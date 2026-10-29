@@ -95,6 +95,20 @@ test("callbacks without the login cookie cannot make unlimited Discogs calls for
   expect(app.discogs.calls.finishLogin).toBeLessThanOrEqual(3);
 });
 
+test("callbacks for a login that has used up its Discogs checks leave the logged-out budget to other people", async () => {
+  const app = await createTestApp();
+  const [authorizeUrl] = await startLogins(app, 1, fromPhone("203.0.113.1"));
+  const requestToken = new URL(authorizeUrl!, "http://fake").searchParams.get("oauth_token")!;
+  for (let i = 0; i < 50; i++) {
+    await app.request(`/api/login/callback?oauth_token=${requestToken}&oauth_verifier=junk-${i}`, { headers: fromPhone(`198.51.100.${i}`) });
+  }
+
+  const others: (string | null)[] = [];
+  for (let i = 0; i < 20; i++) others.push(...(await startLogins(app, 1, fromPhone(`192.0.2.${i}`))));
+
+  expect(others.every((location) => location?.startsWith("/fake-discogs/"))).toBe(true);
+});
+
 test("callbacks without the login cookie from one device share that device's limit", async () => {
   const app = await createTestApp();
   const requestTokens: string[] = [];

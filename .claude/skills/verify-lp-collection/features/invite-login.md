@@ -11,7 +11,7 @@ Nobody can sign up without an Invite (ADR-0001). The app's Owner logs in with Di
 - `invite-refused` shows "This Invite has already been used.", "This Invite has expired." or "This Invite link isn't valid." instead of a log-in link.
 - `session` keeps the User logged in after a reload. The cookie `lp_session` lasts 400 days.
 - `logout` ends the session and returns to the invite-only message.
-- `login-problem` explains a login that did not finish, in an alert above the page. The callback sends an invitee back to their Invite page and everyone else to `/`, with `?login=cookie-missing` (the browser lost the `lp_login` cookie), `expired`, `failed`, `too-many` (more than 10 login starts from one device in 15 minutes while logged out) or `discogs-unavailable`.
+- `login-problem` explains a login that did not finish, in an alert above the page. The callback sends an invitee back to their Invite page and everyone else to `/`, with `?login=cookie-missing` (the browser lost the `lp_login` cookie), `expired`, `failed`, `too-many` (per 15 minutes: more than 10 logged-out Discogs calls from one device, an IPv6 /64 counting as one device, more than 30 from everyone logged out together, or more than 30 login starts by one logged-in User) or `discogs-unavailable`.
 - `two-tabs` lets a login started in a second tab finish without breaking the first one.
 
 ## How to get to it (user POV)
@@ -50,5 +50,6 @@ Preconditions:
 - The fake keeps its pending logins in memory. A relaunch between tapping "Log in with Discogs" and "Authorize" shows "This login has expired."
 - "Copy link" needs clipboard permission in a scripted browser. Read the "Invite link" field instead of the clipboard.
 - Logged-out login starts are limited to 10 per 15 minutes per device, and every browser context on this computer is the same device. A long drive can hit the limit; relaunch with a new run id.
+- A callback without the `lp_login` cookie reaches Discogs at most 3 times per login attempt, and each of those calls spends the same logged-out budget as a login start. Later ones answer `?login=expired`. Count the `Discogs login failed` lines in the run log to see how many reached Discogs.
 - The callback URL no longer carries the Invite code. The app keeps the code, encrypted, with the pending login.
 - The real Discogs login is not drivable here. It needs the keys that `scripts/wizard/discogs.sh` stores in the cluster.

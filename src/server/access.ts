@@ -222,7 +222,6 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
   const loggedOutTotal = fixedWindowLimit(loginLimits.loggedOutTotal, loginAttemptLifetime, now);
   const perUser = fixedWindowLimit(loginLimits.perUser, loginAttemptLifetime, now);
 
-  /** Every Discogs call made for someone not logged in shares one budget, so a spread of addresses cannot drain the home IP's Discogs quota. */
   function allowLoggedOutDiscogsCall(c: Context) {
     return loggedOutPerDevice(deviceKey(clientAddress(c))) && loggedOutTotal("all");
   }
@@ -279,8 +278,8 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     const claim = async () => (await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning()).length > 0;
     if (startedInThisBrowser && !(await claim())) return c.redirect(loginProblemPath(code, "expired"), 302);
     if (!startedInThisBrowser) {
-      if (!allowLoggedOutDiscogsCall(c)) return c.redirect(loginProblemPath(undefined, "too-many"), 302);
       if (!(await reserveVerifierCheck(requestToken))) return c.redirect(loginProblemPath(undefined, "expired"), 302);
+      if (!allowLoggedOutDiscogsCall(c)) return c.redirect(loginProblemPath(undefined, "too-many"), 302);
     }
 
     let identity: DiscogsIdentity;
@@ -310,7 +309,6 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     }
   }
 
-  /** Without the login cookie anyone who saw the request token can send verifiers, so each attempt gets only a few Discogs checks. */
   async function reserveVerifierCheck(requestToken: string) {
     const reserved = await db
       .update(loginAttempts)
