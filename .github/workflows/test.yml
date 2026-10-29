@@ -16,6 +16,12 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: A failing test fails the run
+        run: |
+          if npx vitest run --config test/exit-code/vitest.config.ts; then
+            echo "::error::vitest exited 0 although a test failed"
+            exit 1
+          fi
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - run: docker build .
