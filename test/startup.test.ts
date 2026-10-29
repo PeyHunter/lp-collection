@@ -30,3 +30,34 @@ test("the app refuses to start with only half of the Discogs keys", () => {
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("Set both DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET");
 });
+
+test("without Discogs keys the app uses the fake Discogs only when asked to", () => {
+  const result = startServer({ APP_OWNER_DISCOGS_USERNAME: "owner" });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET are not set");
+  expect(result.stderr).toContain("DISCOGS=fake");
+});
+
+test("in production the app refuses to run the fake Discogs", () => {
+  const result = startServer({ NODE_ENV: "production", APP_OWNER_DISCOGS_USERNAME: "owner", DISCOGS: "fake" });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("The fake Discogs lets anyone log in as anyone");
+});
+
+const discogsKeys = { DISCOGS_CONSUMER_KEY: "key", DISCOGS_CONSUMER_SECRET: "secret" };
+
+test("in production the app refuses to start without its public URL", () => {
+  const result = startServer({ NODE_ENV: "production", APP_OWNER_DISCOGS_USERNAME: "owner", ...discogsKeys });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("PUBLIC_URL is not set");
+});
+
+test("the app refuses to start with a public URL that is not a web address", () => {
+  const result = startServer({ APP_OWNER_DISCOGS_USERNAME: "owner", ...discogsKeys, PUBLIC_URL: "lp-collection.example" });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("PUBLIC_URL must be the address phones open");
+});

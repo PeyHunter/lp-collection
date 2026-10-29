@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createTestApp, days } from "../support/test-app.ts";
+import { cookieFrom, createTestApp, days } from "../support/test-app.ts";
 
 type TestApp = Awaited<ReturnType<typeof createTestApp>>;
 
@@ -78,27 +78,25 @@ test("an Invite works only once", async () => {
 test("an Invite used up while the second person was on Discogs still refuses them", async () => {
   const app = await createTestApp();
   const invite = await createInvite(app, await logInAsAppOwner(app));
-  const strangerStart = await app.request(`/api/login?invite=${invite.code}`);
+  const strangerLogin = await app.startLogin({ invite: invite.code });
   await app.logIn("friend", { invite: invite.code });
 
-  const strangerCallback = await app.request(app.discogs.authorizeAs(strangerStart.headers.get("location")!, "stranger"));
+  const strangerCallback = await strangerLogin.finish("stranger");
 
   expect(strangerCallback.status).toBe(302);
   expect(strangerCallback.headers.get("location")).toBe(`/invite/${invite.code}`);
-  expect(strangerCallback.headers.get("set-cookie")).toBeNull();
+  expect(cookieFrom(strangerCallback, "lp_session")).toBeUndefined();
 });
 
 test("two people finishing their login with the same Invite at the same moment: only one gets in", async () => {
   const app = await createTestApp();
   const invite = await createInvite(app, await logInAsAppOwner(app));
   const people = ["friend", "stranger", "neighbour", "cousin"];
-  const starts = await Promise.all(people.map(() => app.request(`/api/login?invite=${invite.code}`)));
+  const logins = await Promise.all(people.map(() => app.startLogin({ invite: invite.code })));
 
-  const callbacks = await Promise.all(
-    people.map((name, index) => app.request(app.discogs.authorizeAs(starts[index]!.headers.get("location")!, name))),
-  );
+  const callbacks = await Promise.all(people.map((name, index) => logins[index]!.finish(name)));
 
-  expect(callbacks.filter((callback) => callback.headers.get("set-cookie") !== null)).toHaveLength(1);
+  expect(callbacks.filter((callback) => cookieFrom(callback, "lp_session") !== undefined)).toHaveLength(1);
 });
 
 test("without an Invite a new person gets no account", async () => {
@@ -168,26 +166,14 @@ test("a session keeps a User logged in for 400 days", async () => {
   expect((await me(app, session)).status).toBe(401);
 });
 
-test("behind the HTTPS tunnel the session cookie is Secure and Discogs calls back over HTTPS", async () => {
-  const app = await createTestApp();
-  const headers = { "x-forwarded-proto": "https" };
-
-  const start = await app.request("/api/login", { headers });
-  const callbackUrl = app.discogs.authorizeAs(start.headers.get("location")!, app.appOwnerDiscogsUsername);
-  const { setCookie } = await app.logIn(app.appOwnerDiscogsUsername, { headers });
-
-  expect(callbackUrl).toMatch(/^https:\/\/localhost\/api\/login\/callback\?/);
-  expect(setCookie).toMatch(/Secure/);
-});
-
 test("a login left unfinished for more than 15 minutes is refused", async () => {
   const app = await createTestApp();
-  const start = await app.request("/api/login");
+  const login = await app.startLogin();
   app.clock.advance(15 * 60 * 1000 + 1);
 
-  const callback = await app.request(app.discogs.authorizeAs(start.headers.get("location")!, app.appOwnerDiscogsUsername));
+  const callback = await login.finish(app.appOwnerDiscogsUsername);
 
   expect(callback.status).toBe(302);
   expect(callback.headers.get("location")).toBe("/");
-  expect(callback.headers.get("set-cookie")).toBeNull();
+  expect(cookieFrom(callback, "lp_session")).toBeUndefined();
 });

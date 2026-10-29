@@ -11,16 +11,18 @@ You need Node.js 24 or newer and a PostgreSQL database.
 ```sh
 npm install
 npm run build
-DATABASE_URL=postgres://user:password@localhost:5432/lp_collection APP_OWNER_DISCOGS_USERNAME=your-discogs-name npm start
+DATABASE_URL=postgres://user:password@localhost:5432/lp_collection APP_OWNER_DISCOGS_USERNAME=your-discogs-name DISCOGS=fake npm start
 ```
 
 Open http://localhost:3000. The app runs its database migrations when it starts.
 
 `APP_OWNER_DISCOGS_USERNAME` names the app's Owner: the Discogs user who can log in without an Invite and create Invites for everyone else.
 
+`PUBLIC_URL` is the address phones open, such as `https://lp-collection.peytonhunter.com`. Invite links and the Discogs login send people there, and an `https://` address makes the login cookie Secure. Locally it defaults to `http://localhost:<PORT>`; set it to your computer's network address to try the app from a phone. In production the app refuses to start without it.
+
 While working on the UI, run `npm start` in one terminal and `npm run dev` in another, then open the address Vite prints. It reloads on save and forwards `/api` to the server.
 
-Without `DISCOGS_CONSUMER_KEY` and `DISCOGS_CONSUMER_SECRET` the app uses a fake Discogs. Its "Log in with Discogs" opens a Fake Discogs page that only asks for a username: type the app Owner's username to log in as the Owner, or any other name to play an invited friend. With both keys set, it logs in through the real Discogs. In production (`NODE_ENV=production`, as in the container image) the app refuses to start without the keys; run `scripts/wizard/discogs.sh` to get them.
+The app logs in through the real Discogs when `DISCOGS_CONSUMER_KEY` and `DISCOGS_CONSUMER_SECRET` are set; run `scripts/wizard/discogs.sh` to get them. Without them it refuses to start. To try it on your own computer without Discogs, add `DISCOGS=fake` to the start command. Its "Log in with Discogs" then opens a Fake Discogs page that only asks for a username: type the app Owner's username to log in as the Owner, or any other name to play an invited friend. Anyone can log in as anyone there, so the app refuses `DISCOGS=fake` in production (`NODE_ENV=production`, as in the container image).
 
 After changing `src/server/schema.ts`, run `npm run db:generate` and commit the new files in `drizzle/`.
 
@@ -40,5 +42,5 @@ GitHub Actions runs all of this, and builds the container image, on every push a
 
 ```sh
 docker build -t lp-collection .
-docker run -e DATABASE_URL=... -e APP_OWNER_DISCOGS_USERNAME=... -e DISCOGS_CONSUMER_KEY=... -e DISCOGS_CONSUMER_SECRET=... -p 3000:3000 lp-collection
+docker run -e DATABASE_URL=... -e PUBLIC_URL=https://lp-collection.peytonhunter.com -e APP_OWNER_DISCOGS_USERNAME=... -e DISCOGS_CONSUMER_KEY=... -e DISCOGS_CONSUMER_SECRET=... -p 3000:3000 lp-collection
 ```

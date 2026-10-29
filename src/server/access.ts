@@ -13,6 +13,7 @@ const loginAttemptLifetime = 15 * minute;
 // Browsers cap a cookie's Max-Age at 400 days.
 const sessionLifetime = 400 * day;
 const sessionCookie = "lp_session";
+const loginCookie = "lp_login";
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -47,9 +48,10 @@ function decideLogin(facts: {
   return { kind: "refused" };
 }
 
-export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUsername }: AppDependencies) {
+export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUsername, publicUrl }: AppDependencies) {
   const { db } = database;
   const routes = new Hono();
+  const secure = publicUrl.protocol === "https:";
   const isAppOwner = (discogsUsername: string) => discogsUsername.toLowerCase() === appOwnerDiscogsUsername.toLowerCase();
 
   async function findInvite(code: string) {
@@ -127,7 +129,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
       sameSite: "Lax",
       path: "/",
       maxAge: sessionLifetime / 1000,
-      secure: requestOrigin(c).startsWith("https:"),
+      secure,
     });
   }
 
@@ -150,7 +152,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     const createdAt = now();
     const expiresAt = new Date(createdAt.getTime() + inviteLifetime);
     await db.insert(invites).values({ codeHash: sha256(code), createdBy: user.id, createdAt, expiresAt });
-    return c.json({ url: `${requestOrigin(c)}/invite/${code}`, expiresAt: expiresAt.toISOString() }, 201);
+    return c.json({ url: new URL(`/invite/${code}`, publicUrl).href, expiresAt: expiresAt.toISOString() }, 201);
   });
 
   routes.get("/api/invites/:code", async (c) => {
@@ -166,10 +168,17 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
       if (inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
       inviteId = invite!.id;
     }
-    const login = await discogs.startLogin(loginCallbackUrl(c, code));
+    const login = await discogs.startLogin(loginCallbackUrl(publicUrl, code));
     const createdAt = now();
     await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(createdAt.getTime() - loginAttemptLifetime)));
     await db.insert(loginAttempts).values({ requestToken: login.requestToken, requestSecret: login.requestSecret, inviteId, createdAt });
+    setCookie(c, loginCookie, login.requestToken, {
+      httpOnly: true,
+      sameSite: "Lax",
+      path: "/api/login",
+      maxAge: loginAttemptLifetime / 1000,
+      secure,
+    });
     return c.redirect(login.authorizeUrl, 302);
   });
 
@@ -177,7 +186,8 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     const requestToken = c.req.query("oauth_token");
     const verifier = c.req.query("oauth_verifier");
     const code = c.req.query("invite");
-    if (!requestToken || !verifier) return c.redirect("/", 302);
+    if (!requestToken || !verifier || getCookie(c, loginCookie) !== requestToken) return c.redirect("/", 302);
+    deleteCookie(c, loginCookie, { path: "/api/login", secure });
     const [attempt] = await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning();
     if (!attempt || now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect("/", 302);
 
@@ -198,7 +208,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
   routes.post("/api/logout", async (c) => {
     const token = getCookie(c, sessionCookie);
     if (token) await db.delete(sessions).where(eq(sessions.tokenHash, sha256(token)));
-    deleteCookie(c, sessionCookie, { path: "/", secure: requestOrigin(c).startsWith("https:") });
+    deleteCookie(c, sessionCookie, { path: "/", secure });
     return c.body(null, 204);
   });
 
@@ -213,16 +223,10 @@ function discogsFields(identity: DiscogsIdentity) {
   };
 }
 
-// The app sits behind a Cloudflare Tunnel, which speaks HTTPS to the phone and plain HTTP to the app.
-function requestOrigin(c: Context) {
-  const url = new URL(c.req.url);
-  const protocol = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim() ?? url.protocol.replace(":", "");
-  return `${protocol}://${url.host}`;
-}
-
-function loginCallbackUrl(c: Context, inviteToShowOnRefusal: string | undefined) {
-  const query = inviteToShowOnRefusal === undefined ? "" : `?invite=${encodeURIComponent(inviteToShowOnRefusal)}`;
-  return `${requestOrigin(c)}/api/login/callback${query}`;
+function loginCallbackUrl(publicUrl: URL, inviteToShowOnRefusal: string | undefined) {
+  const url = new URL("/api/login/callback", publicUrl);
+  if (inviteToShowOnRefusal !== undefined) url.searchParams.set("invite", inviteToShowOnRefusal);
+  return url.href;
 }
 
 function invitePath(code: string) {
