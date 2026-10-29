@@ -11,10 +11,8 @@ export type TestAppOptions = {
 };
 
 export type LoginResult = {
-  /** The `Cookie` header value to send as this User, or undefined when the login was refused. */
   session: string | undefined;
   setCookie: string | null;
-  /** Where the app sent the browser at the end. */
   location: string | null;
 };
 
@@ -56,7 +54,6 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
       await admin.end();
     },
     request,
-    /** Walks the whole "Log in with Discogs" round trip as a browser would, typing `discogsUsername` on the fake Discogs page. */
     async logIn(discogsUsername: string, { invite, headers }: { invite?: string; headers?: Record<string, string> } = {}): Promise<LoginResult> {
       const start = await request(invite === undefined ? "/api/login" : `/api/login?invite=${encodeURIComponent(invite)}`, { headers });
       const authorizeUrl = start.headers.get("location");

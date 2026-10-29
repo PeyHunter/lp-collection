@@ -6,9 +6,7 @@ import type { DiscogsGateway } from "./discogs.ts";
 export type AppDependencies = {
   database: Database;
   discogs: DiscogsGateway;
-  /** Every expiry check reads this clock, so tests can move time instead of waiting. */
   now: () => Date;
-  /** The Discogs username of the person who runs this LP-Collection and alone may create Invites. */
   appOwnerDiscogsUsername: string;
 };
 

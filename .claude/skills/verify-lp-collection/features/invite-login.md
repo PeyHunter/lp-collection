@@ -38,6 +38,9 @@ Preconditions:
 
 ## Gotchas
 
+- Chromium logs every 4xx answer to a fetch as a console error. A `401 (Unauthorized)` from `/api/me` with no session and a `410 (Gone)` from `/api/invites/<code>` for a used or expired Invite are expected. Any other console error is a failure.
+- A Discogs user who is already a User and opens an Invite just logs in, and the Invite stays unused. Use a new username for the invitee on every drive against the same run.
+
 - Expiry after 7 days cannot be driven here: the launched app uses the real clock. `test/api/invite-login.test.ts` covers it with a controlled clock. Report `invite-refused` (expired) as not driven.
 - Use a fresh browser context per person. Contexts share no cookies, like two phones. One context reused for the invitee is still logged in as the Owner.
 - The fake keeps its pending logins in memory. A relaunch between tapping "Log in with Discogs" and "Authorize" shows "This login has expired."

@@ -5,7 +5,6 @@ import { createRealDiscogs } from "../src/server/real-discogs.ts";
 
 type Received = { method: string; path: string; headers: IncomingHttpHeaders };
 
-/** Plays Discogs' three OAuth endpoints and records what the app sent. */
 async function startDiscogsStub() {
   const received: Received[] = [];
   const server = createServer((request, response) => {

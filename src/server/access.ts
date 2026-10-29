@@ -36,7 +36,6 @@ type LoginDecision =
   | { kind: "new-user"; via: { kind: "app-owner" } | { kind: "invite"; inviteId: string } }
   | { kind: "refused" };
 
-/** Who may come in at the end of the Discogs handshake (ADR-0001: nobody signs up without an Invite). */
 function decideLogin(facts: {
   existingUserId: string | undefined;
   isAppOwner: boolean;
@@ -48,7 +47,6 @@ function decideLogin(facts: {
   return { kind: "refused" };
 }
 
-/** Invites, the Discogs login and sessions, under /api. */
 export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUsername }: AppDependencies) {
   const { db } = database;
   const routes = new Hono();
@@ -78,13 +76,12 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
         .values({ ...discogsFields(identity), discogsUserId: identity.discogsUserId, createdAt: at })
         .returning({ id: users.id });
       if (via.kind === "invite") {
-        const [consumed] = await tx
+        const [claimedWhileStillValid] = await tx
           .update(invites)
           .set({ usedAt: at, usedBy: user!.id })
           .where(and(eq(invites.id, via.inviteId), isNull(invites.usedAt), gt(invites.expiresAt, at)))
           .returning({ id: invites.id });
-        // Someone else used the Invite, or it expired, since the person started logging in.
-        if (!consumed) tx.rollback();
+        if (!claimedWhileStillValid) tx.rollback();
       }
       const [collection] = await tx.insert(collections).values({ ownerId: user!.id, createdAt: at }).returning({ id: collections.id });
       await tx.insert(memberships).values({ collectionId: collection!.id, userId: user!.id });
@@ -169,9 +166,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
       if (inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
       inviteId = invite!.id;
     }
-    // The raw invite code rides along in the callback URL only so a refusal can show that Invite's page; it is never stored.
-    const callbackUrl = `${requestOrigin(c)}/api/login/callback${code === undefined ? "" : `?invite=${encodeURIComponent(code)}`}`;
-    const login = await discogs.startLogin(callbackUrl);
+    const login = await discogs.startLogin(loginCallbackUrl(c, code));
     const createdAt = now();
     await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(createdAt.getTime() - loginAttemptLifetime)));
     await db.insert(loginAttempts).values({ requestToken: login.requestToken, requestSecret: login.requestSecret, inviteId, createdAt });
@@ -223,6 +218,11 @@ function requestOrigin(c: Context) {
   const url = new URL(c.req.url);
   const protocol = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim() ?? url.protocol.replace(":", "");
   return `${protocol}://${url.host}`;
+}
+
+function loginCallbackUrl(c: Context, inviteToShowOnRefusal: string | undefined) {
+  const query = inviteToShowOnRefusal === undefined ? "" : `?invite=${encodeURIComponent(inviteToShowOnRefusal)}`;
+  return `${requestOrigin(c)}/api/login/callback${query}`;
 }
 
 function invitePath(code: string) {

@@ -8,18 +8,12 @@ export type FakeDiscogsScript = {
 };
 
 export type FakeDiscogs = DiscogsGateway & {
-  /** Plays the person on the authorize page: returns the callback URL Discogs would send them back to. */
   authorizeAs(authorizeUrl: string, discogsUsername: string): string;
-  /** The page a person sees in place of Discogs' authorize page when running locally. */
   pages: Hono;
 };
 
 const authorizePath = "/fake-discogs/authorize";
 
-/**
- * Stands in for Discogs in tests and local development.
- * Its login protocol: the verifier is the Discogs username the person typed.
- */
 export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   const pending = new Map<string, { requestSecret: string; callbackUrl: string }>();
 
@@ -61,13 +55,13 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       pending.set(requestToken, { requestSecret, callbackUrl });
       return { requestToken, requestSecret, authorizeUrl: `${authorizePath}?oauth_token=${requestToken}` };
     },
-    async finishLogin({ requestToken, requestSecret, verifier }) {
+    async finishLogin({ requestToken, requestSecret, verifier: typedDiscogsUsername }) {
       const login = pending.get(requestToken);
       if (!login || login.requestSecret !== requestSecret) throw new Error("Fake Discogs refused an unknown request token");
       pending.delete(requestToken);
       return {
-        discogsUserId: fakeDiscogsUserId(verifier),
-        discogsUsername: verifier,
+        discogsUserId: fakeDiscogsUserId(typedDiscogsUsername),
+        discogsUsername: typedDiscogsUsername,
         accessToken: randomUUID(),
         accessSecret: randomUUID(),
       };
@@ -80,7 +74,6 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   };
 }
 
-// Derived from the username so the same person keeps the same Discogs identity across restarts.
 function fakeDiscogsUserId(discogsUsername: string) {
   return createHash("sha256").update(discogsUsername.toLowerCase()).digest().readUInt32BE(0) & 0x7fffffff;
 }

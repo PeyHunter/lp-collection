@@ -193,7 +193,6 @@ finish() {
 
 # ──────────────────────────────────────────────────────────────────────────
 # STAGES: author this section. One stage() per step the human takes.
-# Replace the example below. Set TOTAL_STAGES to match the stages you write.
 # Keep every stage inside run_wizard and the last line as is: bash then parses
 # the whole file before the first prompt, so an edit mid-run can't break it.
 # ──────────────────────────────────────────────────────────────────────────
@@ -204,8 +203,8 @@ TOTAL_STAGES=4
 NAMESPACE="${NAMESPACE:-lp-collection}"
 SECRET_NAME="lp-collection-discogs"
 APP_URL="https://lp-collection.peytonhunter.com"
-# The keys never touch a file in this repo: the repo is public. They live only in this shell and the cluster.
-ENV_FILE=/dev/null
+KEYS_STAY_OUT_OF_THE_PUBLIC_REPO=/dev/null
+ENV_FILE=$KEYS_STAY_OUT_OF_THE_PUBLIC_REPO
 
 banner "Discogs login keys for LP-Collection"
 
