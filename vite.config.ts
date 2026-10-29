@@ -5,5 +5,5 @@ export default defineConfig({
   root: "src/web",
   plugins: [react()],
   build: { outDir: "../../dist/web", emptyOutDir: true },
-  server: { proxy: { "/api": "http://localhost:3000" } },
+  server: { proxy: { "/api": "http://localhost:3000", "/fake-discogs": "http://localhost:3000" } },
 });

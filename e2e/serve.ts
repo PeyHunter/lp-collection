@@ -21,5 +21,6 @@ await pg.start();
 await pg.createDatabase("lp_collection");
 process.on("SIGTERM", () => pg.stop().then(() => process.exit(0)));
 
+process.env.APP_OWNER_DISCOGS_USERNAME ??= "owner";
 process.env.DATABASE_URL = `postgres://postgres:${password}@localhost:${port}/lp_collection`;
 await import("../src/server/main.ts");
