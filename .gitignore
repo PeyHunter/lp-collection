@@ -4,3 +4,5 @@ test-results/
 playwright-report/
 .env
 .verify/
+.audit/
+.claude/worktrees/

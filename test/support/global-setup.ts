@@ -4,24 +4,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import EmbeddedPostgres from "embedded-postgres";
 import type { TestProject } from "vitest/node";
-
-const PORT = 54329;
+import { freePort } from "./free-port.ts";
 
 // One real PostgreSQL server for the whole test run; each test file gets its own fresh database.
 export default async function setup(project: TestProject) {
+  const port = await freePort();
   const password = randomUUID();
   const dir = await mkdtemp(join(tmpdir(), "lp-collection-pg-"));
   const pg = new EmbeddedPostgres({
     databaseDir: dir,
     user: "postgres",
     password,
-    port: PORT,
+    port,
     persistent: false,
     onLog: () => {},
   });
   await pg.initialise();
   await pg.start();
-  project.provide("postgresUrl", `postgres://postgres:${password}@localhost:${PORT}`);
+  project.provide("postgresUrl", `postgres://postgres:${password}@localhost:${port}`);
 
   return async () => {
     await pg.stop();

@@ -13,6 +13,10 @@ _Avoid_: account (ambiguous with the Discogs account)
 **Owner**:
 The User a Collection belongs to. Copies added to the Collection also go into the Owner's Discogs collection.
 
+**App Owner**:
+The one User who runs this LP-Collection, named by their Discogs username in the app's settings. Only the App Owner can log in without an Invite and create Invites. They are also the Owner of their own Collection.
+_Avoid_: admin, Owner (when you mean the App Owner)
+
 **Member**:
 A User the Owner has given access to their Collection. The Owner is also a Member.
 _Avoid_: guest, shared user
@@ -44,6 +48,19 @@ The year this Release was manufactured.
 **Period**:
 The decade of the Original year (60s, 70s, ...).
 _Avoid_: era
+
+### Where records live
+
+**Shelf**:
+One shelving unit in a Collection, with one photo of its front and a grid of rows and columns laid over that photo.
+_Avoid_: rack, unit (in the UI)
+
+**Section**:
+One square of a Shelf, labelled by row letter and column number from the top left ("C4"). A Copy lives in at most one Section.
+_Avoid_: cube, bin, slot
+
+**Not on a shelf**:
+A Copy with no Section yet, or whose Section was removed.
 
 ### Condition and value
 
