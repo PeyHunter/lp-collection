@@ -26,6 +26,13 @@ export async function createTestApp(script: FakeDiscogsScript = {}) {
 
   return {
     discogs,
+    /** Cuts every connection the app holds, as a PostgreSQL restart would. */
+    async dropDatabaseConnections() {
+      const admin = new pg.Client({ connectionString: `${serverUrl}/postgres` });
+      await admin.connect();
+      await admin.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1", [name]);
+      await admin.end();
+    },
     request: (path: string, init?: RequestInit) => app.request(path, init),
   };
 }
