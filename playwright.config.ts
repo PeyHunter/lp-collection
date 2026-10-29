@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = 4173;
+// Set E2E_PORT to a unique value when several checkouts run browser tests at once.
+const port = Number(process.env.E2E_PORT ?? 4173);
 
 export default defineConfig({
   testDir: "e2e",
@@ -13,7 +14,8 @@ export default defineConfig({
     command: "npm run build && node e2e/serve.ts",
     url: `http://localhost:${port}/api/health`,
     env: { PORT: String(port) },
-    reuseExistingServer: !process.env.CI,
+    // Never reuse: a server already on this port may be another checkout running other code.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

@@ -4,22 +4,13 @@
 import { execSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import EmbeddedPostgres from "embedded-postgres";
+import { freePort } from "../../../../test/support/free-port.ts";
 import { evidenceDir, statePath, type RunState } from "./shared.ts";
 
 const runId = process.argv[2] ?? `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-
-function freePort() {
-  return new Promise<number>((resolve, reject) => {
-    const server = createServer().listen(0, () => {
-      const address = server.address();
-      server.close(() => (typeof address === "object" && address ? resolve(address.port) : reject(new Error("no port"))));
-    });
-  });
-}
 
 await mkdir(evidenceDir(runId), { recursive: true });
 execSync("npm run build", { stdio: ["ignore", "ignore", "inherit"] });
@@ -35,7 +26,7 @@ await pg.start();
 await pg.createDatabase("lp_collection");
 
 const app = spawn("node", ["src/server/main.ts"], {
-  env: { ...process.env, PORT: String(appPort), DATABASE_URL: `postgres://postgres:${password}@localhost:${postgresPort}/lp_collection` },
+  env: { APP_OWNER_DISCOGS_USERNAME: "owner", ...process.env, DISCOGS: "fake", PORT: String(appPort), DATABASE_URL: `postgres://postgres:${password}@localhost:${postgresPort}/lp_collection` },
   stdio: ["ignore", "inherit", "inherit"],
 });
 

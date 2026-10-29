@@ -11,7 +11,8 @@
     "build": "vite build",
     "typecheck": "tsc",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
