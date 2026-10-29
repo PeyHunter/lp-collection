@@ -55,7 +55,6 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
       await admin.end();
     },
     request,
-    /** Taps "Log in with Discogs" in one browser; `finish` comes back to the app from Discogs in that same browser. */
     async startLogin({ invite, headers }: { invite?: string; headers?: Record<string, string> } = {}) {
       const start = await request(invite === undefined ? "/api/login" : `/api/login?invite=${encodeURIComponent(invite)}`, { headers });
       const authorizeUrl = start.headers.get("location");
@@ -79,7 +78,6 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   };
 }
 
-/** The `name=value` pair of a cookie the response sets, as a browser would send it back. */
 export function cookieFrom(response: Response, name: string) {
   return response.headers.getSetCookie().find((cookie) => cookie.startsWith(`${name}=`))?.split(";")[0];
 }
