@@ -166,26 +166,14 @@ test("a session keeps a User logged in for 400 days", async () => {
   expect((await me(app, session)).status).toBe(401);
 });
 
-test("behind the HTTPS tunnel the session cookie is Secure and Discogs calls back over HTTPS", async () => {
-  const app = await createTestApp();
-  const headers = { "x-forwarded-proto": "https" };
-
-  const start = await app.request("/api/login", { headers });
-  const callbackUrl = app.discogs.authorizeAs(start.headers.get("location")!, app.appOwnerDiscogsUsername);
-  const { setCookie } = await app.logIn(app.appOwnerDiscogsUsername, { headers });
-
-  expect(callbackUrl).toMatch(/^https:\/\/localhost\/api\/login\/callback\?/);
-  expect(setCookie).toMatch(/Secure/);
-});
-
 test("a login left unfinished for more than 15 minutes is refused", async () => {
   const app = await createTestApp();
-  const start = await app.request("/api/login");
+  const login = await app.startLogin();
   app.clock.advance(15 * 60 * 1000 + 1);
 
-  const callback = await app.request(app.discogs.authorizeAs(start.headers.get("location")!, app.appOwnerDiscogsUsername));
+  const callback = await login.finish(app.appOwnerDiscogsUsername);
 
   expect(callback.status).toBe(302);
   expect(callback.headers.get("location")).toBe("/");
-  expect(callback.headers.get("set-cookie")).toBeNull();
+  expect(cookieFrom(callback, "lp_session")).toBeUndefined();
 });

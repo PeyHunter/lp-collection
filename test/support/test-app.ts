@@ -8,6 +8,7 @@ import { createFakeDiscogs, type FakeDiscogsScript } from "../../src/server/fake
 export type TestAppOptions = {
   discogs?: FakeDiscogsScript;
   appOwnerDiscogsUsername?: string;
+  publicUrl?: string;
 };
 
 export type LoginResult = {
@@ -20,7 +21,7 @@ export type LoginResult = {
  * Starts the app against a brand-new PostgreSQL database and a scripted fake Discogs.
  * Tests talk to it only through `request`, the same HTTP API the phone UI uses.
  */
-export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsername = "app-owner" }: TestAppOptions = {}) {
+export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsername = "app-owner", publicUrl = "http://localhost" }: TestAppOptions = {}) {
   const serverUrl = inject("postgresUrl");
   const name = `test_${randomUUID().replaceAll("-", "")}`;
   const admin = new pg.Client({ connectionString: `${serverUrl}/postgres` });
@@ -32,7 +33,7 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   await migrate(database);
   const discogs = createFakeDiscogs(script);
   let now = new Date("2026-03-01T12:00:00Z");
-  const app = createApp({ database, discogs, now: () => now, appOwnerDiscogsUsername });
+  const app = createApp({ database, discogs, now: () => now, appOwnerDiscogsUsername, publicUrl: new URL(publicUrl) });
 
   afterAll(() => database.close());
 
