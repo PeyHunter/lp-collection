@@ -73,3 +73,20 @@ test("the app refuses to start with a public URL that is not a web address", () 
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("PUBLIC_URL must be the address phones open");
 });
+
+const publicUrl = { PUBLIC_URL: "https://lp-collection.example" };
+
+test("with the real Discogs the app refuses to start without the key that encrypts Discogs tokens", () => {
+  const result = startServer({ NODE_ENV: "production", APP_OWNER_DISCOGS_USERNAME: "owner", ...discogsKeys, ...publicUrl });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("TOKEN_ENCRYPTION_KEY is not set");
+  expect(result.stderr).toContain("scripts/wizard/discogs.sh");
+});
+
+test("the app refuses a token encryption key that is not 32 random bytes in base64", () => {
+  const result = startServer({ APP_OWNER_DISCOGS_USERNAME: "owner", ...discogsKeys, ...publicUrl, TOKEN_ENCRYPTION_KEY: "too-short" });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("TOKEN_ENCRYPTION_KEY must be 32 bytes in base64");
+});

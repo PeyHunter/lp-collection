@@ -247,9 +247,13 @@ fi
 stage "Save the secret in the cluster"
 say "This creates or replaces the secret ${SECRET_NAME} in namespace ${NAMESPACE}."
 say "It also stores the app's address, ${APP_URL}, as PUBLIC_URL, so Invite links and the Discogs login point there."
+say "And it stores TOKEN_ENCRYPTION_KEY, a random key the app encrypts each User's Discogs tokens with."
+note "A key already in the secret is kept, because a new key would make the stored tokens unreadable."
 if confirm "Save it now?"; then
   kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$NAMESPACE" >/dev/null
   b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
+  TOKEN_ENCRYPTION_KEY=$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.TOKEN_ENCRYPTION_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  [[ -n "$TOKEN_ENCRYPTION_KEY" ]] || TOKEN_ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64 | tr -d '\n')
   kubectl apply -f - >/dev/null <<YAML
 apiVersion: v1
 kind: Secret
@@ -262,6 +266,7 @@ data:
   DISCOGS_CONSUMER_SECRET: $(b64 "$DISCOGS_CONSUMER_SECRET")
   APP_OWNER_DISCOGS_USERNAME: $(b64 "$APP_OWNER_DISCOGS_USERNAME")
   PUBLIC_URL: $(b64 "$APP_URL")
+  TOKEN_ENCRYPTION_KEY: $(b64 "$TOKEN_ENCRYPTION_KEY")
 YAML
   printf '  %s✓ saved%s secret %s in namespace %s\n' "$GREEN" "$RESET" "$SECRET_NAME" "$NAMESPACE"
   note "Check it with: kubectl -n ${NAMESPACE} get secret ${SECRET_NAME}"

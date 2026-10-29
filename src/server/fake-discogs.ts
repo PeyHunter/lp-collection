@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import type { DiscogsGateway, ReleaseCandidate } from "./discogs.ts";
+import type { DiscogsGateway, DiscogsIdentity, ReleaseCandidate } from "./discogs.ts";
 
 /** What the fake Discogs answers in a test, e.g. which Releases a barcode matches. */
 export type FakeDiscogsScript = {
@@ -9,6 +9,7 @@ export type FakeDiscogsScript = {
 
 export type FakeDiscogs = DiscogsGateway & {
   authorizeAs(authorizeUrl: string, discogsUsername: string): string;
+  issuedIdentities: DiscogsIdentity[];
   pages: Hono;
 };
 
@@ -16,6 +17,7 @@ const authorizePath = "/fake-discogs/authorize";
 
 export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   const pending = new Map<string, { requestSecret: string; callbackUrl: string }>();
+  const issuedIdentities: DiscogsIdentity[] = [];
 
   function callbackFor(requestToken: string, discogsUsername: string) {
     const login = pending.get(requestToken);
@@ -59,17 +61,20 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       const login = pending.get(requestToken);
       if (!login || login.requestSecret !== requestSecret) throw new Error("Fake Discogs refused an unknown request token");
       pending.delete(requestToken);
-      return {
+      const identity = {
         discogsUserId: fakeDiscogsUserId(typedDiscogsUsername),
         discogsUsername: typedDiscogsUsername,
         accessToken: randomUUID(),
         accessSecret: randomUUID(),
       };
+      issuedIdentities.push(identity);
+      return identity;
     },
     authorizeAs(authorizeUrl, discogsUsername) {
       const requestToken = new URL(authorizeUrl, "http://fake-discogs").searchParams.get("oauth_token") ?? "";
       return callbackFor(requestToken, discogsUsername);
     },
+    issuedIdentities,
     pages,
   };
 }

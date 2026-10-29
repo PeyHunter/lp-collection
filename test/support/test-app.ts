@@ -1,9 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, inject } from "vitest";
 import { createApp } from "../../src/server/app.ts";
 import { connectDatabase, migrate } from "../../src/server/db.ts";
 import { createFakeDiscogs, type FakeDiscogsScript } from "../../src/server/fake-discogs.ts";
+import { createSecretBox } from "../../src/server/secret-box.ts";
 
 export type TestAppOptions = {
   discogs?: FakeDiscogsScript;
@@ -33,14 +34,27 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   await migrate(database);
   const discogs = createFakeDiscogs(script);
   let now = new Date("2026-03-01T12:00:00Z");
-  const app = createApp({ database, discogs, now: () => now, appOwnerDiscogsUsername, publicUrl: new URL(publicUrl) });
+  const secretBox = createSecretBox(randomBytes(32));
+  const app = createApp({ database, discogs, secretBox, now: () => now, appOwnerDiscogsUsername, publicUrl: new URL(publicUrl) });
 
   afterAll(() => database.close());
 
   const request = (path: string, init?: RequestInit) => app.request(path, init);
 
   return {
+    database,
     discogs,
+    secretBox,
+    /** Reads the database directly, for what the API never shows, such as how a secret is stored. */
+    async query<Row extends Record<string, unknown>>(text: string, values: unknown[] = []) {
+      const client = new pg.Client({ connectionString: `${serverUrl}/${name}` });
+      await client.connect();
+      try {
+        return (await client.query<Row>(text, values)).rows;
+      } finally {
+        await client.end();
+      }
+    },
     appOwnerDiscogsUsername,
     clock: {
       advance(ms: number) {

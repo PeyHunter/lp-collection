@@ -1,8 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, isNull, lt, TransactionRollbackError } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, notLike, TransactionRollbackError } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppDependencies } from "./app.ts";
+import type { Database } from "./db.ts";
+import { sealedPrefix, type SecretBox } from "./secret-box.ts";
 import type { DiscogsGateway, DiscogsIdentity } from "./discogs.ts";
 import { collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
 
@@ -48,7 +50,7 @@ function decideLogin(facts: {
   return { kind: "refused" };
 }
 
-export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUsername, publicUrl }: AppDependencies) {
+export function createAccessRoutes({ database, discogs, secretBox, now, appOwnerDiscogsUsername, publicUrl }: AppDependencies) {
   const { db } = database;
   const routes = new Hono();
   const secure = publicUrl.protocol === "https:";
@@ -75,7 +77,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     return db.transaction(async (tx) => {
       const [user] = await tx
         .insert(users)
-        .values({ ...discogsFields(identity), discogsUserId: identity.discogsUserId, createdAt: at })
+        .values({ ...discogsFields(identity, secretBox), discogsUserId: identity.discogsUserId, createdAt: at })
         .returning({ id: users.id });
       if (via.kind === "invite") {
         const [claimedWhileStillValid] = await tx
@@ -101,7 +103,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     });
     switch (decision.kind) {
       case "returning-user":
-        await db.update(users).set(discogsFields(identity)).where(eq(users.id, decision.userId));
+        await db.update(users).set(discogsFields(identity, secretBox)).where(eq(users.id, decision.userId));
         return decision.userId;
       case "new-user":
         try {
@@ -171,7 +173,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     const login = await discogs.startLogin(loginCallbackUrl(publicUrl, code));
     const createdAt = now();
     await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(createdAt.getTime() - loginAttemptLifetime)));
-    await db.insert(loginAttempts).values({ requestToken: login.requestToken, requestSecret: login.requestSecret, inviteId, createdAt });
+    await db.insert(loginAttempts).values({ requestToken: login.requestToken, requestSecret: secretBox.seal(login.requestSecret), inviteId, createdAt });
     setCookie(c, loginCookie, login.requestToken, {
       httpOnly: true,
       sameSite: "Lax",
@@ -193,7 +195,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
 
     let identity: DiscogsIdentity;
     try {
-      identity = await discogs.finishLogin({ requestToken, requestSecret: attempt.requestSecret, verifier });
+      identity = await discogs.finishLogin({ requestToken, requestSecret: secretBox.open(attempt.requestSecret), verifier });
     } catch (error) {
       console.error(`Discogs login failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.redirect("/", 302);
@@ -215,11 +217,11 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
   return routes;
 }
 
-function discogsFields(identity: DiscogsIdentity) {
+function discogsFields(identity: DiscogsIdentity, box: SecretBox) {
   return {
     discogsUsername: identity.discogsUsername,
-    discogsAccessToken: identity.accessToken,
-    discogsAccessSecret: identity.accessSecret,
+    discogsAccessToken: box.seal(identity.accessToken),
+    discogsAccessSecret: box.seal(identity.accessSecret),
   };
 }
 
@@ -235,4 +237,20 @@ function invitePath(code: string) {
 
 function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
+}
+
+/** Encrypts Discogs secrets stored before encryption existed. Safe to run on every start. */
+export async function sealStoredDiscogsTokens({ db }: Database, box: SecretBox) {
+  const stored = await db.select({ id: users.id, token: users.discogsAccessToken, secret: users.discogsAccessSecret }).from(users);
+  for (const user of stored) {
+    if (box.isSealed(user.token) && box.isSealed(user.secret)) continue;
+    await db
+      .update(users)
+      .set({
+        discogsAccessToken: box.isSealed(user.token) ? user.token : box.seal(user.token),
+        discogsAccessSecret: box.isSealed(user.secret) ? user.secret : box.seal(user.secret),
+      })
+      .where(eq(users.id, user.id));
+  }
+  await db.delete(loginAttempts).where(notLike(loginAttempts.requestSecret, `${sealedPrefix}%`));
 }

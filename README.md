@@ -22,7 +22,7 @@ Open http://localhost:3000. The app runs its database migrations when it starts.
 
 While working on the UI, run `npm start` in one terminal and `npm run dev` in another, then open the address Vite prints. It reloads on save and forwards `/api` to the server.
 
-The app logs in through the real Discogs when `DISCOGS_CONSUMER_KEY` and `DISCOGS_CONSUMER_SECRET` are set; run `scripts/wizard/discogs.sh` to get them. Without them it refuses to start. To try it on your own computer without Discogs, add `DISCOGS=fake` to the start command. Its "Log in with Discogs" then opens a Fake Discogs page that only asks for a username: type the app Owner's username to log in as the Owner, or any other name to play an invited friend. Anyone can log in as anyone there, so the app refuses `DISCOGS=fake` in production (`NODE_ENV=production`, as in the container image).
+The app logs in through the real Discogs when `DISCOGS_CONSUMER_KEY` and `DISCOGS_CONSUMER_SECRET` are set; run `scripts/wizard/discogs.sh` to get them. Without them it refuses to start. With them it also needs `TOKEN_ENCRYPTION_KEY`, 32 random bytes in base64 (`openssl rand -base64 32`), to encrypt each User's Discogs tokens in the database. The wizard generates it and keeps the one already in the cluster, because a new key makes the stored tokens unreadable. To try it on your own computer without Discogs, add `DISCOGS=fake` to the start command. Its "Log in with Discogs" then opens a Fake Discogs page that only asks for a username: type the app Owner's username to log in as the Owner, or any other name to play an invited friend. Anyone can log in as anyone there, so the app refuses `DISCOGS=fake` in production (`NODE_ENV=production`, as in the container image).
 
 After changing `src/server/schema.ts`, run `npm run db:generate` and commit the new files in `drizzle/`.
 
@@ -62,5 +62,5 @@ The database lives on a local-path volume, which is deleted together with its cl
 
 ```sh
 docker build -t lp-collection .
-docker run -e DATABASE_URL=... -e PUBLIC_URL=https://lp-collection.peytonhunter.com -e APP_OWNER_DISCOGS_USERNAME=... -e DISCOGS_CONSUMER_KEY=... -e DISCOGS_CONSUMER_SECRET=... -p 3000:3000 lp-collection
+docker run -e DATABASE_URL=... -e PUBLIC_URL=https://lp-collection.peytonhunter.com -e APP_OWNER_DISCOGS_USERNAME=... -e DISCOGS_CONSUMER_KEY=... -e DISCOGS_CONSUMER_SECRET=... -e TOKEN_ENCRYPTION_KEY=... -p 3000:3000 lp-collection
 ```
