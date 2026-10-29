@@ -73,46 +73,60 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     return row?.user;
   }
 
+  /** Returns the new User's id, or undefined when a simultaneous login by the same Discogs user signed up first. */
   async function signUp(identity: DiscogsIdentity, via: Extract<LoginDecision, { kind: "new-user" }>["via"]) {
     const at = now();
     return db.transaction(async (tx) => {
       const [user] = await tx
         .insert(users)
         .values({ ...discogsFields(identity, secretBox), discogsUserId: identity.discogsUserId, createdAt: at })
+        .onConflictDoNothing({ target: users.discogsUserId })
         .returning({ id: users.id });
+      if (!user) return undefined;
       if (via.kind === "invite") {
         const [claimedWhileStillValid] = await tx
           .update(invites)
-          .set({ usedAt: at, usedBy: user!.id })
+          .set({ usedAt: at, usedBy: user.id })
           .where(and(eq(invites.id, via.inviteId), isNull(invites.usedAt), gt(invites.expiresAt, at)))
           .returning({ id: invites.id });
         if (!claimedWhileStillValid) tx.rollback();
       }
-      const [collection] = await tx.insert(collections).values({ ownerId: user!.id, createdAt: at }).returning({ id: collections.id });
-      await tx.insert(memberships).values({ collectionId: collection!.id, userId: user!.id });
-      return user!.id;
+      const [collection] = await tx.insert(collections).values({ ownerId: user.id, createdAt: at }).returning({ id: collections.id });
+      await tx.insert(memberships).values({ collectionId: collection!.id, userId: user.id });
+      return user.id;
     });
   }
 
-  async function logIn(identity: DiscogsIdentity, inviteId: string | null): Promise<string | undefined> {
+  async function existingUserId(identity: DiscogsIdentity) {
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.discogsUserId, identity.discogsUserId));
+    return existing?.id;
+  }
+
+  async function logInReturningUser(identity: DiscogsIdentity, userId: string) {
+    await db.update(users).set(discogsFields(identity, secretBox)).where(eq(users.id, userId));
+    return userId;
+  }
+
+  async function logIn(identity: DiscogsIdentity, inviteId: string | null): Promise<string | undefined> {
     const [invite] = inviteId ? await db.select().from(invites).where(eq(invites.id, inviteId)) : [];
     const decision = decideLogin({
-      existingUserId: existing?.id,
+      existingUserId: await existingUserId(identity),
       isAppOwner: isAppOwner(identity.discogsUsername),
       invite: invite && { id: invite.id, status: inviteStatus(invite, now()).status },
     });
     switch (decision.kind) {
       case "returning-user":
-        await db.update(users).set(discogsFields(identity, secretBox)).where(eq(users.id, decision.userId));
-        return decision.userId;
-      case "new-user":
+        return logInReturningUser(identity, decision.userId);
+      case "new-user": {
+        let userId: string | undefined;
         try {
-          return await signUp(identity, decision.via);
+          userId = await signUp(identity, decision.via);
         } catch (error) {
           if (error instanceof TransactionRollbackError) return undefined;
           throw error;
         }
+        return userId ?? logInReturningUser(identity, (await existingUserId(identity))!);
+      }
       case "refused":
         return undefined;
     }
