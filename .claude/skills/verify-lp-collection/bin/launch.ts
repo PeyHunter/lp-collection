@@ -26,7 +26,7 @@ await pg.start();
 await pg.createDatabase("lp_collection");
 
 const app = spawn("node", ["src/server/main.ts"], {
-  env: { APP_OWNER_DISCOGS_USERNAME: "owner", ...process.env, PORT: String(appPort), DATABASE_URL: `postgres://postgres:${password}@localhost:${postgresPort}/lp_collection` },
+  env: { APP_OWNER_DISCOGS_USERNAME: "owner", ...process.env, DISCOGS: "fake", PORT: String(appPort), DATABASE_URL: `postgres://postgres:${password}@localhost:${postgresPort}/lp_collection` },
   stdio: ["ignore", "inherit", "inherit"],
 });
 

@@ -30,19 +30,20 @@ function readConfig(env: NodeJS.ProcessEnv): Config | { error: string } {
 
 function readDiscogs(env: NodeJS.ProcessEnv): Config["discogs"] | { error: string } {
   const { DISCOGS_CONSUMER_KEY, DISCOGS_CONSUMER_SECRET } = env;
+  const production = env.NODE_ENV === "production";
+  if (env.DISCOGS === "fake") {
+    if (production) return { error: "The fake Discogs lets anyone log in as anyone, so it never runs in production. Remove DISCOGS=fake." };
+    return { kind: "fake" };
+  }
   if (DISCOGS_CONSUMER_KEY && DISCOGS_CONSUMER_SECRET) {
     return { kind: "real", consumerKey: DISCOGS_CONSUMER_KEY, consumerSecret: DISCOGS_CONSUMER_SECRET };
   }
   if (DISCOGS_CONSUMER_KEY || DISCOGS_CONSUMER_SECRET) {
     return { error: "Set both DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET, or neither." };
   }
-  if (env.NODE_ENV === "production") {
-    return {
-      error:
-        "DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET are not set, so nobody could log in. Run the Discogs wizard (scripts/wizard/discogs.sh) to register the app with Discogs and store its keys.",
-    };
-  }
-  return { kind: "fake" };
+  const missingKeys =
+    "DISCOGS_CONSUMER_KEY and DISCOGS_CONSUMER_SECRET are not set, so nobody could log in. Run the Discogs wizard (scripts/wizard/discogs.sh) to register the app with Discogs and store its keys.";
+  return { error: production ? missingKeys : `${missingKeys} To try the app on this computer without Discogs, start it with DISCOGS=fake.` };
 }
 
 function readPublicUrl(env: NodeJS.ProcessEnv, port: number): URL | { error: string } {
@@ -70,7 +71,7 @@ let discogs: DiscogsGateway;
 if (config.discogs.kind === "real") {
   discogs = createRealDiscogs(config.discogs);
 } else {
-  console.log("No Discogs keys set: using the fake Discogs, whose login page asks only for a username.");
+  console.log("DISCOGS=fake: using the fake Discogs, whose login page asks only for a username.");
   discogs = fake = createFakeDiscogs();
 }
 
