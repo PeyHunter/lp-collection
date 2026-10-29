@@ -13,6 +13,7 @@ export type FakeDiscogs = DiscogsGateway & {
   /** The account named `from` takes the name `to`, and a different, new account takes the name `from`. */
   renameAccount(from: string, to: string): void;
   issuedIdentities: DiscogsIdentity[];
+  calls: { startLogin: number; finishLogin: number };
   pages: Hono;
 };
 
@@ -21,6 +22,7 @@ const authorizePath = "/fake-discogs/authorize";
 export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   const pending = new Map<string, { requestSecret: string; callbackUrl: string; authorized?: { verifier: string; discogsUsername: string } }>();
   const issuedIdentities: DiscogsIdentity[] = [];
+  const calls = { startLogin: 0, finishLogin: 0 };
   const renamedAccounts = new Map<string, number>();
   const discogsUserIdOf = (discogsUsername: string) =>
     renamedAccounts.get(discogsUsername.toLowerCase()) ?? fakeDiscogsUserId(discogsUsername);
@@ -62,6 +64,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       return script.releasesByBarcode?.[barcode] ?? [];
     },
     async startLogin(callbackUrl) {
+      calls.startLogin += 1;
       if (script.loginStartFails) throw new Error("Fake Discogs is scripted to refuse new logins");
       const requestToken = randomUUID();
       const requestSecret = randomUUID();
@@ -69,6 +72,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       return { requestToken, requestSecret, authorizeUrl: `${authorizePath}?oauth_token=${requestToken}` };
     },
     async finishLogin({ requestToken, requestSecret, verifier }) {
+      calls.finishLogin += 1;
       const login = pending.get(requestToken);
       if (!login || login.requestSecret !== requestSecret) throw new Error("Fake Discogs refused an unknown request token");
       if (!login.authorized || login.authorized.verifier !== verifier) throw new Error("Fake Discogs refused a wrong verifier");
@@ -92,6 +96,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       return callbackFor(requestToken, discogsUsername);
     },
     issuedIdentities,
+    calls,
     pages,
   };
 }

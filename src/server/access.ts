@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, isNull, lt, lte, notLike, or, TransactionRollbackError } from "drizzle-orm";
+import { isIPv6 } from "node:net";
+import { and, eq, gt, isNull, lt, lte, notLike, or, sql, TransactionRollbackError } from "drizzle-orm";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -18,7 +19,12 @@ const sessionLifetime = 400 * day;
 const sessionCookie = "lp_session";
 const loginCookie = "lp_login";
 const maxPendingLogins = 5;
-const maxAnonymousLoginStarts = 10;
+const maxVerifierChecksWithoutCookie = 3;
+const loginLimits = {
+  loggedOutPerDevice: 10,
+  loggedOutTotal: 30,
+  perUser: 30,
+};
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -212,22 +218,19 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     });
   }
 
-  const anonymousLoginStarts = new Map<string, { windowStart: number; count: number }>();
+  const loggedOutPerDevice = fixedWindowLimit(loginLimits.loggedOutPerDevice, loginAttemptLifetime, now);
+  const loggedOutTotal = fixedWindowLimit(loginLimits.loggedOutTotal, loginAttemptLifetime, now);
+  const perUser = fixedWindowLimit(loginLimits.perUser, loginAttemptLifetime, now);
 
-  function allowAnonymousLoginStart(client: string) {
-    const at = now().getTime();
-    for (const [key, window] of anonymousLoginStarts) {
-      if (at - window.windowStart >= loginAttemptLifetime) anonymousLoginStarts.delete(key);
-    }
-    const window = anonymousLoginStarts.get(client) ?? { windowStart: at, count: 0 };
-    window.count += 1;
-    anonymousLoginStarts.set(client, window);
-    return window.count <= maxAnonymousLoginStarts;
+  /** Every Discogs call made for someone not logged in shares one budget, so a spread of addresses cannot drain the home IP's Discogs quota. */
+  function allowLoggedOutDiscogsCall(c: Context) {
+    return loggedOutPerDevice(deviceKey(clientAddress(c))) && loggedOutTotal("all");
   }
 
   routes.get("/api/login", async (c) => {
     const code = c.req.query("invite");
-    if (!(await currentUser(c)) && !allowAnonymousLoginStart(clientAddress(c))) {
+    const user = await currentUser(c);
+    if (!(user ? perUser(user.id) : allowLoggedOutDiscogsCall(c))) {
       return c.redirect(loginProblemPath(code, "too-many"), 302);
     }
     let inviteId: string | null = null;
@@ -270,6 +273,10 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     if (now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect(loginProblemPath(codeForThisBrowser, "expired"), 302);
     const claim = async () => (await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning()).length > 0;
     if (startedInThisBrowser && !(await claim())) return c.redirect(loginProblemPath(code, "expired"), 302);
+    if (!startedInThisBrowser) {
+      if (!allowLoggedOutDiscogsCall(c)) return c.redirect(loginProblemPath(undefined, "too-many"), 302);
+      if (!(await reserveVerifierCheck(requestToken))) return c.redirect(loginProblemPath(undefined, "expired"), 302);
+    }
 
     let identity: DiscogsIdentity;
     try {
@@ -289,6 +296,16 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     await startSession(c, userId);
     return c.redirect("/", 302);
   });
+
+  /** Without the login cookie anyone who saw the request token can send verifiers, so each attempt gets only a few Discogs checks. */
+  async function reserveVerifierCheck(requestToken: string) {
+    const reserved = await db
+      .update(loginAttempts)
+      .set({ verifierChecks: sql`${loginAttempts.verifierChecks} + 1` })
+      .where(and(eq(loginAttempts.requestToken, requestToken), lt(loginAttempts.verifierChecks, maxVerifierChecksWithoutCookie)))
+      .returning({ requestToken: loginAttempts.requestToken });
+    return reserved.length > 0;
+  }
 
   routes.post("/api/logout", async (c) => {
     const token = getCookie(c, sessionCookie);
@@ -323,6 +340,34 @@ function clientAddress(c: Context) {
   } catch {
     return "unknown";
   }
+}
+
+/** One home or phone network gets a whole IPv6 /64, so its addresses count as one device. */
+function deviceKey(address: string) {
+  if (!isIPv6(address)) return address;
+  const mappedIPv4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+  if (mappedIPv4) return mappedIPv4[1]!;
+  const [head, tail] = address.split("::");
+  const groups = (part: string | undefined) => (part ? part.split(":").flatMap((group) => (group.includes(".") ? ["0", "0"] : [group])) : []);
+  const headGroups = groups(head);
+  const tailGroups = groups(tail);
+  const zeros = tail === undefined ? [] : Array<string>(8 - headGroups.length - tailGroups.length).fill("0");
+  const network = [...headGroups, ...zeros, ...tailGroups].slice(0, 4).map((group) => parseInt(group, 16).toString(16));
+  return `${network.join(":")}::/64`;
+}
+
+function fixedWindowLimit(limit: number, windowMs: number, now: () => Date) {
+  const windows = new Map<string, { windowStart: number; count: number }>();
+  return function allow(key: string) {
+    const at = now().getTime();
+    for (const [stale, window] of windows) {
+      if (at - window.windowStart >= windowMs) windows.delete(stale);
+    }
+    const window = windows.get(key) ?? { windowStart: at, count: 0 };
+    window.count += 1;
+    windows.set(key, window);
+    return window.count <= limit;
+  };
 }
 
 function invitePath(code: string) {

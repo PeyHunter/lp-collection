@@ -63,5 +63,6 @@ export const loginAttempts = pgTable("login_attempts", {
   requestSecret: text("request_secret").notNull(),
   inviteId: uuid("invite_id").references(() => invites.id),
   inviteCode: text("invite_code"),
+  verifierChecks: integer("verifier_checks").notNull().default(0),
   createdAt: at("created_at").notNull(),
 });
