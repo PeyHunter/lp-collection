@@ -334,7 +334,7 @@ if ! confirm "Add it and push now?"; then
   exit 0
 fi
 if ! sed "s/sha-0000000/${TAG}/" "$REPO_DIR/deploy/argocd-application.yaml" \
-  | ssh -q "$K3S_HOST" "cd ~/cluster && git pull -q --ff-only && cat > apps/lp-collection.yaml && git add apps/lp-collection.yaml \
+  | ssh -q -o ControlMaster=auto -o ControlPath="$SSH_DIR/control" -o ControlPersist=15m "$K3S_HOST" "cd ~/cluster && git pull -q --ff-only && cat > apps/lp-collection.yaml && git add apps/lp-collection.yaml \
       && { git diff --cached --quiet || git commit -qm 'lp-collection: deploy ${TAG}'; } && git push -q"; then
   warn "Couldn't update k3s-gitops on k3s-1. The message above says why."
   note "Fix it, then run this wizard again. The steps already done are remembered."
