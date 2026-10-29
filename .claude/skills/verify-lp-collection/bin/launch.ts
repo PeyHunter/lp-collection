@@ -2,6 +2,7 @@
 // Usage (from the repo root, in the background): node .claude/skills/verify-lp-collection/bin/launch.ts [run-id]
 // Prints "READY <run-id> <url>" once the app answers a healthy /api/health. stop.ts (SIGUSR2) tears it all down.
 import { execSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -26,13 +27,15 @@ execSync("npm run build", { stdio: ["ignore", "ignore", "inherit"] });
 const postgresPort = await freePort();
 const appPort = await freePort();
 const dataDir = await mkdtemp(join(tmpdir(), `lp-collection-verify-${runId}-`));
-const pg = new EmbeddedPostgres({ databaseDir: dataDir, user: "postgres", password: "postgres", port: postgresPort, persistent: false, onLog: () => {} });
+// A fresh random password per run: the database is throwaway and nothing secret is committed.
+const password = randomUUID();
+const pg = new EmbeddedPostgres({ databaseDir: dataDir, user: "postgres", password, port: postgresPort, persistent: false, onLog: () => {} });
 await pg.initialise();
 await pg.start();
 await pg.createDatabase("lp_collection");
 
 const app = spawn("node", ["src/server/main.ts"], {
-  env: { ...process.env, PORT: String(appPort), DATABASE_URL: `postgres://postgres:postgres@localhost:${postgresPort}/lp_collection` },
+  env: { ...process.env, PORT: String(appPort), DATABASE_URL: `postgres://postgres:${password}@localhost:${postgresPort}/lp_collection` },
   stdio: ["ignore", "inherit", "inherit"],
 });
 
