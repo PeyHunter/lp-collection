@@ -1,0 +1,15 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  background: light-dark(oklch(98% 0.005 80), oklch(18% 0.01 80));
+  color: light-dark(oklch(22% 0.01 80), oklch(94% 0.005 80));
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  padding-block: max(1.5rem, env(safe-area-inset-top)) 1.5rem;
+  padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+}
