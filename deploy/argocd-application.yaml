@@ -21,3 +21,7 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # The namespace stays outside Argo CD, so deleting this Application never
+    # deletes the namespace, the database volume or the wizard's secrets.
+    syncOptions:
+      - CreateNamespace=true
