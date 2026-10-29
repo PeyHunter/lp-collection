@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { sealStoredDiscogsTokens } from "./access.ts";
+import { sealStoredDiscogsTokens, storedTokensOpenWith } from "./access.ts";
 import { createApp } from "./app.ts";
 import { connectDatabase, migrate } from "./db.ts";
 import { createFakeDiscogs, type FakeDiscogs } from "./fake-discogs.ts";
@@ -101,6 +101,13 @@ if (config.discogs.kind === "real") {
 const database = connectDatabase(config.databaseUrl);
 await migrate(database);
 const secretBox = createSecretBox(config.tokenEncryptionKey);
+if (!(await storedTokensOpenWith(database, secretBox))) {
+  console.error(
+    "LP-Collection cannot start: TOKEN_ENCRYPTION_KEY cannot open the Discogs tokens already stored. Start the app with the key it used before (TOKEN_ENCRYPTION_KEY in the lp-collection-discogs secret). If that key is lost, clear the stored tokens so every User logs in again: UPDATE users SET discogs_access_token = '', discogs_access_secret = '';",
+  );
+  await database.close();
+  process.exit(1);
+}
 await sealStoredDiscogsTokens(database, secretBox);
 
 const app = createApp({ database, discogs, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl });

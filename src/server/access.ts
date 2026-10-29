@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { isIPv6 } from "node:net";
-import { and, eq, gt, isNull, lt, lte, notLike, or, sql, TransactionRollbackError } from "drizzle-orm";
+import { and, eq, gt, isNull, like, lt, lte, notLike, or, sql, TransactionRollbackError } from "drizzle-orm";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -265,7 +265,12 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     if (!requestToken || !verifier) return c.redirect(loginProblemPath(undefined, "failed"), 302);
     const [attempt] = await db.select().from(loginAttempts).where(eq(loginAttempts.requestToken, requestToken));
     if (!attempt) return c.redirect(loginProblemPath(undefined, "expired"), 302);
-    const code = attempt.inviteCode === null ? undefined : secretBox.open(attempt.inviteCode);
+    const opened = openAttempt(attempt);
+    if (!opened) {
+      await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken));
+      return c.redirect(loginProblemPath(undefined, "expired"), 302);
+    }
+    const { code, requestSecret } = opened;
     const pending = pendingLogins(c);
     const startedInThisBrowser = pending.includes(requestToken);
     if (startedInThisBrowser) setPendingLogins(c, pending.filter((token) => token !== requestToken));
@@ -280,7 +285,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
 
     let identity: DiscogsIdentity;
     try {
-      identity = await discogs.finishLogin({ requestToken, requestSecret: secretBox.open(attempt.requestSecret), verifier });
+      identity = await discogs.finishLogin({ requestToken, requestSecret, verifier });
     } catch (error) {
       console.error(`Discogs login failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.redirect(loginProblemPath(codeForThisBrowser, "failed"), 302);
@@ -296,6 +301,14 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     await startSession(c, userId);
     return c.redirect("/", 302);
   });
+
+  function openAttempt(attempt: typeof loginAttempts.$inferSelect) {
+    try {
+      return { requestSecret: secretBox.open(attempt.requestSecret), code: attempt.inviteCode === null ? undefined : secretBox.open(attempt.inviteCode) };
+    } catch {
+      return undefined;
+    }
+  }
 
   /** Without the login cookie anyone who saw the request token can send verifiers, so each attempt gets only a few Discogs checks. */
   async function reserveVerifierCheck(requestToken: string) {
@@ -376,6 +389,21 @@ function invitePath(code: string) {
 
 function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
+}
+
+export async function storedTokensOpenWith({ db }: Database, box: SecretBox) {
+  const [stored] = await db
+    .select({ token: users.discogsAccessToken })
+    .from(users)
+    .where(like(users.discogsAccessToken, `${sealedPrefix}%`))
+    .limit(1);
+  if (!stored) return true;
+  try {
+    box.open(stored.token);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function sealStoredDiscogsTokens({ db }: Database, box: SecretBox) {
