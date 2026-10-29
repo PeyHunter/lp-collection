@@ -1,0 +1,249 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE. Not production code.
+  LP-Collection Collection list in the "Gig poster" direction: search, sort and poster-style group headings.
+  Open with ?sort=period (or artist, year, value) to start on another sort.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Collection · LP-Collection prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400..900&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="gig-poster.css">
+<style>
+.title-block { display: grid; gap: var(--space-s); }
+.title-block .poster-h { font-size: 13.4cqi; }
+.title-block .sub { display: flex; justify-content: space-between; gap: var(--space-m); font-family: var(--body); text-transform: none; font-size: var(--text-sm); line-height: 1.3; color: var(--ink-dim); }
+.title-block .sub b { color: var(--ink); font-weight: 600; }
+
+.controls { display: grid; gap: var(--space-s); }
+.search { position: relative; display: grid; }
+.search svg { position: absolute; inset-block-start: 50%; inset-inline-start: var(--space-m); translate: 0 -50%; inline-size: 1.125rem; color: var(--ink-dim); pointer-events: none; }
+.search .input { padding-inline-start: 2.75rem; }
+.sort { display: flex; align-items: center; gap: var(--space-xs); border: 0; margin: 0; padding: 0; }
+.sort legend { float: inline-start; margin-inline-end: var(--space-2xs); font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-dim); }
+.sort .chips { flex: 1; display: grid; grid-template-columns: repeat(4, auto); gap: var(--space-2xs); }
+.sort .chip { padding-inline: var(--space-xs); }
+.dir {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3xs);
+  min-inline-size: var(--tap);
+  min-block-size: var(--tap);
+  font-size: var(--text-s);
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+.dir svg { inline-size: 1.25rem; }
+.dir:active { opacity: 0.7; }
+.order-note { font-size: var(--text-xs); color: var(--ink-faint); }
+
+.groups { container-type: inline-size; display: grid; gap: var(--space-xl); }
+.group { display: grid; }
+.group-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-m);
+  padding-block: var(--space-s) var(--space-2xs);
+  border-block-start: 2px solid var(--ink);
+}
+.group-h .poster-h { font-size: 13cqi; white-space: nowrap; overflow: clip; text-overflow: ellipsis; }
+.group-h .poster-h small { font-size: 0.42em; letter-spacing: 0; margin-inline-start: 0.2em; color: var(--accent); }
+.group-h .poster-h .lower { text-transform: none; color: var(--accent); }
+.group-h .n { flex: none; font-size: var(--text-sm); font-weight: 600; color: var(--ink-dim); }
+.group.muted .group-h { border-block-start-color: var(--line); }
+.group.muted .group-h .poster-h { font-size: 8cqi; color: var(--accent-ink); }
+.empty { padding-block: var(--space-l); color: var(--ink-dim); text-align: center; }
+
+@media (hover: hover) and (pointer: fine) {
+  .dir:hover { color: var(--ink); }
+}
+</style>
+</head>
+<body>
+
+<header class="top content-grid">
+  <div class="top-inner">
+    <h1><small>Collection</small>Peyton’s Collection</h1>
+    <button class="icon-btn" type="button" aria-label="Download as a spreadsheet">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="content-grid">
+  <section class="poster title-block" aria-labelledby="page-h">
+    <div class="rule"></div>
+    <h2 id="page-h" class="poster-h">The <span class="accent">records</span></h2>
+    <p class="sub"><span><b>612</b> LPs · <b>184.350</b> kr</span><span><b>14</b> with no Value yet</span></p>
+  </section>
+
+  <section class="controls" aria-label="Search and sort">
+    <label class="search">
+      <span class="visually-hidden">Search the Collection</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+      <input class="input" type="search" id="q" placeholder="Search artist, title, label…" autocomplete="off">
+    </label>
+    <fieldset class="sort">
+      <legend class="visually-hidden">Sort by</legend>
+      <div class="chips">
+        <label class="chip"><input type="radio" name="sort" value="value" checked>Value</label>
+        <label class="chip"><input type="radio" name="sort" value="artist">Artist</label>
+        <label class="chip"><input type="radio" name="sort" value="period">Period</label>
+        <label class="chip"><input type="radio" name="sort" value="year">Year</label>
+      </div>
+      <button class="dir" type="button" id="dir" aria-label="Reverse the order">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4v16M4 16l4 4 4-4M16 20V4M12 8l4-4 4 4"/></svg>
+      </button>
+    </fieldset>
+    <p class="order-note" id="order-note" aria-live="polite"></p>
+  </section>
+
+  <div class="groups" id="groups"></div>
+</main>
+
+<nav class="dock content-grid" aria-label="Main">
+  <div class="dock-inner">
+    <a class="tab" href="home.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4z"/></svg>
+      Home
+    </a>
+    <a class="scan" href="lookup.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M11 9v6M14 9v6M17 9v6"/></svg>
+      Scan
+    </a>
+    <a class="tab" href="collection.html" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>
+      Collection
+    </a>
+  </div>
+</nav>
+
+<script>
+const copies = [
+  { artist: "Miles Davis", sortArtist: "Davis, Miles", title: "Kind of Blue", year: 1959, label: "Columbia", catno: "CS 8163", genre: "Jazz", value: 4850, cover: "p1", h: 250 },
+  { artist: "John Coltrane", sortArtist: "Coltrane, John", title: "A Love Supreme", year: 1965, label: "Impulse!", catno: "A-77", genre: "Jazz", value: 3200, cover: "p3", h: 20 },
+  { artist: "Pink Floyd", sortArtist: "Pink Floyd", title: "The Dark Side of the Moon", year: 1973, label: "Harvest", catno: "SHVL 804", genre: "Rock", value: 2900, cover: "p3", h: 300 },
+  { artist: "The Beatles", sortArtist: "Beatles", title: "Abbey Road", year: 1969, label: "Apple", catno: "PCS 7088", genre: "Rock", value: 2400, cover: "p2", h: 140 },
+  { artist: "The Beatles", sortArtist: "Beatles", title: "Revolver", year: 1966, label: "Parlophone", catno: "PMC 7009", genre: "Rock", value: 2100, cover: "p4", h: 90 },
+  { artist: "David Bowie", sortArtist: "Bowie, David", title: "Hunky Dory", year: 1971, label: "RCA Victor", catno: "SF 8244", genre: "Rock", value: 1850, cover: "p4", h: 70 },
+  { artist: "Miles Davis", sortArtist: "Davis, Miles", title: "Bitches Brew", year: 1970, label: "Columbia", catno: "GP 26", genre: "Jazz", value: 1400, cover: "p1", h: 200 },
+  { artist: "Daft Punk", sortArtist: "Daft Punk", title: "Discovery", year: 2001, label: "Virgin", catno: "V 2940", genre: "Electronic", value: 1100, cover: "p2", h: 330 },
+  { artist: "Massive Attack", sortArtist: "Massive Attack", title: "Mezzanine", year: 1998, label: "Virgin", catno: "WBRLP 4", genre: "Electronic", value: 980, cover: "p1", h: 0 },
+  { artist: "Joni Mitchell", sortArtist: "Mitchell, Joni", title: "Blue", year: 1971, label: "Reprise", catno: "K 44128", genre: "Folk", value: 950, cover: "p4", h: 240 },
+  { artist: "Kraftwerk", sortArtist: "Kraftwerk", title: "Trans-Europe Express", year: 1977, label: "Kling Klang", catno: "1C 064-82 306", genre: "Electronic", value: 880, cover: "p2", h: 250 },
+  { artist: "Leonard Cohen", sortArtist: "Cohen, Leonard", title: "Songs of Leonard Cohen", year: 1967, label: "CBS", catno: "63241", genre: "Folk", value: 760, cover: "p4", h: 40 },
+  { artist: "Kate Bush", sortArtist: "Bush, Kate", title: "Hounds of Love", year: 1985, label: "EMI", catno: "KAB 1", genre: "Pop", value: 720, cover: "p3", h: 260 },
+  { artist: "Kim Larsen", sortArtist: "Larsen, Kim", title: "Værsgo", year: 1973, label: "Polydor", catno: "2380 038", genre: "Rock", value: 650, cover: "p1", h: 110 },
+  { artist: "David Bowie", sortArtist: "Bowie, David", title: "Low", year: 1977, label: "RCA Victor", catno: "PL 12030", genre: "Rock", value: 620, cover: "p3", h: 30 },
+  { artist: "The Savage Rose", sortArtist: "Savage Rose", title: "In The Plain", year: 1968, label: "Polydor", catno: "184 144", genre: "Rock", value: 540, cover: "none", h: 0 },
+  { artist: "Gasolin'", sortArtist: "Gasolin'", title: "Gas 5", year: 1975, label: "CBS", catno: "CBS 69209", genre: "Rock", value: 420, cover: "p2", h: 50 },
+  { artist: "Talking Heads", sortArtist: "Talking Heads", title: "Remain in Light", year: 1980, label: "Sire", catno: "SRK 6095", genre: "Rock", value: 380, cover: "p3", h: 15 },
+  { artist: "Fontaines D.C.", sortArtist: "Fontaines D.C.", title: "Romance", year: 2024, label: "XL", catno: "XL1453LP", genre: "Rock", value: 320, cover: "p1", h: 10 },
+  { artist: "Joni Mitchell", sortArtist: "Mitchell, Joni", title: "Court and Spark", year: 1974, label: "Asylum", catno: "SYLA 8756", genre: "Folk", value: 310, cover: "p2", h: 170 },
+  { artist: "Fiona Apple", sortArtist: "Apple, Fiona", title: "When the Pawn Hits the Conflicts He Thinks Like a King What He Knows Throws the Blows When He Goes to the Fight...", year: 1999, label: "Clean Slate", catno: "E2 69195", genre: "Pop", value: 160, cover: "p4", h: 60 },
+  { artist: "Kim Larsen & Bellami", sortArtist: "Larsen, Kim & Bellami", title: "Midt om natten", year: 1983, label: "Medley", catno: "Medley A 2010", genre: "Rock", value: null, cover: "p3", h: 280 },
+  { artist: "Nina Simone", sortArtist: "Simone, Nina", title: "Wild Is the Wind", year: 1966, label: "Philips", catno: "PHS 600-207", genre: "Jazz", value: null, cover: "p1", h: 340 },
+  { artist: "Bill Evans Trio", sortArtist: "Evans, Bill", title: "Waltz for Debby", year: 1962, label: "Riverside", catno: "RLP 9399", genre: "Jazz", value: null, cover: "none", h: 0 },
+];
+
+const kr = new Intl.NumberFormat("da-DK");
+const period = (year) => `${String(Math.floor(year / 10) * 10).slice(2)}s`;
+const valueBand = (v) => v >= 2000 ? "2.000+" : v >= 1000 ? "1.000+" : v >= 500 ? "500+" : "Under 500";
+
+const sorts = {
+  value: {
+    compare: (a, b) => a.value - b.value,
+    group: (c) => valueBand(c.value),
+    heading: (key) => key === "Under 500" ? `&lt;&#8202;500<small>kr</small>` : `${key}<small>kr</small>`,
+    order: ["High first", "Low first"],
+  },
+  artist: {
+    compare: (a, b) => a.sortArtist.localeCompare(b.sortArtist, "da") || a.year - b.year,
+    group: (c) => c.sortArtist[0].toUpperCase(),
+    heading: (key) => key,
+    order: ["A to Z", "Z to A"],
+  },
+  period: {
+    compare: (a, b) => a.year - b.year,
+    group: (c) => period(c.year),
+    heading: (key) => `The ${key.slice(0, 2)}<span class="lower">s</span>`,
+    order: ["Oldest first", "Newest first"],
+  },
+  year: {
+    compare: (a, b) => a.year - b.year || a.sortArtist.localeCompare(b.sortArtist, "da"),
+    group: (c) => String(c.year),
+    heading: (key) => key,
+    order: ["Oldest first", "Newest first"],
+  },
+};
+const defaultReversed = { value: true, artist: false, period: false, year: false };
+
+const groupsEl = document.getElementById("groups");
+const q = document.getElementById("q");
+const note = document.getElementById("order-note");
+const params = new URLSearchParams(location.search);
+let sortKey = sorts[params.get("sort")] ? params.get("sort") : "value";
+let reversed = defaultReversed[sortKey];
+document.querySelector(`input[name=sort][value=${sortKey}]`).checked = true;
+
+const escape = (s) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+
+function row(c) {
+  const cover = c.cover === "none" ? "cover none" : `cover ${c.cover}`;
+  const value = c.value === null
+    ? `<span class="row-value no-value">No Value yet</span>`
+    : `<span class="row-value tnum">${kr.format(c.value)} <small>kr</small></span>`;
+  return `<li class="row">
+    <span class="${cover}" style="--h:${c.h}" aria-hidden="true"></span>
+    <span class="row-text"><a class="row-link row-title" href="copy.html">${escape(c.title)}</a><span class="row-artist">${escape(c.artist)}</span><span class="row-meta">${c.year} · ${escape(c.label)} · ${escape(c.catno)}</span></span>
+    ${value}
+  </li>`;
+}
+
+function group(heading, items, muted = false) {
+  const n = `${items.length} LP${items.length === 1 ? "" : "s"}`;
+  return `<section class="group${muted ? " muted" : ""}">
+    <h3 class="group-h"><span class="poster-h">${heading}</span><span class="n">${n}</span></h3>
+    <ol class="rows">${items.map(row).join("")}</ol>
+  </section>`;
+}
+
+function render() {
+  const sort = sorts[sortKey];
+  const term = q.value.trim().toLowerCase();
+  const found = copies.filter((c) => !term || [c.artist, c.title, c.label, c.catno, c.genre].some((f) => f.toLowerCase().includes(term)));
+  const ranked = sortKey === "value" ? found.filter((c) => c.value !== null) : found;
+  const unvalued = sortKey === "value" ? found.filter((c) => c.value === null) : [];
+  const sorted = ranked.toSorted((a, b) => (reversed ? -1 : 1) * sort.compare(a, b));
+
+  const groups = new Map();
+  for (const c of sorted) {
+    const key = sort.group(c);
+    groups.set(key, [...(groups.get(key) ?? []), c]);
+  }
+  const html = [...groups].map(([key, items]) => group(sort.heading(key), items));
+  if (unvalued.length) html.push(group("No Value yet", unvalued, true));
+  groupsEl.innerHTML = html.join("") || `<p class="empty">No Copies match “${escape(q.value)}”.</p>`;
+
+  note.textContent = `${sort.order[reversed === defaultReversed[sortKey] ? 0 : 1]}${sortKey === "value" ? ". Copies with no Value always come last." : "."}`;
+}
+
+document.querySelectorAll("input[name=sort]").forEach((input) => input.addEventListener("change", () => {
+  sortKey = input.value;
+  reversed = defaultReversed[sortKey];
+  render();
+}));
+document.getElementById("dir").addEventListener("click", () => { reversed = !reversed; render(); });
+q.addEventListener("input", render);
+render();
+</script>
+</body>
+</html>

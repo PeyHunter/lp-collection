@@ -1,0 +1,240 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE. Not production code. FIRST SKETCH of a new feature.
+  The Owner photographs a record shelf, the app lays a grid over the photo so each square is a
+  numbered section, Copies are put in squares, and a looked-up record lights up its square.
+  The SVG drawing stands in for the Owner's photo of a 4 wide by 6 high cube shelf.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Shelf · LP-Collection prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400..900&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="gig-poster.css">
+<style>
+.found { display: grid; grid-template-columns: auto 1fr; align-items: end; column-gap: 4cqi; }
+.found .poster-h { font-size: 30cqi; line-height: 0.78; color: var(--accent); }
+.found .what { display: grid; gap: 1.5cqi; padding-block-end: 0.5cqi; }
+.found .what .t { font-size: 7cqi; font-weight: 800; letter-spacing: -0.02em; line-height: 0.95; }
+.found .what .s { font-family: var(--body); text-transform: none; font-size: var(--text-s); font-weight: 500; line-height: 1.25; color: var(--ink-dim); }
+
+.photo-wrap { display: grid; gap: var(--space-xs); }
+.shelf-photo { inline-size: 100%; border-radius: var(--radius-m); }
+.shelf-photo .cell { cursor: pointer; }
+.shelf-photo .cell rect.hit { fill: transparent; stroke: color-mix(in oklch, var(--ink) 70%, transparent); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.shelf-photo .cell rect.dim { fill: oklch(0% 0 none / 0.42); }
+.shelf-photo .cell text { font-family: var(--body); font-size: 13px; font-weight: 700; fill: var(--ink); paint-order: stroke; stroke: oklch(0% 0 none / 0.6); stroke-width: 3px; }
+.shelf-photo .cell.here rect.hit { stroke: var(--accent); stroke-width: 5; stroke-dasharray: none; }
+.shelf-photo .cell.here rect.dim { fill: transparent; }
+.shelf-photo .cell.here .tag { fill: var(--accent-fill); }
+.shelf-photo .cell.here text { font-family: var(--display); font-size: 15px; font-weight: 800; fill: var(--on-accent); stroke: none; }
+.shelf-photo .cell:focus-visible { outline: 2px solid transparent; }
+.shelf-photo .cell:focus-visible rect.hit { stroke: var(--ink); stroke-width: 4; stroke-dasharray: none; }
+.shelf-photo .cell:active rect.dim { fill: oklch(0% 0 none / 0.2); }
+.caption { font-size: var(--text-xs); color: var(--ink-faint); text-align: center; }
+
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xs); }
+
+.in-square .badge {
+  justify-self: start;
+  margin-block-start: var(--space-2xs);
+  padding: var(--space-3xs) var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.steps { display: grid; gap: var(--space-s); padding-block-start: 0.875rem; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 2.25rem 1fr; gap: var(--space-s); align-items: baseline; counter-increment: step; font-size: var(--text-sm); color: var(--ink-dim); }
+.steps li::before { content: counter(step); font-family: var(--display); font-size: var(--text-xl); font-weight: 900; color: var(--accent); line-height: 1; }
+.steps b { color: var(--ink); font-weight: 600; }
+
+@media (hover: hover) and (pointer: fine) {
+  .shelf-photo .cell:hover rect.dim { fill: oklch(0% 0 none / 0.2); }
+}
+</style>
+</head>
+<body>
+
+<header class="top content-grid">
+  <div class="top-inner">
+    <a class="icon-btn" href="copy.html" aria-label="Back to Kind of Blue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <h1><small>Shelf</small>Living room shelf</h1>
+  </div>
+</header>
+
+<main class="content-grid">
+  <section class="poster" aria-labelledby="found-h">
+    <p class="kicker"><span>First sketch</span><span>4 × 6 squares</span></p>
+    <div class="rule"></div>
+    <h2 id="found-h" class="visually-hidden">Kind of Blue lives in C4</h2>
+    <div class="found" aria-hidden="true">
+      <span class="poster-h">C4</span>
+      <span class="what"><span class="t">Kind of Blue</span><span class="s">lives in C4. Column C, row 4 from the top.</span></span>
+    </div>
+  </section>
+
+  <section class="photo-wrap" aria-label="Shelf photo with squares">
+    <svg class="shelf-photo" id="shelf" viewBox="0 0 400 560" role="group" aria-label="Photo of the shelf with a grid of 24 squares. C4 is marked."></svg>
+    <p class="caption">Tap a square to see what is in it.</p>
+    <div class="tools">
+      <button class="btn quiet" type="button">Adjust grid</button>
+      <button class="btn quiet" type="button">Retake photo</button>
+    </div>
+  </section>
+
+  <section class="in-square" aria-labelledby="in-h">
+    <div class="section-head"><h2 id="in-h">In C4</h2><span class="count">9 LPs</span></div>
+    <ol class="rows">
+      <li class="row">
+        <span class="cover" style="--h:250" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Kind of Blue</a><span class="row-artist">Miles Davis</span><span class="row-meta">1959 · Columbia · CS 8163</span><span class="badge">Looked up</span></span>
+        <span class="row-value tnum">4.850 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p2" style="--h:20" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Mingus Ah Um</a><span class="row-artist">Charles Mingus</span><span class="row-meta">1959 · Columbia · CS 8171</span></span>
+        <span class="row-value tnum">1.250 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p3" style="--h:20" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">A Love Supreme</a><span class="row-artist">John Coltrane</span><span class="row-meta">1965 · Impulse! · A-77</span></span>
+        <span class="row-value tnum">3.200 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p4" style="--h:220" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Blue Train</a><span class="row-artist">John Coltrane</span><span class="row-meta">1957 · Blue Note · BLP 1577</span></span>
+        <span class="row-value tnum">2.200 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p1" style="--h:200" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Bitches Brew</a><span class="row-artist">Miles Davis</span><span class="row-meta">1970 · Columbia · GP 26</span></span>
+        <span class="row-value tnum">1.400 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p1" style="--h:120" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Moanin’</a><span class="row-artist">Art Blakey &amp; The Jazz Messengers</span><span class="row-meta">1958 · Blue Note · BLP 4003</span></span>
+        <span class="row-value tnum">900 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p2" style="--h:80" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Time Out</a><span class="row-artist">The Dave Brubeck Quartet</span><span class="row-meta">1959 · Columbia · CS 8192</span></span>
+        <span class="row-value tnum">450 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p1" style="--h:340" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Wild Is the Wind</a><span class="row-artist">Nina Simone</span><span class="row-meta">1966 · Philips · PHS 600-207</span></span>
+        <span class="row-value no-value">No Value yet</span>
+      </li>
+      <li class="row">
+        <span class="cover none" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Waltz for Debby</a><span class="row-artist">Bill Evans Trio</span><span class="row-meta">1962 · Riverside · RLP 9399</span></span>
+        <span class="row-value no-value">No Value yet</span>
+      </li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="how-h">
+    <div class="section-head"><h2 id="how-h">How the shelf works</h2></div>
+    <ol class="steps">
+      <li><span><b>Photograph your shelf</b> straight on, the whole thing in one picture.</span></li>
+      <li><span><b>Line up the grid</b> with the squares. Columns get letters, rows get numbers.</span></li>
+      <li><span><b>Put Copies in squares</b> when you add them, or a whole square at once.</span></li>
+      <li><span><b>Look up any record</b> and its square lights up on the photo.</span></li>
+    </ol>
+  </section>
+</main>
+
+<nav class="dock content-grid" aria-label="Main">
+  <div class="dock-inner">
+    <a class="tab" href="home.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4z"/></svg>
+      Home
+    </a>
+    <a class="scan" href="lookup.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M11 9v6M14 9v6M17 9v6"/></svg>
+      Scan
+    </a>
+    <a class="tab" href="collection.html" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>
+      Collection
+    </a>
+  </div>
+</nav>
+
+<script>
+const svg = document.getElementById("shelf");
+const NS = "http://www.w3.org/2000/svg";
+const cols = ["A", "B", "C", "D"];
+const rows = 6;
+const frame = 14, wall = 9;
+const cellW = (400 - frame * 2 - wall * 3) / 4;
+const cellH = (560 - frame * 2 - wall * (rows - 1)) / rows;
+const here = "C4";
+const counts = { A1: 14, A2: 11, A3: 16, A4: 12, A5: 9, A6: 0, B1: 13, B2: 15, B3: 10, B4: 12, B5: 8, B6: 6, C1: 12, C2: 14, C3: 9, C4: 9, C5: 11, C6: 0, D1: 10, D2: 13, D3: 12, D4: 7, D5: 0, D6: 5 };
+
+let seed = 7;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const el = (name, attrs, parent = svg) => {
+  const node = document.createElementNS(NS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  parent.append(node);
+  return node;
+};
+
+el("rect", { width: 400, height: 560, fill: "oklch(22% 0.02 60)" });
+el("rect", { x: 4, y: 4, width: 392, height: 552, rx: 3, fill: "oklch(78% 0.04 80)" });
+
+const spines = el("g", {});
+cols.forEach((col, c) => {
+  for (let r = 0; r < rows; r++) {
+    const x = frame + c * (cellW + wall), y = frame + r * (cellH + wall);
+    el("rect", { x, y, width: cellW, height: cellH, fill: "oklch(26% 0.025 60)" }, spines);
+    const n = counts[`${col}${r + 1}`];
+    if (!n) continue;
+    const used = Math.min(cellW - 4, n * 6.2);
+    let sx = x + 2;
+    while (sx < x + used) {
+      const w = 2.5 + rand() * 5;
+      const L = 30 + rand() * 55, C = 0.02 + rand() * 0.12, H = Math.floor(rand() * 360);
+      el("rect", { x: sx, y: y + 4 + rand() * 4, width: w, height: cellH - 6, fill: `oklch(${L}% ${C} ${H})` }, spines);
+      sx += w + 0.6;
+    }
+    if (used < cellW - 20) {
+      el("rect", { x: x + used + 4, y: y + 10, width: 3.5, height: cellH - 12, fill: `oklch(${40 + rand() * 30}% 0.06 ${Math.floor(rand() * 360)})`, transform: `rotate(-14 ${x + used + 6} ${y + cellH})` }, spines);
+    }
+  }
+});
+
+const light = el("radialGradient", { id: "light", cx: "35%", cy: "30%", r: "85%" }, el("defs", {}));
+el("stop", { offset: "0", "stop-color": "oklch(100% 0 none)", "stop-opacity": "0.10" }, light);
+el("stop", { offset: "1", "stop-color": "oklch(0% 0 none)", "stop-opacity": "0.35" }, light);
+el("rect", { width: 400, height: 560, fill: "url(#light)" });
+
+cols.forEach((col, c) => {
+  for (let r = 0; r < rows; r++) {
+    const id = `${col}${r + 1}`;
+    const x = frame + c * (cellW + wall), y = frame + r * (cellH + wall);
+    const n = counts[id];
+    const a = el("a", { href: "#in-h", class: `cell${id === here ? " here" : ""}`, "aria-label": `${id}, ${n} LPs` });
+    el("rect", { class: "dim", x, y, width: cellW, height: cellH }, a);
+    el("rect", { class: "hit", x: x + 1.5, y: y + 1.5, width: cellW - 3, height: cellH - 3, rx: 3 }, a);
+    if (id === here) {
+      el("rect", { class: "tag", x: x + 6, y: y + 6, width: 34, height: 22, rx: 11 }, a);
+      el("text", { x: x + 23, y: y + 22, "text-anchor": "middle" }, a).textContent = id;
+    } else {
+      el("text", { x: x + 7, y: y + 19 }, a).textContent = id;
+    }
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE. Not production code.
+  LP-Collection home screen in the "Gig poster" direction (variant 10, chosen by the Owner).
+  The collection stats are set like a concert poster, then calm sections for Value and Recently added.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Home · LP-Collection prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400..900&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="gig-poster.css">
+<style>
+.hero { display: grid; grid-template-columns: auto 1fr; align-items: end; column-gap: 3cqi; }
+.hero .n { font-size: 31cqi; font-weight: 900; letter-spacing: -0.04em; line-height: 0.78; margin-inline-start: -0.04em; }
+.hero .side { display: grid; gap: 2.5cqi; justify-items: start; padding-block-end: 0.4cqi; }
+.hero .lps { font-size: 11cqi; font-weight: 800; line-height: 0.8; color: var(--accent); }
+.hero .new { font-family: var(--body); text-transform: none; font-size: var(--text-s); font-weight: 600; line-height: 1.2; color: var(--ink-dim); }
+.hero .new b { color: var(--ink); font-weight: 700; }
+
+.line { display: flex; align-items: baseline; justify-content: space-between; gap: 3cqi; font-weight: 800; }
+.line .num { letter-spacing: -0.03em; }
+.l-artists { font-size: 12.4cqi; }
+.l-labels { font-size: 13.2cqi; color: var(--accent); }
+
+.billing {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--body);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  color: var(--ink-dim);
+}
+.lineup { display: grid; gap: 2.4cqi; text-align: center; }
+.headliner { white-space: nowrap; font-size: 11.6cqi; font-weight: 900; letter-spacing: -0.02em; }
+.support { font-size: 6.3cqi; font-weight: 700; display: flex; flex-wrap: wrap; justify-content: center; gap: 1.2cqi 3cqi; }
+.support.small { font-size: 4.6cqi; font-weight: 600; color: var(--ink-dim); }
+.lineup sup {
+  font-family: var(--body);
+  font-size: max(0.6875rem, 0.36em);
+  font-weight: 700;
+  letter-spacing: 0;
+  vertical-align: 0.9em;
+  margin-inline-start: 0.15em;
+  color: var(--accent-ink);
+}
+
+.dates { display: grid; grid-template-columns: 1fr 1fr; border-block: 1px solid var(--line); }
+.dates > div { display: grid; gap: 0.375rem; padding-block: var(--space-s); }
+.dates > div + div { border-inline-start: 1px solid var(--line); padding-inline-start: 0.875rem; }
+.dates dt { font-family: var(--body); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.14em; line-height: 1.2; color: var(--ink-dim); }
+.dates .yr { font-size: 11cqi; font-weight: 800; letter-spacing: -0.03em; }
+.dates .what { font-family: var(--body); text-transform: none; font-size: var(--text-s); line-height: 1.25; color: var(--ink-dim); }
+.dates .what b { color: var(--ink); font-weight: 600; }
+
+.decades { display: grid; gap: var(--space-s); }
+.decade-hero { display: flex; align-items: baseline; justify-content: space-between; gap: 2cqi; }
+.decade-hero .big { white-space: nowrap; font-size: 15cqi; font-weight: 900; letter-spacing: -0.05em; }
+.decade-hero .big span { color: var(--accent); text-transform: none; }
+.decade-hero .cap { font-family: var(--body); text-transform: none; text-align: end; font-size: var(--text-s); line-height: 1.25; color: var(--ink-dim); }
+.decade-hero .cap b { display: block; white-space: nowrap; font-family: var(--display); font-size: var(--text-xl); font-weight: 800; line-height: 1.05; color: var(--ink); }
+.bars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0.3125rem; align-items: end; }
+.bars li { display: grid; gap: 0.3125rem; }
+.bars .b { block-size: calc(var(--n) / 214 * 4rem); min-block-size: 3px; background: var(--ink); border-radius: 1px; }
+.bars .hot .b { background: var(--accent); }
+.bars .k { text-transform: none; font-family: var(--body); font-size: var(--text-2xs); font-weight: 600; text-align: center; line-height: 1.1; color: var(--ink-dim); }
+.bars .k b { display: block; color: var(--ink); font-weight: 700; }
+
+.genres { display: grid; gap: var(--space-xs); }
+.genre-top { display: flex; align-items: baseline; justify-content: space-between; font-size: 15.6cqi; font-weight: 900; letter-spacing: -0.03em; }
+.genre-rest { display: flex; flex-wrap: wrap; gap: var(--space-2xs) 0.875rem; font-size: 4.4cqi; font-weight: 600; line-height: 1.2; }
+.genre-rest span span { color: var(--accent-ink); }
+
+.fine {
+  display: grid;
+  gap: 0.375rem;
+  padding-block-start: var(--space-2xs);
+  font-family: var(--body);
+  text-transform: none;
+  font-size: var(--text-s);
+  line-height: 1.35;
+  color: var(--ink-dim);
+}
+.fine b { color: var(--ink); font-weight: 600; }
+.fine dt { display: inline; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: var(--text-2xs); color: var(--accent-ink); margin-inline-end: 0.375rem; }
+.fine dd { display: inline; }
+
+.value { display: grid; gap: 0.875rem; padding-block-start: 0.875rem; }
+.value-figure { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2xs) var(--space-m); }
+</style>
+</head>
+<body>
+
+<header class="top content-grid">
+  <div class="top-inner">
+    <h1><small>Collection</small>Peyton’s Collection</h1>
+    <button class="icon-btn" type="button" aria-label="Account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="content-grid">
+  <section class="poster" aria-label="Collection stats">
+    <p class="kicker"><span>Now playing</span><span>Oct 2026</span></p>
+    <div class="rule"></div>
+
+    <div class="hero">
+      <span class="n tnum">612</span>
+      <div class="side">
+        <span class="lps">LPs</span>
+        <span class="new"><b>+23</b> added<br>this month</span>
+      </div>
+    </div>
+    <p class="line l-artists"><span class="num">341</span><span>Artists</span></p>
+    <p class="line l-labels"><span class="num">187</span><span>Labels</span></p>
+
+    <div class="rule"></div>
+    <p class="billing"><span>Top of the bill</span><span>LPs</span></p>
+    <ol class="lineup">
+      <li class="headliner">Kim Larsen<sup>14</sup></li>
+      <li class="support"><span>The Beatles<sup>11</sup></span><span>David Bowie<sup>9</sup></span></li>
+      <li class="support small"><span>Miles Davis<sup>8</sup></span><span class="accent" aria-hidden="true">•</span><span>Joni Mitchell<sup>7</sup></span></li>
+    </ol>
+
+    <dl class="dates">
+      <div><dt>DOORS</dt><dd class="yr">1959</dd><dd class="what"><b>Kind of Blue</b><br>Miles Davis</dd></div>
+      <div><dt>CURFEW</dt><dd class="yr">2024</dd><dd class="what"><b>Romance</b><br>Fontaines D.C.</dd></div>
+    </dl>
+
+    <div class="decades">
+      <div class="decade-hero">
+        <span class="big">The 70<span>s</span></span>
+        <span class="cap"><b>214</b>LPs from<br>the 1970s</span>
+      </div>
+      <ol class="bars" aria-label="LPs by Period">
+        <li><span class="b" style="--n:31"></span><span class="k"><b>31</b>50s</span></li>
+        <li><span class="b" style="--n:118"></span><span class="k"><b>118</b>60s</span></li>
+        <li class="hot"><span class="b" style="--n:214"></span><span class="k"><b>214</b>70s</span></li>
+        <li><span class="b" style="--n:132"></span><span class="k"><b>132</b>80s</span></li>
+        <li><span class="b" style="--n:58"></span><span class="k"><b>58</b>90s</span></li>
+        <li><span class="b" style="--n:27"></span><span class="k"><b>27</b>00s</span></li>
+        <li><span class="b" style="--n:24"></span><span class="k"><b>24</b>10s</span></li>
+        <li><span class="b" style="--n:8"></span><span class="k"><b>8</b>20s</span></li>
+      </ol>
+    </div>
+
+    <div class="rule thin"></div>
+    <div class="genres">
+      <p class="genre-top"><span>Rock</span><span class="accent">41%</span></p>
+      <p class="genre-rest">
+        <span>Jazz <span>18</span></span>
+        <span>Pop <span>15</span></span>
+        <span>Electronic <span>9</span></span>
+        <span>Folk <span>8</span></span>
+        <span>Other <span>9</span></span>
+      </p>
+    </div>
+
+    <div class="rule thin"></div>
+    <dl class="fine">
+      <div><dt>House label</dt><dd><b>Harvest</b>, 22 LPs</dd></div>
+      <div><dt>Pressed in</dt><dd>UK <b>38%</b> · US <b>27%</b> · Denmark <b>19%</b> · Germany <b>9%</b> · other <b>7%</b></dd></div>
+      <div><dt>Condition</dt><dd>NM <b>12%</b> · VG+ <b>54%</b> · VG <b>27%</b> · G+ or below <b>7%</b></dd></div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="value-h">
+    <div class="section-head"><h2 id="value-h">Value</h2></div>
+    <div class="value">
+      <div class="value-figure">
+        <p class="amount tnum">184.350<small>kr</small></p>
+        <p class="delta tnum">↑ 15.450 kr (+9,1 %) <span>12 mo</span></p>
+      </div>
+      <figure class="chart">
+        <svg viewBox="0 0 320 90" role="img" aria-label="Collection value, last 12 months, from 168.900 kr to 184.350 kr">
+          <defs>
+            <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="oklch(62% 0.15 36)" stop-opacity="0.35"/>
+              <stop offset="1" stop-color="oklch(62% 0.15 36)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="M6 84 L34 77.9 L62 73.4 L90 76.4 L118 64.3 L146 56.7 L174 48.7 L202 45.6 L230 34 L258 28 L286 19.4 L314 6 L314 90 L6 90 Z" fill="url(#fill)"/>
+          <path d="M6 84 L34 77.9 L62 73.4 L90 76.4 L118 64.3 L146 56.7 L174 48.7 L202 45.6 L230 34 L258 28 L286 19.4 L314 6" fill="none" stroke="oklch(93% 0.035 85)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+          <circle cx="314" cy="6" r="4.5" fill="oklch(62% 0.15 36)" stroke="oklch(24% 0.04 50)" stroke-width="2"/>
+        </svg>
+        <figcaption class="axis"><span>Nov 2025</span><span>Oct 2026</span></figcaption>
+      </figure>
+      <div class="facts">
+        <div class="fact"><span class="k">Most valuable</span><span class="v tnum">4.850 kr</span><span class="s">Miles Davis, Kind of Blue · 1959 US, CS 8163</span></div>
+        <div class="fact"><span class="k">No Value yet</span><span class="v warn tnum">14 LPs</span><span class="s">Not counted in the total</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="recent-h">
+    <div class="section-head"><h2 id="recent-h">Recently added</h2><a class="link" href="collection.html">See all</a></div>
+    <ol class="rows">
+      <li class="row">
+        <span class="cover" style="--h:10" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Romance</a><span class="row-artist">Fontaines D.C.</span><span class="row-meta">2024 · XL1453LP · added 29 Oct</span></span>
+        <span class="row-value tnum">320 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p3" style="--h:280" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Midt om natten</a><span class="row-artist">Kim Larsen &amp; Bellami</span><span class="row-meta">1983 · Medley A 2010 · added 28 Oct</span></span>
+        <span class="row-value no-value">No Value yet</span>
+      </li>
+      <li class="row">
+        <span class="cover p2" style="--h:250" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">Trans-Europe Express</a><span class="row-artist">Kraftwerk</span><span class="row-meta">1977 · 1C 064-82 306 · added 24 Oct</span></span>
+        <span class="row-value tnum">880 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover p4" style="--h:60" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">When the Pawn Hits the Conflicts He Thinks Like a King What He Knows Throws the Blows When He Goes to the Fight...</a><span class="row-artist">Fiona Apple</span><span class="row-meta">1999 · E2 69195 · added 22 Oct</span></span>
+        <span class="row-value tnum">160 <small>kr</small></span>
+      </li>
+      <li class="row">
+        <span class="cover none" aria-hidden="true"></span>
+        <span class="row-text"><a class="row-link row-title" href="copy.html">In The Plain</a><span class="row-artist">The Savage Rose</span><span class="row-meta">1968 · added 19 Oct</span></span>
+        <span class="row-value tnum">540 <small>kr</small></span>
+      </li>
+    </ol>
+  </section>
+</main>
+
+<nav class="dock content-grid" aria-label="Main">
+  <div class="dock-inner">
+    <a class="tab" href="home.html" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4z"/></svg>
+      Home
+    </a>
+    <a class="scan" href="lookup.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M11 9v6M14 9v6M17 9v6"/></svg>
+      Scan
+    </a>
+    <a class="tab" href="collection.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>
+      Collection
+    </a>
+  </div>
+</nav>
+
+</body>
+</html>
