@@ -237,18 +237,16 @@ image_is_public() {
 banner "Put LP-Collection online at ${APP_URL}"
 
 stage "Reach the cluster"
-if ! kubectl get nodes >/dev/null 2>&1; then
-  say "kubectl works on k3s-1, so this wizard sends its kubectl commands there over ssh."
-  note "If ssh asks for your k3s-1 password, type it. It asks only once."
-  SSH_DIR=$(mktemp -d)
-  cat > "$SSH_DIR/kubectl" <<'SH'
+say "kubectl works on k3s-1, so this wizard sends its kubectl commands there over ssh."
+note "If ssh asks for your k3s-1 password, type it. It asks only once."
+SSH_DIR=$(mktemp -d)
+cat > "$SSH_DIR/kubectl" <<'SH'
 #!/usr/bin/env bash
 exec ssh -q -o ControlMaster=auto -o ControlPath="$SSH_DIR/control" -o ControlPersist=15m \
   "$K3S_HOST" "KUBECONFIG=~/.kube/config kubectl $(printf '%q ' "$@")"
 SH
-  chmod +x "$SSH_DIR/kubectl"
-  export SSH_DIR K3S_HOST PATH="$SSH_DIR:$PATH"
-fi
+chmod +x "$SSH_DIR/kubectl"
+export SSH_DIR K3S_HOST PATH="$SSH_DIR:$PATH"
 until kubectl get nodes >/dev/null 2>&1; do
   warn "Cannot reach the cluster through ${K3S_HOST}."
   note "Check that k3s-1 is on and that 'ssh ${K3S_HOST}' works."
@@ -291,7 +289,7 @@ else
   step "Copy one of the commands, such as the Docker one. The wizard keeps only the token."
   note "Don't install anything on this computer. The cluster runs the connector."
   ask_secret TUNNEL_INPUT "Paste the command or the token:"
-  TUNNEL_TOKEN="${TUNNEL_INPUT##* }"
+  TUNNEL_TOKEN=$(printf '%s\n' "$TUNNEL_INPUT" | awk '{ print $NF }')
   if [[ ${#TUNNEL_TOKEN} -lt 50 ]]; then
     warn "That doesn't look like a tunnel token. Run this wizard again and paste the whole command."
     exit 1
