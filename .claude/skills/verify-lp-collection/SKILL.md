@@ -5,7 +5,7 @@ description: Launch the real LP-Collection app (Hono API + React phone UI on a t
 
 # Verify LP-Collection
 
-LP-Collection is one Node app: a JSON API under `/api` and a React phone UI, served from the same port. Users touch the phone UI in mobile Safari; the API is the secondary surface. The launcher starts the app with `DISCOGS=fake`, so Discogs is replaced by the fake gateway (`src/server/fake-discogs.ts`): any Lookup finds nothing, and "Log in with Discogs" goes to a Fake Discogs page where you type any Discogs username. The launcher names `owner` as the app's Owner (`APP_OWNER_DISCOGS_USERNAME`), so logging in as `owner` needs no Invite.
+LP-Collection is one Node app: a JSON API under `/api` and a React phone UI, served from the same port. Users touch the phone UI in mobile Safari; the API is the secondary surface. The launcher starts the app with `DISCOGS=fake`, so Discogs is replaced by the fake gateway (`src/server/fake-discogs.ts`): a Lookup finds only its few sample Releases, and "Log in with Discogs" goes to a Fake Discogs page where you type any Discogs username. The launcher names `owner` as the app's Owner (`APP_OWNER_DISCOGS_USERNAME`), so logging in as `owner` needs no Invite.
 
 All commands run from the repo root. Every run has a run id; everything it keeps lives in `.verify/<run-id>/` (gitignored).
 
