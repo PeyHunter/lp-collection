@@ -16,6 +16,7 @@ const loginAttemptLifetime = 15 * minute;
 const sessionLifetime = 400 * day;
 const sessionCookie = "lp_session";
 const loginCookie = "lp_login";
+const maxPendingLogins = 5;
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -162,6 +163,21 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     return c.json(status, inviteHttpStatus[status.status]);
   });
 
+  function pendingLogins(c: Context) {
+    return (getCookie(c, loginCookie) ?? "").split(" ").filter(Boolean);
+  }
+
+  function setPendingLogins(c: Context, requestTokens: string[]) {
+    if (requestTokens.length === 0) return deleteCookie(c, loginCookie, { path: "/api/login", secure });
+    setCookie(c, loginCookie, requestTokens.slice(-maxPendingLogins).join(" "), {
+      httpOnly: true,
+      sameSite: "Lax",
+      path: "/api/login",
+      maxAge: loginAttemptLifetime / 1000,
+      secure,
+    });
+  }
+
   routes.get("/api/login", async (c) => {
     const code = c.req.query("invite");
     let inviteId: string | null = null;
@@ -170,39 +186,44 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
       if (inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
       inviteId = invite!.id;
     }
-    const login = await discogs.startLogin(loginCallbackUrl(publicUrl, code));
+    const login = await discogs.startLogin(new URL("/api/login/callback", publicUrl).href);
     const createdAt = now();
     await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(createdAt.getTime() - loginAttemptLifetime)));
-    await db.insert(loginAttempts).values({ requestToken: login.requestToken, requestSecret: secretBox.seal(login.requestSecret), inviteId, createdAt });
-    setCookie(c, loginCookie, login.requestToken, {
-      httpOnly: true,
-      sameSite: "Lax",
-      path: "/api/login",
-      maxAge: loginAttemptLifetime / 1000,
-      secure,
+    await db.insert(loginAttempts).values({
+      requestToken: login.requestToken,
+      requestSecret: secretBox.seal(login.requestSecret),
+      inviteId,
+      inviteCode: code === undefined ? null : secretBox.seal(code),
+      createdAt,
     });
+    setPendingLogins(c, [...pendingLogins(c), login.requestToken]);
     return c.redirect(login.authorizeUrl, 302);
   });
 
   routes.get("/api/login/callback", async (c) => {
     const requestToken = c.req.query("oauth_token");
     const verifier = c.req.query("oauth_verifier");
-    const code = c.req.query("invite");
-    if (!requestToken || !verifier || getCookie(c, loginCookie) !== requestToken) return c.redirect("/", 302);
-    deleteCookie(c, loginCookie, { path: "/api/login", secure });
-    const [attempt] = await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning();
-    if (!attempt || now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect("/", 302);
+    if (!requestToken || !verifier) return c.redirect(loginProblemPath(undefined, "failed"), 302);
+    const [attempt] = await db.select().from(loginAttempts).where(eq(loginAttempts.requestToken, requestToken));
+    if (!attempt) return c.redirect(loginProblemPath(undefined, "expired"), 302);
+    const code = attempt.inviteCode === null ? undefined : secretBox.open(attempt.inviteCode);
+    if (now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect(loginProblemPath(code, "expired"), 302);
+    const pending = pendingLogins(c);
+    if (!pending.includes(requestToken)) return c.redirect(loginProblemPath(code, "cookie-missing"), 302);
+    setPendingLogins(c, pending.filter((token) => token !== requestToken));
+    const [claimed] = await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning();
+    if (!claimed) return c.redirect(loginProblemPath(code, "expired"), 302);
 
     let identity: DiscogsIdentity;
     try {
       identity = await discogs.finishLogin({ requestToken, requestSecret: secretBox.open(attempt.requestSecret), verifier });
     } catch (error) {
       console.error(`Discogs login failed: ${error instanceof Error ? error.message : String(error)}`);
-      return c.redirect("/", 302);
+      return c.redirect(loginProblemPath(code, "failed"), 302);
     }
 
     const userId = await logIn(identity, attempt.inviteId);
-    if (!userId) return c.redirect(attempt.inviteId && code !== undefined ? invitePath(code) : "/", 302);
+    if (!userId) return c.redirect(code === undefined ? "/" : invitePath(code), 302);
     await startSession(c, userId);
     return c.redirect("/", 302);
   });
@@ -225,10 +246,11 @@ function discogsFields(identity: DiscogsIdentity, box: SecretBox) {
   };
 }
 
-function loginCallbackUrl(publicUrl: URL, inviteToShowOnRefusal: string | undefined) {
-  const url = new URL("/api/login/callback", publicUrl);
-  if (inviteToShowOnRefusal !== undefined) url.searchParams.set("invite", inviteToShowOnRefusal);
-  return url.href;
+/** Why a login did not finish, shown to the person on the page they return to. */
+type LoginProblem = "cookie-missing" | "expired" | "failed";
+
+function loginProblemPath(inviteCode: string | undefined, problem: LoginProblem) {
+  return `${inviteCode === undefined ? "/" : invitePath(inviteCode)}?login=${problem}`;
 }
 
 function invitePath(code: string) {

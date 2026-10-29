@@ -1,0 +1,1 @@
+ALTER TABLE "login_attempts" ADD COLUMN "invite_code" text;

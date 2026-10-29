@@ -174,6 +174,6 @@ test("a login left unfinished for more than 15 minutes is refused", async () => 
   const callback = await login.finish(app.appOwnerDiscogsUsername);
 
   expect(callback.status).toBe(302);
-  expect(callback.headers.get("location")).toBe("/");
+  expect(callback.headers.get("location")).toBe("/?login=expired");
   expect(cookieFrom(callback, "lp_session")).toBeUndefined();
 });

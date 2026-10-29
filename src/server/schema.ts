@@ -57,5 +57,6 @@ export const loginAttempts = pgTable("login_attempts", {
   requestToken: text("request_token").primaryKey(),
   requestSecret: text("request_secret").notNull(),
   inviteId: uuid("invite_id").references(() => invites.id),
+  inviteCode: text("invite_code"),
   createdAt: at("created_at").notNull(),
 });

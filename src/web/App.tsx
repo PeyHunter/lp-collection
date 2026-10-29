@@ -7,11 +7,25 @@ function routeFrom(pathname: string): Route {
   return invite ? { page: "invite", code: decodeURIComponent(invite[1]!) } : { page: "home" };
 }
 
+const loginProblems = {
+  "cookie-missing":
+    "Your Discogs login didn't finish because this browser didn't keep its login cookie. This happens when cookies are blocked, or when the login started at a different address than this one. Allow cookies for this site, then log in again from this page.",
+  expired: "Your Discogs login took too long. Log in again.",
+  failed: "Discogs didn't confirm your login. Try again.",
+} as const;
+
+function loginProblemFrom(search: string) {
+  const problem = new URLSearchParams(search).get("login");
+  return problem !== null && problem in loginProblems ? loginProblems[problem as keyof typeof loginProblems] : undefined;
+}
+
 export function App() {
   const route = routeFrom(location.pathname);
+  const loginProblem = loginProblemFrom(location.search);
   return (
     <main>
       <h1>LP-Collection</h1>
+      {loginProblem && <p role="alert">{loginProblem}</p>}
       {route.page === "invite" ? <InvitePage code={route.code} /> : <HomePage />}
     </main>
   );

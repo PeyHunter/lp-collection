@@ -8,6 +8,13 @@
       "when": 1793310063750,
       "tag": "0000_invite_login",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793313934669,
+      "tag": "0001_login_hardening",
+      "breakpoints": true
     }
   ]
 }
