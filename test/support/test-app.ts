@@ -54,17 +54,33 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
       await admin.end();
     },
     request,
-    async logIn(discogsUsername: string, { invite, headers }: { invite?: string; headers?: Record<string, string> } = {}): Promise<LoginResult> {
+    /** Taps "Log in with Discogs" in one browser; `finish` comes back to the app from Discogs in that same browser. */
+    async startLogin({ invite, headers }: { invite?: string; headers?: Record<string, string> } = {}) {
       const start = await request(invite === undefined ? "/api/login" : `/api/login?invite=${encodeURIComponent(invite)}`, { headers });
       const authorizeUrl = start.headers.get("location");
-      if (start.status !== 302 || !authorizeUrl?.startsWith("/fake-discogs/")) {
-        return { session: undefined, setCookie: null, location: authorizeUrl };
+      const loginCookie = cookieFrom(start, "lp_login");
+      const cookie = [headers?.cookie, loginCookie].filter(Boolean).join("; ");
+      return {
+        start,
+        authorizeUrl,
+        finish: (discogsUsername: string) => request(discogs.authorizeAs(authorizeUrl!, discogsUsername), { headers: { ...headers, cookie } }),
+      };
+    },
+    async logIn(discogsUsername: string, options: { invite?: string; headers?: Record<string, string> } = {}): Promise<LoginResult> {
+      const login = await this.startLogin(options);
+      if (login.start.status !== 302 || !login.authorizeUrl?.startsWith("/fake-discogs/")) {
+        return { session: undefined, setCookie: null, location: login.authorizeUrl };
       }
-      const callback = await request(discogs.authorizeAs(authorizeUrl, discogsUsername), { headers });
-      const setCookie = callback.headers.get("set-cookie");
+      const callback = await login.finish(discogsUsername);
+      const setCookie = callback.headers.getSetCookie().find((cookie) => cookie.startsWith("lp_session=")) ?? null;
       return { session: setCookie?.split(";")[0], setCookie, location: callback.headers.get("location") };
     },
   };
+}
+
+/** The `name=value` pair of a cookie the response sets, as a browser would send it back. */
+export function cookieFrom(response: Response, name: string) {
+  return response.headers.getSetCookie().find((cookie) => cookie.startsWith(`${name}=`))?.split(";")[0];
 }
 
 export const days = (count: number) => count * 24 * 60 * 60 * 1000;
