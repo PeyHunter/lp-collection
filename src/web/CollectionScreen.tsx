@@ -4,16 +4,14 @@ import type { Condition } from "../server/discogs.ts";
 import type { Me } from "./App.tsx";
 import { Header } from "./Header.tsx";
 import { Cover } from "./Cover.tsx";
-import { clearHandoff, followLink, readHandoff } from "./navigation.ts";
+import { followLink, useHandoff } from "./navigation.ts";
 
 type CopiesState = { kind: "loading" } | { kind: "failed" } | { kind: "loaded"; copies: CopyView[] };
 
 export function CollectionScreen({ me, onLoggedOut }: { me: Me; onLoggedOut: () => void }) {
   const [state, setState] = useState<CopiesState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
-  const [handoff] = useState(readHandoff);
-
-  useEffect(clearHandoff, []);
+  const handoff = useHandoff();
 
   useEffect(() => {
     fetch(`/api/collections/${me.collection.id}/copies`)

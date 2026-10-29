@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { DiscogsAuth, DiscogsGateway, DiscogsIdentity, Release } from "./discogs.ts";
 
-/** A Release the fake Discogs knows, with the barcodes printed on it. */
 export type FakeRelease = Release & { barcodes: string[]; format: string | null };
 
 /** What the fake Discogs answers in a test, e.g. which Releases a barcode matches. */
@@ -24,7 +23,6 @@ export type FakeDiscogs = DiscogsGateway & {
   renameAccount(from: string, to: string): void;
   issuedIdentities: DiscogsIdentity[];
   calls: { startLogin: number; finishLogin: number };
-  /** Every Lookup and Release request the app made, in order. */
   requests: FakeDiscogsRequest[];
   pages: Hono;
 };
@@ -90,7 +88,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       answer({ endpoint: "search", barcode, ...auth });
       return releases
         .filter((release) => release.barcodes.includes(barcode))
-        .map(({ pressingYear, originalYear: _, barcodes: __, ...candidate }) => ({ ...candidate, year: pressingYear }));
+        .map(({ originalYear: _, barcodes: __, ...candidate }) => candidate);
     },
     async release(discogsReleaseId, auth) {
       answer({ endpoint: "release", discogsReleaseId, ...auth });
@@ -149,7 +147,6 @@ function coverSvg({ discogsReleaseId, title }: Release) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><title>${escapeHtml(title)}</title><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="oklch(55% 0.12 ${hue})"/><stop offset="1" stop-color="oklch(25% 0.06 ${hue})"/></linearGradient></defs><rect width="120" height="120" fill="url(#g)"/><circle cx="40" cy="44" r="18" fill="oklch(85% 0.1 ${(hue + 60) % 360})"/></svg>`;
 }
 
-/** The Releases `DISCOGS=fake` knows, so a local run can look records up. Barcode 886979891211 matches three pressings. */
 export const sampleReleases: FakeRelease[] = [
   {
     discogsReleaseId: 2335811,

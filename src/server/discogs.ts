@@ -14,7 +14,6 @@ export type Condition = (typeof conditions)[number];
 
 export const defaultCondition: Condition = "Very Good Plus (VG+)";
 
-/** A Release as a Lookup returns it, before the User picks one. `year` is the Pressing year. */
 export type ReleaseCandidate = {
   discogsReleaseId: number;
   artist: string;
@@ -22,12 +21,11 @@ export type ReleaseCandidate = {
   label: string | null;
   catalogNumber: string | null;
   country: string | null;
-  year: number | null;
+  pressingYear: number | null;
   format: string | null;
   coverImageUrl: string | null;
 };
 
-/** The Release details the app keeps once a User saves a Copy of it. */
 export type Release = {
   discogsReleaseId: number;
   artist: string;
@@ -40,7 +38,6 @@ export type Release = {
   coverImageUrl: string | null;
 };
 
-/** A User's Discogs OAuth access token. Discogs counts its rate limit per token. */
 export type DiscogsAuth = {
   token: string;
   secret: string;

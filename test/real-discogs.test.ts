@@ -191,7 +191,7 @@ test("a barcode Lookup searches the Discogs database as the User and reads each 
       label: "Columbia",
       catalogNumber: "CS 8163",
       country: "US",
-      year: 2010,
+      pressingYear: 2010,
       format: "Vinyl, LP, Album, Reissue",
       coverImageUrl: "https://i.discogs.com/kind-of-blue.jpeg",
     },
@@ -202,7 +202,7 @@ test("a barcode Lookup searches the Discogs database as the User and reads each 
       label: null,
       catalogNumber: null,
       country: null,
-      year: null,
+      pressingYear: null,
       format: null,
       coverImageUrl: null,
     },
@@ -247,13 +247,13 @@ test("a Release with no master release and no year has no Original year, and its
 
 test("requests with one User's token are spaced out to stay under Discogs' rate limit", async () => {
   const stub = await startDiscogsStub();
-  const discogs = gateway(stub.url, { requestGapMs: 100 });
+  const discogs = gateway(stub.url, { requestGapMs: 300 });
 
   await Promise.all([discogs.release(2335811, auth), discogs.lookupByBarcode("886979891211", auth)]);
 
   expect(stub.received).toHaveLength(3);
   const gaps = stub.received.slice(1).map((request, index) => request.at - stub.received[index]!.at);
-  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(90);
+  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(200);
 });
 
 test("another User's token does not wait behind the first User's requests", async () => {

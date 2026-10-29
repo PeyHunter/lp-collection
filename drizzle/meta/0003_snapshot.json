@@ -1,5 +1,5 @@
 {
-  "id": "30484682-44e5-47ec-8745-c5bc0683f2b7",
+  "id": "db6d245e-9041-4f58-a1e1-27f8104b4389",
   "prevId": "f59e7e12-2fcb-4909-8480-32747fcf1850",
   "version": "7",
   "dialect": "postgresql",
@@ -29,8 +29,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.barcode_lookups": {
-      "name": "barcode_lookups",
+    "public.barcode_lookup_cache": {
+      "name": "barcode_lookup_cache",
       "schema": "",
       "columns": {
         "barcode": {

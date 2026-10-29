@@ -1,5 +1,5 @@
 CREATE TYPE "public"."condition" AS ENUM('Mint (M)', 'Near Mint (NM or M-)', 'Very Good Plus (VG+)', 'Very Good (VG)', 'Good Plus (G+)', 'Good (G)', 'Fair (F)', 'Poor (P)');--> statement-breakpoint
-CREATE TABLE "barcode_lookups" (
+CREATE TABLE "barcode_lookup_cache" (
 	"barcode" text PRIMARY KEY NOT NULL,
 	"candidates" jsonb NOT NULL,
 	"looked_up_at" timestamp with time zone NOT NULL

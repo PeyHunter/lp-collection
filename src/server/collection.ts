@@ -4,17 +4,16 @@ import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
 import type { DiscogsAuth, ReleaseCandidate } from "./discogs.ts";
 import type { SecretBox } from "./secret-box.ts";
-import { barcodeLookups, copies, memberships, releases, users } from "./schema.ts";
+import { barcodeLookupCache, copies, memberships, releases, users } from "./schema.ts";
 
 type Member = { auth: DiscogsAuth; collectionId: string };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
 
-/** Barcodes are 8 to 14 digits (EAN-8, UPC-A, EAN-13, GTIN-14). People type them with spaces and dashes. */
 function parseBarcode(typed: string | undefined) {
   const digits = (typed ?? "").replaceAll(/[\s-]/g, "");
-  return /^\d{8,14}$/.test(digits) ? digits : undefined;
+  return /^(\d{8}|\d{12,14})$/.test(digits) ? digits : undefined;
 }
 
 function discogsAuth(user: typeof users.$inferSelect, box: SecretBox): DiscogsAuth {
@@ -54,11 +53,11 @@ export function createCollectionRoutes({ database, discogs, secretBox, now }: Ap
   });
 
   async function lookUpBarcode(barcode: string, auth: DiscogsAuth): Promise<ReleaseCandidate[]> {
-    const [cached] = await db.select().from(barcodeLookups).where(eq(barcodeLookups.barcode, barcode));
+    const [cached] = await db.select().from(barcodeLookupCache).where(eq(barcodeLookupCache.barcode, barcode));
     if (cached) return cached.candidates;
     const candidates = await discogs.lookupByBarcode(barcode, auth);
     if (candidates.length > 0) {
-      await db.insert(barcodeLookups).values({ barcode, candidates, lookedUpAt: now() }).onConflictDoNothing();
+      await db.insert(barcodeLookupCache).values({ barcode, candidates, lookedUpAt: now() }).onConflictDoNothing();
     }
     return candidates;
   }
@@ -75,7 +74,7 @@ export function createCollectionRoutes({ database, discogs, secretBox, now }: Ap
 
   routes.get("/api/collections/:collectionId/lookup", async (c) => {
     const barcode = parseBarcode(c.req.query("barcode"));
-    if (!barcode) return c.json({ error: "Type the 8 to 14 digits under the barcode." }, 400);
+    if (!barcode) return c.json({ error: "Type all the digits under the barcode: 8, 12 or 13 of them." }, 400);
     try {
       return c.json({ barcode, candidates: await lookUpBarcode(barcode, c.var.member.auth) });
     } catch (error) {

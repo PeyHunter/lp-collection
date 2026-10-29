@@ -9,7 +9,6 @@ export type RealDiscogsOptions = {
   webBaseUrl?: string;
   /** Discogs allows 60 authenticated requests a minute per token, so one a second keeps a token under it. */
   requestGapMs?: number;
-  /** How long to wait before each retry after Discogs answers 429 Too Many Requests. */
   backoffMs?: number[];
 };
 
@@ -153,7 +152,7 @@ function candidateFrom(result: SearchResult): ReleaseCandidate {
     label: result.label?.[0] ? withoutNumbering(result.label[0]) : null,
     catalogNumber: catalogNumber(result.catno),
     country: result.country || null,
-    year: year(result.year),
+    pressingYear: year(result.year),
     format: result.format?.length ? result.format.join(", ") : null,
     coverImageUrl: result.cover_image && !result.cover_image.endsWith("/spacer.gif") ? result.cover_image : null,
   };
@@ -176,7 +175,6 @@ function releaseFrom(release: DiscogsRelease, master: { year?: number } | undefi
   };
 }
 
-/** Joins credited artists the way Discogs prints them: "Miles Davis", "Simon & Garfunkel", "Eric B. & Rakim". */
 function artistCredit(artists: { name: string; join?: string }[]) {
   return artists
     .map(({ name, join }, index) => {

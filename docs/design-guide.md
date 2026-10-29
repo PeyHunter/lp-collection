@@ -74,7 +74,7 @@ The app has one theme, dark. `color-scheme: dark` is set on `:root` and in a `<m
 
 The contrast numbers are WCAG 2 ratios, computed from the token values. `--accent` is below 4.5:1, so use it only for large text. Cream text on `--accent` measures 3.7:1, so filled controls use the darker `--accent-fill`.
 
-Never put `--ink-faint` text on `--surface`. It is mixed toward `--bg`, so on the lighter `--surface` it drops below 4.5:1. Use `--ink-dim` for secondary text inside a card.
+Never put `--ink-faint` text on `--surface`. It already sits near the 4.5:1 floor on `--bg`, and the lighter `--surface` takes contrast away. The same goes for any tinted row or card. Use `--ink-dim` for secondary text there.
 
 Darken or lighten with `--black` and `--white`, never the keywords `black` and `white`, as in `color-mix(in oklch, var(--accent-fill), var(--black) 14%)` for a pressed fill. Their hue is `none`, so the mix keeps the accent's hue.
 

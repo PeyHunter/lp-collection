@@ -333,7 +333,6 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
   return routes;
 }
 
-/** The User whose session cookie came with this request, if the session is still valid. */
 export async function sessionUser({ db }: Database, now: () => Date, c: Context) {
   const token = getCookie(c, sessionCookie);
   if (!token) return undefined;

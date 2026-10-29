@@ -236,6 +236,7 @@ main.content-grid { row-gap: var(--space-xl); align-content: start; padding-bloc
 .row-meta { font-size: var(--text-xs); color: var(--ink-faint); white-space: nowrap; overflow: clip; text-overflow: ellipsis; }
 .row-end { flex: none; max-inline-size: 4.5rem; text-align: end; }
 .row.fresh { background: color-mix(in oklch, var(--accent) 10%, transparent); }
+.row.fresh .row-meta { color: var(--ink-dim); }
 
 .cover {
   flex: none;

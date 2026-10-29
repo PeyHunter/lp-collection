@@ -70,14 +70,12 @@ export const loginAttempts = pgTable("login_attempts", {
 
 export const condition = pgEnum("condition", conditions);
 
-/** Discogs' answer to a barcode Lookup, kept so the same barcode never costs a second Discogs request. */
-export const barcodeLookups = pgTable("barcode_lookups", {
+export const barcodeLookupCache = pgTable("barcode_lookup_cache", {
   barcode: text("barcode").primaryKey(),
   candidates: jsonb("candidates").$type<ReleaseCandidate[]>().notNull(),
   lookedUpAt: at("looked_up_at").notNull(),
 });
 
-/** A cache of Discogs release data, keyed by the Discogs release id. */
 export const releases = pgTable("releases", {
   discogsReleaseId: integer("discogs_release_id").primaryKey(),
   artist: text("artist").notNull(),

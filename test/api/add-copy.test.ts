@@ -55,7 +55,7 @@ test("a barcode that matches one Release shows that Release with cover, artist, 
         label: "Parlophone",
         catalogNumber: "0190295328709",
         country: "Europe",
-        year: 2021,
+        pressingYear: 2021,
         format: "Vinyl, 2×LP, Album, Reissue",
         coverImageUrl: "/fake-discogs/covers/16893476.svg",
       },
@@ -70,11 +70,11 @@ test("a barcode that matches several Releases lists every pressing in Discogs' o
   const response = await owner.as(`/lookup?barcode=${kindOfBlue}`);
 
   expect(response.status).toBe(200);
-  const { candidates } = (await response.json()) as { candidates: { discogsReleaseId: number; country: string; year: number }[] };
-  expect(candidates.map(({ discogsReleaseId, country, year }) => ({ discogsReleaseId, country, year }))).toEqual([
-    { discogsReleaseId: 2335811, country: "US", year: 2010 },
-    { discogsReleaseId: 2474032, country: "Europe", year: 2010 },
-    { discogsReleaseId: 7371225, country: "Europe", year: 2015 },
+  const { candidates } = (await response.json()) as { candidates: { discogsReleaseId: number; country: string; pressingYear: number }[] };
+  expect(candidates.map(({ discogsReleaseId, country, pressingYear }) => ({ discogsReleaseId, country, pressingYear }))).toEqual([
+    { discogsReleaseId: 2335811, country: "US", pressingYear: 2010 },
+    { discogsReleaseId: 2474032, country: "Europe", pressingYear: 2010 },
+    { discogsReleaseId: 7371225, country: "Europe", pressingYear: 2015 },
   ]);
 });
 
@@ -94,10 +94,13 @@ test("a barcode Discogs doesn't know finds no Releases, and something that isn't
 
   const unknown = await owner.as("/lookup?barcode=4006381333931");
   const notABarcode = await owner.as("/lookup?barcode=kind%20of%20blue");
+  const tenDigits = await owner.as("/lookup?barcode=8869798912");
 
   expect(unknown.status).toBe(200);
   expect(await unknown.json()).toEqual({ barcode: "4006381333931", candidates: [] });
   expect(notABarcode.status).toBe(400);
+  expect(await notABarcode.json()).toEqual({ error: "Type all the digits under the barcode: 8, 12 or 13 of them." });
+  expect(tenDigits.status).toBe(400);
   expect(app.discogs.requests).toHaveLength(1);
 });
 
