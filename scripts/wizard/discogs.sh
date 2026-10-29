@@ -246,6 +246,7 @@ fi
 
 stage "Save the secret in the cluster"
 say "This creates or replaces the secret ${SECRET_NAME} in namespace ${NAMESPACE}."
+say "It also stores the app's address, ${APP_URL}, as PUBLIC_URL, so Invite links and the Discogs login point there."
 if confirm "Save it now?"; then
   kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$NAMESPACE" >/dev/null
   b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
@@ -260,6 +261,7 @@ data:
   DISCOGS_CONSUMER_KEY: $(b64 "$DISCOGS_CONSUMER_KEY")
   DISCOGS_CONSUMER_SECRET: $(b64 "$DISCOGS_CONSUMER_SECRET")
   APP_OWNER_DISCOGS_USERNAME: $(b64 "$APP_OWNER_DISCOGS_USERNAME")
+  PUBLIC_URL: $(b64 "$APP_URL")
 YAML
   printf '  %s✓ saved%s secret %s in namespace %s\n' "$GREEN" "$RESET" "$SECRET_NAME" "$NAMESPACE"
   note "Check it with: kubectl -n ${NAMESPACE} get secret ${SECRET_NAME}"

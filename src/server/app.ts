@@ -8,6 +8,8 @@ export type AppDependencies = {
   discogs: DiscogsGateway;
   now: () => Date;
   appOwnerDiscogsUsername: string;
+  /** Where phones reach the app; Invite links and the Discogs callback point here. */
+  publicUrl: URL;
 };
 
 export function createApp(dependencies: AppDependencies) {
