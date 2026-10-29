@@ -1,9 +1,34 @@
 {
-  "id": "b6387c26-e103-442a-93de-847d188f8415",
+  "id": "d5c33259-5e8d-4d8f-a7b2-45e4254d0fe5",
   "prevId": "09bc2385-d93e-48ed-9652-e9f902d12bab",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.app_owner": {
+      "name": "app_owner",
+      "schema": "",
+      "columns": {
+        "configured_discogs_username": {
+          "name": "configured_discogs_username",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "discogs_user_id": {
+          "name": "discogs_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.collections": {
       "name": "collections",
       "schema": "",

@@ -35,7 +35,8 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   const discogs = createFakeDiscogs(script);
   let now = new Date("2026-03-01T12:00:00Z");
   const secretBox = createSecretBox(randomBytes(32));
-  const app = createApp({ database, discogs, secretBox, now: () => now, appOwnerDiscogsUsername, publicUrl: new URL(publicUrl) });
+  const start = (owner: string) => createApp({ database, discogs, secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl) });
+  let app = start(appOwnerDiscogsUsername);
 
   afterAll(() => database.close());
 
@@ -45,6 +46,10 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
     database,
     discogs,
     secretBox,
+    /** Starts the app again on the same database, as a redeploy with changed settings would. */
+    restart({ appOwnerDiscogsUsername }: { appOwnerDiscogsUsername: string }) {
+      app = start(appOwnerDiscogsUsername);
+    },
     /** Reads the database directly, for what the API never shows, such as how a secret is stored. */
     async query<Row extends Record<string, unknown>>(text: string, values: unknown[] = []) {
       const client = new pg.Client({ connectionString: `${serverUrl}/${name}` });

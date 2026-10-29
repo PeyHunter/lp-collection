@@ -7,7 +7,7 @@ import type { AppDependencies } from "./app.ts";
 import type { Database } from "./db.ts";
 import { sealedPrefix, type SecretBox } from "./secret-box.ts";
 import type { DiscogsIdentity, LoginStart } from "./discogs.ts";
-import { collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
+import { appOwner, collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
 
 const minute = 60 * 1000;
 const day = 24 * 60 * minute;
@@ -57,7 +57,25 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
   const { db } = database;
   const routes = new Hono();
   const secure = publicUrl.protocol === "https:";
-  const isAppOwner = (discogsUsername: string) => discogsUsername.toLowerCase() === appOwnerDiscogsUsername.toLowerCase();
+  const configuredOwner = appOwnerDiscogsUsername.toLowerCase();
+
+  async function pinnedAppOwner() {
+    const [pinned] = await db.select().from(appOwner).where(eq(appOwner.configuredDiscogsUsername, configuredOwner));
+    return pinned?.discogsUserId;
+  }
+
+  /** The settings name the Owner by username; the first login under that name pins the Owner to its immutable Discogs user id. */
+  async function isAppOwnerLogin(identity: DiscogsIdentity) {
+    const pinned = await pinnedAppOwner();
+    if (pinned !== undefined) return pinned === identity.discogsUserId;
+    if (identity.discogsUsername.toLowerCase() !== configuredOwner) return false;
+    await db.insert(appOwner).values({ configuredDiscogsUsername: configuredOwner, discogsUserId: identity.discogsUserId }).onConflictDoNothing();
+    return (await pinnedAppOwner()) === identity.discogsUserId;
+  }
+
+  async function isAppOwner(user: { discogsUserId: number }) {
+    return (await pinnedAppOwner()) === user.discogsUserId;
+  }
 
   async function findInvite(code: string) {
     const [invite] = await db.select().from(invites).where(eq(invites.codeHash, sha256(code)));
@@ -113,7 +131,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     const [invite] = inviteId ? await db.select().from(invites).where(eq(invites.id, inviteId)) : [];
     const decision = decideLogin({
       existingUserId: await existingUserId(identity),
-      isAppOwner: isAppOwner(identity.discogsUsername),
+      isAppOwner: await isAppOwnerLogin(identity),
       invite: invite && { id: invite.id, status: inviteStatus(invite, now()).status },
     });
     switch (decision.kind) {
@@ -161,7 +179,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     const [collection] = await db.select({ id: collections.id }).from(collections).where(eq(collections.ownerId, user.id));
     return c.json({
       discogsUsername: user.discogsUsername,
-      canCreateInvites: isAppOwner(user.discogsUsername),
+      canCreateInvites: await isAppOwner(user),
       collection: { id: collection!.id },
     });
   });
@@ -169,7 +187,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
   routes.post("/api/invites", async (c) => {
     const user = await currentUser(c);
     if (!user) return c.json({ error: "Not logged in" }, 401);
-    if (!isAppOwner(user.discogsUsername)) return c.json({ error: "Only the app's Owner can create Invites" }, 403);
+    if (!(await isAppOwner(user))) return c.json({ error: "Only the app's Owner can create Invites" }, 403);
     const code = randomBytes(32).toString("base64url");
     const createdAt = now();
     const expiresAt = new Date(createdAt.getTime() + inviteLifetime);

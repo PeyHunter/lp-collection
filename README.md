@@ -16,7 +16,7 @@ DATABASE_URL=postgres://user:password@localhost:5432/lp_collection APP_OWNER_DIS
 
 Open http://localhost:3000. The app runs its database migrations when it starts.
 
-`APP_OWNER_DISCOGS_USERNAME` names the app's Owner: the Discogs user who can log in without an Invite and create Invites for everyone else.
+`APP_OWNER_DISCOGS_USERNAME` names the app's Owner: the Discogs user who can log in without an Invite and create Invites for everyone else. The Owner's first login ties the role to their Discogs account, so renaming that account on Discogs keeps the Owner's rights and nobody gets them by taking the old name. To hand the role to someone else, change the setting; that person becomes the Owner at their next login.
 
 `PUBLIC_URL` is the address phones open, such as `https://lp-collection.peytonhunter.com`. Invite links and the Discogs login send people there, and an `https://` address makes the login cookie Secure. Locally it defaults to `http://localhost:<PORT>`; set it to your computer's network address to try the app from a phone. In production the app refuses to start without it, and it must start with `https://`.
 

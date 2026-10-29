@@ -10,6 +10,8 @@ export type FakeDiscogsScript = {
 
 export type FakeDiscogs = DiscogsGateway & {
   authorizeAs(authorizeUrl: string, discogsUsername: string): string;
+  /** The account named `from` takes the name `to`, and a different, new account takes the name `from`. */
+  renameAccount(from: string, to: string): void;
   issuedIdentities: DiscogsIdentity[];
   pages: Hono;
 };
@@ -19,6 +21,9 @@ const authorizePath = "/fake-discogs/authorize";
 export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   const pending = new Map<string, { requestSecret: string; callbackUrl: string }>();
   const issuedIdentities: DiscogsIdentity[] = [];
+  const renamedAccounts = new Map<string, number>();
+  const discogsUserIdOf = (discogsUsername: string) =>
+    renamedAccounts.get(discogsUsername.toLowerCase()) ?? fakeDiscogsUserId(discogsUsername);
 
   function callbackFor(requestToken: string, discogsUsername: string) {
     const login = pending.get(requestToken);
@@ -64,13 +69,17 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       if (!login || login.requestSecret !== requestSecret) throw new Error("Fake Discogs refused an unknown request token");
       pending.delete(requestToken);
       const identity = {
-        discogsUserId: fakeDiscogsUserId(typedDiscogsUsername),
+        discogsUserId: discogsUserIdOf(typedDiscogsUsername),
         discogsUsername: typedDiscogsUsername,
         accessToken: randomUUID(),
         accessSecret: randomUUID(),
       };
       issuedIdentities.push(identity);
       return identity;
+    },
+    renameAccount(from, to) {
+      renamedAccounts.set(to.toLowerCase(), discogsUserIdOf(from));
+      renamedAccounts.set(from.toLowerCase(), fakeDiscogsUserId(`${from} (a new account)`));
     },
     authorizeAs(authorizeUrl, discogsUsername) {
       const requestToken = new URL(authorizeUrl, "http://fake-discogs").searchParams.get("oauth_token") ?? "";

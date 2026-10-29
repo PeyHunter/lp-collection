@@ -14,7 +14,7 @@ _Avoid_: account (ambiguous with the Discogs account)
 The User a Collection belongs to. Copies added to the Collection also go into the Owner's Discogs collection.
 
 **App Owner**:
-The one User who runs this LP-Collection, named by their Discogs username in the app's settings. Only the App Owner can log in without an Invite and create Invites. They are also the Owner of their own Collection.
+The one User who runs this LP-Collection, named by their Discogs username in the app's settings. Their first login under that name ties the role to their Discogs account, so a later rename keeps it and whoever takes over the old name gets nothing. Only the App Owner can log in without an Invite and create Invites. They are also the Owner of their own Collection.
 _Avoid_: admin, Owner (when you mean the App Owner)
 
 **Member**:
