@@ -64,13 +64,9 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     return pinned?.discogsUserId;
   }
 
-  /** The settings name the Owner by username; the first login under that name pins the Owner to its immutable Discogs user id. */
-  async function isAppOwnerLogin(identity: DiscogsIdentity) {
-    const pinned = await pinnedAppOwner();
-    if (pinned !== undefined) return pinned === identity.discogsUserId;
-    if (identity.discogsUsername.toLowerCase() !== configuredOwner) return false;
+  async function pinAppOwnerAtFirstLogin(identity: DiscogsIdentity) {
+    if (identity.discogsUsername.toLowerCase() !== configuredOwner) return;
     await db.insert(appOwner).values({ configuredDiscogsUsername: configuredOwner, discogsUserId: identity.discogsUserId }).onConflictDoNothing();
-    return (await pinnedAppOwner()) === identity.discogsUserId;
   }
 
   async function isAppOwner(user: { discogsUserId: number }) {
@@ -93,7 +89,6 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     return row?.user;
   }
 
-  /** Returns the new User's id, or undefined when a simultaneous login by the same Discogs user signed up first. */
   async function signUp(identity: DiscogsIdentity, via: Extract<LoginDecision, { kind: "new-user" }>["via"]) {
     const at = now();
     return db.transaction(async (tx) => {
@@ -102,7 +97,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
         .values({ ...discogsFields(identity, secretBox), discogsUserId: identity.discogsUserId, createdAt: at })
         .onConflictDoNothing({ target: users.discogsUserId })
         .returning({ id: users.id });
-      if (!user) return undefined;
+      if (!user) return { kind: "already-a-user" } as const;
       if (via.kind === "invite") {
         const [claimedWhileStillValid] = await tx
           .update(invites)
@@ -113,7 +108,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
       }
       const [collection] = await tx.insert(collections).values({ ownerId: user.id, createdAt: at }).returning({ id: collections.id });
       await tx.insert(memberships).values({ collectionId: collection!.id, userId: user.id });
-      return user.id;
+      return { kind: "signed-up", userId: user.id } as const;
     });
   }
 
@@ -129,23 +124,25 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
 
   async function logIn(identity: DiscogsIdentity, inviteId: string | null): Promise<string | undefined> {
     const [invite] = inviteId ? await db.select().from(invites).where(eq(invites.id, inviteId)) : [];
+    await pinAppOwnerAtFirstLogin(identity);
     const decision = decideLogin({
       existingUserId: await existingUserId(identity),
-      isAppOwner: await isAppOwnerLogin(identity),
+      isAppOwner: await isAppOwner(identity),
       invite: invite && { id: invite.id, status: inviteStatus(invite, now()).status },
     });
     switch (decision.kind) {
       case "returning-user":
         return logInReturningUser(identity, decision.userId);
       case "new-user": {
-        let userId: string | undefined;
+        let signUpResult: Awaited<ReturnType<typeof signUp>>;
         try {
-          userId = await signUp(identity, decision.via);
+          signUpResult = await signUp(identity, decision.via);
         } catch (error) {
           if (error instanceof TransactionRollbackError) return undefined;
           throw error;
         }
-        return userId ?? logInReturningUser(identity, (await existingUserId(identity))!);
+        if (signUpResult.kind === "signed-up") return signUpResult.userId;
+        return logInReturningUser(identity, (await existingUserId(identity))!);
       }
       case "refused":
         return undefined;
@@ -217,7 +214,6 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
 
   const anonymousLoginStarts = new Map<string, { windowStart: number; count: number }>();
 
-  /** A fixed window per device, because each login start costs a Discogs request and a stored row. */
   function allowAnonymousLoginStart(client: string) {
     const at = now().getTime();
     for (const [key, window] of anonymousLoginStarts) {
@@ -267,20 +263,23 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     const [attempt] = await db.select().from(loginAttempts).where(eq(loginAttempts.requestToken, requestToken));
     if (!attempt) return c.redirect(loginProblemPath(undefined, "expired"), 302);
     const code = attempt.inviteCode === null ? undefined : secretBox.open(attempt.inviteCode);
-    if (now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect(loginProblemPath(code, "expired"), 302);
     const pending = pendingLogins(c);
-    if (!pending.includes(requestToken)) return c.redirect(loginProblemPath(code, "cookie-missing"), 302);
-    setPendingLogins(c, pending.filter((token) => token !== requestToken));
+    const startedInThisBrowser = pending.includes(requestToken);
+    if (startedInThisBrowser) setPendingLogins(c, pending.filter((token) => token !== requestToken));
+    const codeForThisBrowser = startedInThisBrowser ? code : undefined;
+    if (now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect(loginProblemPath(codeForThisBrowser, "expired"), 302);
     const [claimed] = await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning();
-    if (!claimed) return c.redirect(loginProblemPath(code, "expired"), 302);
+    if (!claimed) return c.redirect(loginProblemPath(codeForThisBrowser, "expired"), 302);
 
     let identity: DiscogsIdentity;
     try {
       identity = await discogs.finishLogin({ requestToken, requestSecret: secretBox.open(attempt.requestSecret), verifier });
     } catch (error) {
       console.error(`Discogs login failed: ${error instanceof Error ? error.message : String(error)}`);
-      return c.redirect(loginProblemPath(code, "failed"), 302);
+      return c.redirect(loginProblemPath(codeForThisBrowser, "failed"), 302);
     }
+    // Discogs accepted the verifier, so this is the person who authorized; only their browser's cookie is missing.
+    if (!startedInThisBrowser) return c.redirect(loginProblemPath(code, "cookie-missing"), 302);
 
     const userId = await logIn(identity, attempt.inviteId);
     if (!userId) return c.redirect(code === undefined ? "/" : invitePath(code), 302);
@@ -306,7 +305,6 @@ function discogsFields(identity: DiscogsIdentity, box: SecretBox) {
   };
 }
 
-/** Why a login did not finish, shown to the person on the page they return to. */
 type LoginProblem = "cookie-missing" | "expired" | "failed" | "too-many" | "discogs-unavailable";
 
 function loginProblemPath(inviteCode: string | undefined, problem: LoginProblem) {
@@ -332,7 +330,6 @@ function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-/** Encrypts Discogs secrets stored before encryption existed. Safe to run on every start. */
 export async function sealStoredDiscogsTokens({ db }: Database, box: SecretBox) {
   const stored = await db.select({ id: users.id, token: users.discogsAccessToken, secret: users.discogsAccessSecret }).from(users);
   for (const user of stored) {

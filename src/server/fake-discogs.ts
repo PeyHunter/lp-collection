@@ -19,7 +19,7 @@ export type FakeDiscogs = DiscogsGateway & {
 const authorizePath = "/fake-discogs/authorize";
 
 export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
-  const pending = new Map<string, { requestSecret: string; callbackUrl: string }>();
+  const pending = new Map<string, { requestSecret: string; callbackUrl: string; authorized?: { verifier: string; discogsUsername: string } }>();
   const issuedIdentities: DiscogsIdentity[] = [];
   const renamedAccounts = new Map<string, number>();
   const discogsUserIdOf = (discogsUsername: string) =>
@@ -28,9 +28,11 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   function callbackFor(requestToken: string, discogsUsername: string) {
     const login = pending.get(requestToken);
     if (!login) throw new Error(`Fake Discogs has no login waiting for request token ${requestToken}`);
+    const verifier = randomUUID();
+    login.authorized = { verifier, discogsUsername };
     const url = new URL(login.callbackUrl);
     url.searchParams.set("oauth_token", requestToken);
-    url.searchParams.set("oauth_verifier", discogsUsername);
+    url.searchParams.set("oauth_verifier", verifier);
     return url.href;
   }
 
@@ -39,18 +41,20 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     const requestToken = c.req.query("oauth_token") ?? "";
     const login = pending.get(requestToken);
     if (!login) return c.html(page("<p>This login has expired. Go back to LP-Collection and try again.</p>"), 404);
-    const callback = new URL(login.callbackUrl);
-    const hidden = [...callback.searchParams, ["oauth_token", requestToken]]
-      .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name!)}" value="${escapeHtml(value!)}">`)
-      .join("\n      ");
     return c.html(
-      page(`<form method="get" action="${escapeHtml(callback.origin + callback.pathname)}">
-      ${hidden}
+      page(`<form method="post" action="${authorizePath}">
+      <input type="hidden" name="oauth_token" value="${escapeHtml(requestToken)}">
       <label for="username">Discogs username</label>
-      <input id="username" name="oauth_verifier" required autocomplete="username" autocapitalize="none">
+      <input id="username" name="username" required autocomplete="username" autocapitalize="none">
       <button type="submit">Authorize</button>
     </form>`),
     );
+  });
+  pages.post(authorizePath, async (c) => {
+    const form = await c.req.parseBody();
+    const requestToken = String(form.oauth_token ?? "");
+    if (!pending.has(requestToken)) return c.html(page("<p>This login has expired. Go back to LP-Collection and try again.</p>"), 404);
+    return c.redirect(callbackFor(requestToken, String(form.username ?? "")), 302);
   });
 
   return {
@@ -64,13 +68,15 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       pending.set(requestToken, { requestSecret, callbackUrl });
       return { requestToken, requestSecret, authorizeUrl: `${authorizePath}?oauth_token=${requestToken}` };
     },
-    async finishLogin({ requestToken, requestSecret, verifier: typedDiscogsUsername }) {
+    async finishLogin({ requestToken, requestSecret, verifier }) {
       const login = pending.get(requestToken);
       if (!login || login.requestSecret !== requestSecret) throw new Error("Fake Discogs refused an unknown request token");
+      if (!login.authorized || login.authorized.verifier !== verifier) throw new Error("Fake Discogs refused a wrong verifier");
       pending.delete(requestToken);
+      const { discogsUsername } = login.authorized;
       const identity = {
-        discogsUserId: discogsUserIdOf(typedDiscogsUsername),
-        discogsUsername: typedDiscogsUsername,
+        discogsUserId: discogsUserIdOf(discogsUsername),
+        discogsUsername,
         accessToken: randomUUID(),
         accessSecret: randomUUID(),
       };

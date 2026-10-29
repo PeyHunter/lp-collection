@@ -43,8 +43,19 @@ test("when the login cookie never reaches the callback, an invitee returns to th
 
   expect(withoutCookie.headers.get("location")).toBe(`/invite/${code}?login=cookie-missing`);
   expect(cookieFrom(withoutCookie, "lp_session")).toBeUndefined();
-  const retryInTheRightBrowser = await login.finish("friend");
-  expect(cookieFrom(retryInTheRightBrowser, "lp_session")).toBeDefined();
+  expect(await app.logIn("friend", { invite: code })).toMatchObject({ location: "/", session: expect.any(String) });
+});
+
+test("someone who only saw the Discogs authorize address cannot learn the Invite code from the callback", async () => {
+  const app = await createTestApp();
+  const code = await inviteCode(app);
+  const login = await app.startLogin({ invite: code });
+  const requestToken = new URL(login.authorizeUrl!, "http://fake-discogs").searchParams.get("oauth_token")!;
+
+  const replay = await app.request(`/api/login/callback?oauth_token=${requestToken}&oauth_verifier=guess`);
+
+  expect(replay.headers.get("location")).not.toContain(code);
+  expect(cookieFrom(replay, "lp_session")).toBeUndefined();
 });
 
 test("when the login cookie never reaches the callback, a returning User sees an explanation on the home page", async () => {

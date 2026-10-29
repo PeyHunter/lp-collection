@@ -11,7 +11,6 @@ export const users = pgTable("users", {
   createdAt: at("created_at").notNull(),
 });
 
-/** Pins the app's Owner, named by username in the settings, to the Discogs account that held that name at their first login. */
 export const appOwner = pgTable("app_owner", {
   configuredDiscogsUsername: text("configured_discogs_username").primaryKey(),
   discogsUserId: integer("discogs_user_id").notNull(),

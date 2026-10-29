@@ -46,11 +46,9 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
     database,
     discogs,
     secretBox,
-    /** Starts the app again on the same database, as a redeploy with changed settings would. */
     restart({ appOwnerDiscogsUsername }: { appOwnerDiscogsUsername: string }) {
       app = start(appOwnerDiscogsUsername);
     },
-    /** Reads the database directly, for what the API never shows, such as how a secret is stored. */
     async query<Row extends Record<string, unknown>>(text: string, values: unknown[] = []) {
       const client = new pg.Client({ connectionString: `${serverUrl}/${name}` });
       await client.connect();

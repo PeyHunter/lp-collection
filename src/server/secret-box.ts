@@ -11,7 +11,6 @@ export const sealedPrefix = `${version}.`;
 const ivLength = 12;
 const tagLength = 16;
 
-/** Encrypts secrets the app stores, such as Discogs access tokens, with AES-256-GCM. */
 export function createSecretBox(key: Buffer): SecretBox {
   if (key.length !== 32) throw new Error("A secret box key must be 32 bytes");
   return {
