@@ -21,10 +21,14 @@ const loginCookie = "lp_login";
 const maxPendingLogins = 5;
 const maxVerifierChecksWithoutCookie = 3;
 const loginLimits = {
-  loggedOutPerDevice: 10,
-  loggedOutTotal: 30,
-  perUser: 30,
+  perUser: { count: 30, windowMs: 15 * minute },
+  perInvite: { count: 5, windowMs: 15 * minute },
+  loggedOutPerDevice: { count: 10, windowMs: 15 * minute },
+  // Discogs allows the home IP about 25 unauthenticated requests a minute; this leaves room for everyone else's calls.
+  loggedOutTotal: { count: 10, windowMs: minute },
 };
+
+type LoginSpender = { kind: "user"; userId: string } | { kind: "invite"; inviteId: string } | { kind: "logged-out"; device: string };
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -218,26 +222,35 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     });
   }
 
-  const loggedOutPerDevice = fixedWindowLimit(loginLimits.loggedOutPerDevice, loginAttemptLifetime, now);
-  const loggedOutTotal = fixedWindowLimit(loginLimits.loggedOutTotal, loginAttemptLifetime, now);
-  const perUser = fixedWindowLimit(loginLimits.perUser, loginAttemptLifetime, now);
+  const perUser = fixedWindowLimit(loginLimits.perUser, now);
+  const perInvite = fixedWindowLimit(loginLimits.perInvite, now);
+  const loggedOutPerDevice = fixedWindowLimit(loginLimits.loggedOutPerDevice, now);
+  const loggedOutTotal = fixedWindowLimit(loginLimits.loggedOutTotal, now);
 
-  function allowLoggedOutDiscogsCall(c: Context) {
-    return loggedOutPerDevice(deviceKey(clientAddress(c))) && loggedOutTotal("all");
+  function spendLoginBudget(spender: LoginSpender): Extract<LoginProblem, "too-many" | "busy"> | undefined {
+    switch (spender.kind) {
+      case "user":
+        return perUser(spender.userId) ? undefined : "too-many";
+      case "invite":
+        return perInvite(spender.inviteId) ? undefined : "too-many";
+      case "logged-out":
+        if (!loggedOutPerDevice(spender.device)) return "too-many";
+        return loggedOutTotal("all") ? undefined : "busy";
+    }
+  }
+
+  function loggedOut(c: Context): LoginSpender {
+    return { kind: "logged-out", device: deviceKey(clientAddress(c)) };
   }
 
   routes.get("/api/login", async (c) => {
     const code = c.req.query("invite");
+    const invite = code === undefined ? undefined : await findInvite(code);
+    if (code !== undefined && inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
     const user = await currentUser(c);
-    if (!(user ? perUser(user.id) : allowLoggedOutDiscogsCall(c))) {
-      return c.redirect(loginProblemPath(code, "too-many"), 302);
-    }
-    let inviteId: string | null = null;
-    if (code !== undefined) {
-      const invite = await findInvite(code);
-      if (inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
-      inviteId = invite!.id;
-    }
+    const problem = spendLoginBudget(user ? { kind: "user", userId: user.id } : invite ? { kind: "invite", inviteId: invite.id } : loggedOut(c));
+    if (problem) return c.redirect(loginProblemPath(code, problem), 302);
+    const inviteId = invite?.id ?? null;
     let login: LoginStart;
     try {
       login = await discogs.startLogin(new URL("/api/login/callback", publicUrl).href);
@@ -279,7 +292,8 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     if (startedInThisBrowser && !(await claim())) return c.redirect(loginProblemPath(code, "expired"), 302);
     if (!startedInThisBrowser) {
       if (!(await reserveVerifierCheck(requestToken))) return c.redirect(loginProblemPath(undefined, "expired"), 302);
-      if (!allowLoggedOutDiscogsCall(c)) return c.redirect(loginProblemPath(undefined, "too-many"), 302);
+      const problem = spendLoginBudget(attempt.inviteId ? { kind: "invite", inviteId: attempt.inviteId } : loggedOut(c));
+      if (problem) return c.redirect(loginProblemPath(undefined, problem), 302);
     }
 
     let identity: DiscogsIdentity;
@@ -336,7 +350,7 @@ function discogsFields(identity: DiscogsIdentity, box: SecretBox) {
   };
 }
 
-type LoginProblem = "cookie-missing" | "expired" | "failed" | "too-many" | "discogs-unavailable";
+type LoginProblem = "cookie-missing" | "expired" | "failed" | "too-many" | "busy" | "discogs-unavailable";
 
 function loginProblemPath(inviteCode: string | undefined, problem: LoginProblem) {
   return `${inviteCode === undefined ? "/" : invitePath(inviteCode)}?login=${problem}`;
@@ -367,7 +381,7 @@ function deviceKey(address: string) {
   return `${network.join(":")}::/64`;
 }
 
-function fixedWindowLimit(limit: number, windowMs: number, now: () => Date) {
+function fixedWindowLimit({ count: limit, windowMs }: { count: number; windowMs: number }, now: () => Date) {
   const windows = new Map<string, { windowStart: number; count: number }>();
   return function allow(key: string) {
     const at = now().getTime();

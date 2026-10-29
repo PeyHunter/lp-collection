@@ -14,28 +14,20 @@ async function startLogins(app: Awaited<ReturnType<typeof createTestApp>>, count
 test("someone who is not logged in can start 10 logins per 15 minutes from one device", async () => {
   const app = await createTestApp();
 
-  const allowed = await startLogins(app, 10, fromPhone("203.0.113.1"));
+  const allowed: (string | null)[] = [];
+  for (let i = 0; i < 10; i++) {
+    allowed.push(...(await startLogins(app, 1, fromPhone("203.0.113.1"))));
+    app.clock.advance(minutes(1));
+  }
   const [limited] = await startLogins(app, 1, fromPhone("203.0.113.1"));
   const [otherPhone] = await startLogins(app, 1, fromPhone("203.0.113.2"));
-  app.clock.advance(minutes(15));
+  app.clock.advance(minutes(5));
   const [later] = await startLogins(app, 1, fromPhone("203.0.113.1"));
 
   expect(allowed.every((location) => location?.startsWith("/fake-discogs/"))).toBe(true);
   expect(limited).toBe("/?login=too-many");
   expect(otherPhone).toMatch(/^\/fake-discogs\//);
   expect(later).toMatch(/^\/fake-discogs\//);
-});
-
-test("an invitee who hits the limit goes back to their Invite page with an explanation", async () => {
-  const app = await createTestApp();
-  const owner = (await app.logIn(app.appOwnerDiscogsUsername, { headers: fromPhone("198.51.100.9") })).session!;
-  const created = await app.request("/api/invites", { method: "POST", headers: { cookie: owner } });
-  const code = ((await created.json()) as { url: string }).url.split("/invite/")[1]!;
-
-  await startLogins(app, 10, fromPhone("203.0.113.1"), `/api/login?invite=${code}`);
-  const [limited] = await startLogins(app, 1, fromPhone("203.0.113.1"), `/api/login?invite=${code}`);
-
-  expect(limited).toBe(`/invite/${code}?login=too-many`);
 });
 
 test("a logged-in User has their own, larger limit", async () => {
@@ -58,28 +50,11 @@ test("addresses in one IPv6 /64 count as one device", async () => {
 
   for (const address of sameNetwork) await startLogins(app, 1, fromPhone(address));
   const [limited] = await startLogins(app, 1, fromPhone("2001:0db8:0001:0002:ffff:0:0:1"));
+  app.clock.advance(minutes(1));
   const [otherNetwork] = await startLogins(app, 1, fromPhone("2001:db8:1:3::1"));
 
   expect(limited).toBe("/?login=too-many");
   expect(otherNetwork).toMatch(/^\/fake-discogs\//);
-});
-
-test("logged-out logins from many addresses cannot make more than 30 Discogs calls per 15 minutes", async () => {
-  const app = await createTestApp();
-
-  const locations: (string | null)[] = [];
-  for (let i = 0; i < 40; i++) {
-    const [location] = await startLogins(app, 1, fromPhone(`203.0.113.${i}`));
-    locations.push(location ?? null);
-    const requestToken = location?.startsWith("/fake-discogs/") ? new URL(location, "http://fake").searchParams.get("oauth_token") : null;
-    if (requestToken) await app.request(`/api/login/callback?oauth_token=${requestToken}&oauth_verifier=junk`, { headers: fromPhone(`198.51.100.${i}`) });
-  }
-  app.clock.advance(minutes(15));
-  const [later] = await startLogins(app, 1, fromPhone("192.0.2.1"));
-
-  expect(app.discogs.calls.startLogin + app.discogs.calls.finishLogin).toBeLessThanOrEqual(31);
-  expect(locations.at(-1)).toBe("/?login=too-many");
-  expect(later).toMatch(/^\/fake-discogs\//);
 });
 
 test("callbacks without the login cookie cannot make unlimited Discogs calls for one login", async () => {
@@ -104,7 +79,7 @@ test("callbacks for a login that has used up its Discogs checks leave the logged
   }
 
   const others: (string | null)[] = [];
-  for (let i = 0; i < 20; i++) others.push(...(await startLogins(app, 1, fromPhone(`192.0.2.${i}`))));
+  for (let i = 0; i < 6; i++) others.push(...(await startLogins(app, 1, fromPhone(`192.0.2.${i}`))));
 
   expect(others.every((location) => location?.startsWith("/fake-discogs/"))).toBe(true);
 });
@@ -116,6 +91,7 @@ test("callbacks without the login cookie from one device share that device's lim
     const [authorizeUrl] = await startLogins(app, 1, fromPhone(`203.0.113.${i}`));
     requestTokens.push(new URL(authorizeUrl!, "http://fake").searchParams.get("oauth_token")!);
   }
+  app.clock.advance(minutes(1));
 
   for (const requestToken of requestTokens) {
     for (let i = 0; i < 3; i++) await app.request(`/api/login/callback?oauth_token=${requestToken}&oauth_verifier=junk-${i}`, { headers: fromPhone("198.51.100.1") });
@@ -139,4 +115,71 @@ test("when Discogs cannot start a login, the person sees an explanation instead 
   expect(returning.headers.get("location")).toBe("/?login=discogs-unavailable");
   expect(invitee.status).toBe(302);
   expect(invitee.headers.get("location")).toBe(`/invite/${code}?login=discogs-unavailable`);
+});
+
+async function createInvite(app: Awaited<ReturnType<typeof createTestApp>>) {
+  const owner = (await app.logIn(app.appOwnerDiscogsUsername, { headers: fromPhone("198.51.100.9") })).session!;
+  const created = await app.request("/api/invites", { method: "POST", headers: { cookie: owner } });
+  return ((await created.json()) as { url: string }).url.split("/invite/")[1]!;
+}
+
+test("strangers who use up the logged-out budget cannot stop an invited friend from logging in", async () => {
+  const app = await createTestApp();
+  const code = await createInvite(app);
+
+  const strangers: (string | null)[] = [];
+  for (let i = 0; i < 60; i++) strangers.push(...(await startLogins(app, 1, fromPhone(`2001:db8:${i.toString(16)}::1`))));
+  const friend = await app.logIn("friend", { invite: code, headers: fromPhone("192.0.2.77") });
+
+  expect(friend.location).toBe("/");
+  expect(friend.session).toBeDefined();
+  expect(strangers.at(-1)).toBe("/?login=busy");
+});
+
+test("logins started with an unknown Invite reach no Discogs and spend no budget", async () => {
+  const app = await createTestApp();
+
+  const junk = await startLogins(app, 50, fromPhone("203.0.113.1"), "/api/login?invite=junk");
+  const [real] = await startLogins(app, 1, fromPhone("203.0.113.1"));
+
+  expect(junk.every((location) => location === "/invite/junk")).toBe(true);
+  expect(real).toMatch(/^\/fake-discogs\//);
+  expect(app.discogs.calls.startLogin).toBe(1);
+});
+
+test("logged-out logins from many addresses reach Discogs at most 10 times a minute, and the rest are told the app is busy", async () => {
+  const app = await createTestApp();
+
+  const perMinute: number[] = [];
+  const lastEachMinute: (string | null)[] = [];
+  for (let minute = 0; minute < 15; minute++) {
+    const before = app.discogs.calls.startLogin + app.discogs.calls.finishLogin;
+    let last: string | null = null;
+    for (let i = 0; i < 30; i++) {
+      last = (await startLogins(app, 1, fromPhone(`10.${minute}.0.${i}`)))[0] ?? null;
+      const requestToken = last?.startsWith("/fake-discogs/") ? new URL(last, "http://fake").searchParams.get("oauth_token") : null;
+      if (requestToken) await app.request(`/api/login/callback?oauth_token=${requestToken}&oauth_verifier=junk`, { headers: fromPhone(`10.${minute}.1.${i}`) });
+    }
+    perMinute.push(app.discogs.calls.startLogin + app.discogs.calls.finishLogin - before);
+    lastEachMinute.push(last);
+    app.clock.advance(minutes(1));
+  }
+
+  expect(Math.max(...perMinute)).toBe(10);
+  expect(lastEachMinute.every((location) => location === "/?login=busy")).toBe(true);
+});
+
+test("one Invite can start 5 logins per 15 minutes", async () => {
+  const app = await createTestApp();
+  const code = await createInvite(app);
+
+  const allowed: (string | null)[] = [];
+  for (let i = 0; i < 5; i++) allowed.push(...(await startLogins(app, 1, fromPhone(`192.0.2.${i}`), `/api/login?invite=${code}`)));
+  const [limited] = await startLogins(app, 1, fromPhone("192.0.2.99"), `/api/login?invite=${code}`);
+  app.clock.advance(minutes(15));
+  const [later] = await startLogins(app, 1, fromPhone("192.0.2.99"), `/api/login?invite=${code}`);
+
+  expect(allowed.every((location) => location?.startsWith("/fake-discogs/"))).toBe(true);
+  expect(limited).toBe(`/invite/${code}?login=too-many`);
+  expect(later).toMatch(/^\/fake-discogs\//);
 });
