@@ -6,7 +6,7 @@ This folder is the maintained source for verifying what LP-Collection users can 
 
 - A run launched with `bin/launch.ts <run-id>` and `bin/doctor.ts <run-id>` reporting `HEALTHY`.
 - The database is fresh: migrations applied, no Users, Collections or Copies.
-- Discogs is the fake gateway, which finds no Releases. Its login page accepts any username, and `owner` is the app's Owner.
+- Discogs is the fake gateway (`DISCOGS=fake`), which finds no Releases. Its login page accepts any username, and `owner` is the app's Owner.
 
 ## Driving conventions
 
