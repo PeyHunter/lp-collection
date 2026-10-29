@@ -55,7 +55,10 @@ function readPublicUrl(env: NodeJS.ProcessEnv, port: number): URL | { error: str
   }
   const url = URL.parse(env.PUBLIC_URL);
   if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) {
-    return { error: `PUBLIC_URL must be the address phones open, starting with https:// (got "${env.PUBLIC_URL}").` };
+    return { error: `PUBLIC_URL must be the address phones open, starting with https:// or http:// (got "${env.PUBLIC_URL}").` };
+  }
+  if (env.NODE_ENV === "production" && url.protocol !== "https:") {
+    return { error: `In production PUBLIC_URL must start with https://, so the login cookie is only sent over an encrypted connection (got "${env.PUBLIC_URL}").` };
   }
   return new URL(url.origin);
 }

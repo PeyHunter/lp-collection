@@ -55,6 +55,18 @@ test("in production the app refuses to start without its public URL", () => {
   expect(result.stderr).toContain("PUBLIC_URL is not set");
 });
 
+test("in production the app refuses a public URL that is not https, so the login cookie stays Secure", () => {
+  const result = startServer({
+    NODE_ENV: "production",
+    APP_OWNER_DISCOGS_USERNAME: "owner",
+    ...discogsKeys,
+    PUBLIC_URL: "http://lp-collection.example",
+  });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("In production PUBLIC_URL must start with https://");
+});
+
 test("the app refuses to start with a public URL that is not a web address", () => {
   const result = startServer({ APP_OWNER_DISCOGS_USERNAME: "owner", ...discogsKeys, PUBLIC_URL: "lp-collection.example" });
 

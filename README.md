@@ -18,7 +18,7 @@ Open http://localhost:3000. The app runs its database migrations when it starts.
 
 `APP_OWNER_DISCOGS_USERNAME` names the app's Owner: the Discogs user who can log in without an Invite and create Invites for everyone else.
 
-`PUBLIC_URL` is the address phones open, such as `https://lp-collection.peytonhunter.com`. Invite links and the Discogs login send people there, and an `https://` address makes the login cookie Secure. Locally it defaults to `http://localhost:<PORT>`; set it to your computer's network address to try the app from a phone. In production the app refuses to start without it.
+`PUBLIC_URL` is the address phones open, such as `https://lp-collection.peytonhunter.com`. Invite links and the Discogs login send people there, and an `https://` address makes the login cookie Secure. Locally it defaults to `http://localhost:<PORT>`; set it to your computer's network address to try the app from a phone. In production the app refuses to start without it, and it must start with `https://`.
 
 While working on the UI, run `npm start` in one terminal and `npm run dev` in another, then open the address Vite prints. It reloads on save and forwards `/api` to the server.
 
