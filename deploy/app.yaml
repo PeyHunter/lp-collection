@@ -1,0 +1,88 @@
+# Secrets this file reads, never committed:
+#   lp-collection-db (scripts/wizard/deploy.sh): POSTGRES_PASSWORD
+#   lp-collection-discogs (scripts/wizard/discogs.sh): DISCOGS_CONSUMER_KEY,
+#     DISCOGS_CONSUMER_SECRET, APP_OWNER_DISCOGS_USERNAME, PUBLIC_URL
+apiVersion: v1
+kind: Service
+metadata:
+  name: lp-collection
+spec:
+  selector:
+    app: lp-collection
+  ports:
+    - port: 80
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lp-collection
+spec:
+  replicas: 1
+  # The app migrates the database on start, so two versions never run at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: lp-collection
+  template:
+    metadata:
+      labels:
+        app: lp-collection
+    spec:
+      # Next to PostgreSQL, and off the small k3s-1 when k3s-2 is up.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k3s-2]
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          # The Argo CD Application sets the immutable sha-<commit> tag.
+          image: ghcr.io/peyhunter/lp-collection:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lp-collection-db
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgres://lp_collection:$(POSTGRES_PASSWORD)@postgres:5432/lp_collection
+          envFrom:
+            - secretRef:
+                name: lp-collection-discogs
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            periodSeconds: 10
+          # /api/health turns 503 while the database is away, and a restart would not bring it back.
+          livenessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 384Mi

@@ -1,0 +1,97 @@
+# Secrets this file reads, created by scripts/wizard/deploy.sh and never committed:
+#   lp-collection-db: POSTGRES_PASSWORD
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      # local-path keeps the data on one node's disk. k3s-2 is the home node with
+      # memory to spare; k3s-1 is the small VPS and the target for nightly backups.
+      nodeSelector:
+        kubernetes.io/hostname: k3s-2
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # The postgres user in the Alpine image.
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:18.6-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: lp_collection
+            - name: POSTGRES_DB
+              value: lp_collection
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lp-collection-db
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, lp_collection, -d, lp_collection]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, lp_collection, -d, lp_collection]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi
