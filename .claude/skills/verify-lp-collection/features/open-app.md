@@ -18,7 +18,7 @@ Preconditions:
 
 - Baseline state, `doctor.ts` reports `HEALTHY`.
 
-- **Home screen.** Open `/`. Run `node .claude/skills/verify-lp-collection/bin/look.ts <run-id> / home`. The snapshot contains `heading "LP-Collection" [level=1]`, `home.json` shows status `200`, title `LP-Collection` and no console errors, and `home.png` shows the heading on a phone-width page.
+- **Home screen.** Open `/`. Run `node .claude/skills/verify-lp-collection/bin/look.ts <run-id> / home`. The snapshot contains `heading "LP-Collection" [level=1]`, `home.json` shows status `200`, title `LP-Collection` and only one console error, the expected `401 (Unauthorized)` from `/api/me` with no session, and `home.png` shows the heading on a phone-width page.
 - **Deep link.** Open a path the API does not own. Run `node .claude/skills/verify-lp-collection/bin/look.ts <run-id> /some/page deep-link`. The result is the same as the home screen: status `200` and the same heading.
 
 ## Gotchas
