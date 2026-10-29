@@ -49,6 +49,19 @@ The year this Release was manufactured.
 The decade of the Original year (60s, 70s, ...).
 _Avoid_: era
 
+### Where records live
+
+**Shelf**:
+One shelving unit in a Collection, with one photo of its front and a grid of rows and columns laid over that photo.
+_Avoid_: rack, unit (in the UI)
+
+**Section**:
+One square of a Shelf, labelled by row letter and column number from the top left ("C4"). A Copy lives in at most one Section.
+_Avoid_: cube, bin, slot
+
+**Not on a shelf**:
+A Copy with no Section yet, or whose Section was removed.
+
 ### Condition and value
 
 **Media condition**:
