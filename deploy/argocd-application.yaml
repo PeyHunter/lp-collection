@@ -1,0 +1,23 @@
+# Not part of the kustomization. scripts/wizard/deploy.sh copies this into the
+# operator's k3s-gitops repo as apps/lp-collection.yaml, with the real image tag.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lp-collection
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/PeyHunter/lp-collection.git
+    targetRevision: main
+    path: deploy
+    kustomize:
+      images:
+        - ghcr.io/peyhunter/lp-collection:sha-0000000
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lp-collection
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
