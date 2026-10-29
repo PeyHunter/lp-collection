@@ -5,6 +5,7 @@ import type { DiscogsGateway, DiscogsIdentity, ReleaseCandidate } from "./discog
 /** What the fake Discogs answers in a test, e.g. which Releases a barcode matches. */
 export type FakeDiscogsScript = {
   releasesByBarcode?: Record<string, ReleaseCandidate[]>;
+  loginStartFails?: boolean;
 };
 
 export type FakeDiscogs = DiscogsGateway & {
@@ -52,6 +53,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       return script.releasesByBarcode?.[barcode] ?? [];
     },
     async startLogin(callbackUrl) {
+      if (script.loginStartFails) throw new Error("Fake Discogs is scripted to refuse new logins");
       const requestToken = randomUUID();
       const requestSecret = randomUUID();
       pending.set(requestToken, { requestSecret, callbackUrl });

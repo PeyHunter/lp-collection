@@ -12,6 +12,8 @@ const loginProblems = {
     "Your Discogs login didn't finish because this browser didn't keep its login cookie. This happens when cookies are blocked, or when the login started at a different address than this one. Allow cookies for this site, then log in again from this page.",
   expired: "Your Discogs login took too long. Log in again.",
   failed: "Discogs didn't confirm your login. Try again.",
+  "too-many": "Too many logins were started from this device. Wait 15 minutes, then try again.",
+  "discogs-unavailable": "Discogs can't be reached right now. Try again in a moment.",
 } as const;
 
 function loginProblemFrom(search: string) {

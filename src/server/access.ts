@@ -1,11 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, lt, notLike, TransactionRollbackError } from "drizzle-orm";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppDependencies } from "./app.ts";
 import type { Database } from "./db.ts";
 import { sealedPrefix, type SecretBox } from "./secret-box.ts";
-import type { DiscogsGateway, DiscogsIdentity } from "./discogs.ts";
+import type { DiscogsIdentity, LoginStart } from "./discogs.ts";
 import { collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
 
 const minute = 60 * 1000;
@@ -17,6 +18,7 @@ const sessionLifetime = 400 * day;
 const sessionCookie = "lp_session";
 const loginCookie = "lp_login";
 const maxPendingLogins = 5;
+const maxAnonymousLoginStarts = 10;
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -192,15 +194,38 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     });
   }
 
+  const anonymousLoginStarts = new Map<string, { windowStart: number; count: number }>();
+
+  /** A fixed window per device, because each login start costs a Discogs request and a stored row. */
+  function allowAnonymousLoginStart(client: string) {
+    const at = now().getTime();
+    for (const [key, window] of anonymousLoginStarts) {
+      if (at - window.windowStart >= loginAttemptLifetime) anonymousLoginStarts.delete(key);
+    }
+    const window = anonymousLoginStarts.get(client) ?? { windowStart: at, count: 0 };
+    window.count += 1;
+    anonymousLoginStarts.set(client, window);
+    return window.count <= maxAnonymousLoginStarts;
+  }
+
   routes.get("/api/login", async (c) => {
     const code = c.req.query("invite");
+    if (!(await currentUser(c)) && !allowAnonymousLoginStart(clientAddress(c))) {
+      return c.redirect(loginProblemPath(code, "too-many"), 302);
+    }
     let inviteId: string | null = null;
     if (code !== undefined) {
       const invite = await findInvite(code);
       if (inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
       inviteId = invite!.id;
     }
-    const login = await discogs.startLogin(new URL("/api/login/callback", publicUrl).href);
+    let login: LoginStart;
+    try {
+      login = await discogs.startLogin(new URL("/api/login/callback", publicUrl).href);
+    } catch (error) {
+      console.error(`Discogs could not start a login: ${error instanceof Error ? error.message : String(error)}`);
+      return c.redirect(loginProblemPath(code, "discogs-unavailable"), 302);
+    }
     const createdAt = now();
     await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(createdAt.getTime() - loginAttemptLifetime)));
     await db.insert(loginAttempts).values({
@@ -261,10 +286,21 @@ function discogsFields(identity: DiscogsIdentity, box: SecretBox) {
 }
 
 /** Why a login did not finish, shown to the person on the page they return to. */
-type LoginProblem = "cookie-missing" | "expired" | "failed";
+type LoginProblem = "cookie-missing" | "expired" | "failed" | "too-many" | "discogs-unavailable";
 
 function loginProblemPath(inviteCode: string | undefined, problem: LoginProblem) {
   return `${inviteCode === undefined ? "/" : invitePath(inviteCode)}?login=${problem}`;
+}
+
+/** Behind the Cloudflare Tunnel (ADR-0003) every request comes from cloudflared, and Cloudflare names the phone in CF-Connecting-IP. */
+function clientAddress(c: Context) {
+  const viaCloudflare = c.req.header("cf-connecting-ip");
+  if (viaCloudflare) return viaCloudflare;
+  try {
+    return getConnInfo(c).remote.address ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 function invitePath(code: string) {
