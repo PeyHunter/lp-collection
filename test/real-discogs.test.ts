@@ -1,7 +1,7 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, expect, test } from "vitest";
-import { createRealDiscogs } from "../../src/server/real-discogs.ts";
+import { createRealDiscogs } from "../src/server/real-discogs.ts";
 
 type Received = { method: string; path: string; headers: IncomingHttpHeaders };
 
