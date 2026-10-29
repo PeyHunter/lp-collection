@@ -1,0 +1,252 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE. Not production code.
+  LP-Collection Copy detail in the "Gig poster" direction: cover, Release facts, conditions,
+  Value with its history, note, photos, and where the Copy lives on the shelf.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Kind of Blue · LP-Collection prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400..900&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="gig-poster.css">
+<style>
+.big-cover {
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: 1;
+  border-radius: var(--radius-m);
+  background:
+    linear-gradient(to bottom, transparent 70%, oklch(15% 0.03 250 / 0.7)),
+    radial-gradient(ellipse 38% 46% at 62% 44%, oklch(70% 0.06 60) 0 40%, oklch(45% 0.06 40) 60%, transparent 72%),
+    linear-gradient(160deg, oklch(45% 0.1 245), oklch(20% 0.06 255));
+}
+.title-block .poster-h { font-size: 15.4cqi; }
+.title-block .by { font-size: 7.6cqi; font-weight: 800; letter-spacing: -0.02em; color: var(--accent); }
+
+.release { display: grid; grid-template-columns: 1fr 1fr; border-block-start: 1px solid var(--line); font-family: var(--body); text-transform: none; line-height: 1.3; }
+.release > div { display: grid; gap: var(--space-3xs); padding-block: var(--space-s); border-block-end: 1px solid var(--line); }
+.release > div:nth-child(even) { border-inline-start: 1px solid var(--line); padding-inline-start: 0.875rem; }
+.release dt { font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-dim); }
+.release dd { font-weight: 600; line-height: 1.3; }
+.release dd.big { text-transform: uppercase; font-family: var(--display); font-size: var(--text-xl); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+
+.stack { display: grid; gap: 0.875rem; padding-block-start: 0.875rem; }
+.hint { font-size: var(--text-s); color: var(--ink-dim); }
+
+.value-figure { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2xs) var(--space-m); }
+.lowest { font-size: var(--text-sm); color: var(--ink-dim); }
+.lowest b { font-weight: 600; color: var(--ink); }
+
+.home-spot { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: var(--space-l); padding-block-start: 0.875rem; }
+.mini-shelf {
+  display: grid;
+  grid-template-columns: repeat(4, 1.25rem);
+  grid-auto-rows: 1.25rem;
+  gap: 3px;
+  padding: 5px;
+  border-radius: 3px;
+  background: oklch(42% 0.06 60);
+}
+.mini-shelf span { border-radius: 1px; background: var(--sunk); }
+.mini-shelf .here { background: var(--accent); box-shadow: 0 0 0 2px var(--ink); }
+.spot { display: grid; gap: var(--space-xs); }
+.spot .poster-h { font-size: 4.25rem; line-height: 0.8; color: var(--accent); }
+.spot p { font-size: var(--text-sm); color: var(--ink-dim); }
+.spot p b { color: var(--ink); font-weight: 600; }
+.spot .link { justify-self: start; padding-inline: 0; }
+
+.photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-xs); padding-block-start: 0.875rem; }
+.photo {
+  aspect-ratio: 1;
+  border-radius: var(--radius-s);
+  outline: 1px solid oklch(100% 0 none / 0.1);
+  outline-offset: -1px;
+}
+.photo:active { transform: scale(0.97); }
+.ph1 { background: radial-gradient(circle at 50% 50%, oklch(62% 0.15 36) 0 12%, oklch(14% 0.01 50) 13% 70%, oklch(30% 0.02 60) 71%); }
+.ph2 { background: linear-gradient(160deg, oklch(45% 0.1 245), oklch(20% 0.06 255)); }
+.ph3 { background: linear-gradient(100deg, oklch(80% 0.03 85) 0 55%, oklch(70% 0.03 80) 55%); }
+.add-photo {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2xs);
+  aspect-ratio: 1;
+  border-radius: var(--radius-s);
+  border: 1.5px dashed var(--line);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+.add-photo svg { inline-size: 1.25rem; }
+.add-photo:active { transform: scale(0.97); background: var(--press); }
+
+.danger-zone { display: grid; padding-block-start: var(--space-xs); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .photo, .add-photo { transition: transform 160ms var(--ease-out); }
+}
+</style>
+</head>
+<body>
+
+<header class="top content-grid">
+  <div class="top-inner">
+    <a class="icon-btn" href="collection.html" aria-label="Back to the Collection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <h1><small>Copy</small>Added 3 Feb 2024</h1>
+    <button class="icon-btn" type="button" aria-label="More">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="content-grid">
+  <section class="poster title-block" aria-labelledby="title-h">
+    <div class="big-cover" role="img" aria-label="Cover of Kind of Blue"></div>
+    <div class="rule"></div>
+    <h2 id="title-h" class="poster-h">Kind of Blue</h2>
+    <p class="by">Miles Davis</p>
+    <dl class="release">
+      <div><dt>Original year</dt><dd class="big tnum">1959</dd></div>
+      <div><dt>Pressing year</dt><dd class="big tnum">1959</dd></div>
+      <div><dt>Label</dt><dd>Columbia</dd></div>
+      <div><dt>Catalog number</dt><dd class="tnum">CS 8163</dd></div>
+      <div><dt>Country</dt><dd>US</dd></div>
+      <div><dt>Format</dt><dd>LP, Album, Stereo</dd></div>
+      <div><dt>Genre</dt><dd>Jazz, Modal</dd></div>
+      <div><dt>Period</dt><dd>50s</dd></div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="value-h">
+    <div class="section-head"><h2 id="value-h">Value</h2><span class="count">for VG+</span></div>
+    <div class="stack">
+      <div class="value-figure">
+        <p class="amount tnum">4.850<small>kr</small></p>
+        <p class="delta tnum">↑ 450 kr (+10,2 %) <span>12 mo</span></p>
+      </div>
+      <p class="lowest tnum">Lowest listing <b>3.900 kr</b>, any condition</p>
+      <figure class="chart">
+        <svg viewBox="0 0 320 90" role="img" aria-label="Value history, last 12 months, from 4.400 kr to 4.850 kr">
+          <defs>
+            <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="oklch(62% 0.15 36)" stop-opacity="0.35"/>
+              <stop offset="1" stop-color="oklch(62% 0.15 36)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="M6 84 L34 80.5 L62 75.3 L90 75.3 L118 66.7 L146 56.3 L174 49.3 L202 42.4 L230 32 L258 21.6 L286 14.7 L314 6 L314 90 L6 90 Z" fill="url(#fill)"/>
+          <path d="M6 84 L34 80.5 L62 75.3 L90 75.3 L118 66.7 L146 56.3 L174 49.3 L202 42.4 L230 32 L258 21.6 L286 14.7 L314 6" fill="none" stroke="oklch(93% 0.035 85)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+          <circle cx="314" cy="6" r="4.5" fill="oklch(62% 0.15 36)" stroke="oklch(24% 0.04 50)" stroke-width="2"/>
+        </svg>
+        <figcaption class="axis"><span>Nov 2025</span><span>Oct 2026</span></figcaption>
+      </figure>
+      <div class="facts">
+        <div class="fact"><span class="k">Purchase price</span><span class="v tnum">1.200 kr</span><span class="s">12 Mar 2019</span></div>
+        <div class="fact"><span class="k">Gain</span><span class="v gain tnum">+3.650 kr</span><span class="s">Value minus Purchase price</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="cond-h">
+    <div class="section-head"><h2 id="cond-h">Condition</h2></div>
+    <div class="stack">
+      <label class="field"><span>Media condition</span>
+        <select class="input">
+          <option>Mint (M)</option>
+          <option>Near Mint (NM or M-)</option>
+          <option selected>Very Good Plus (VG+)</option>
+          <option>Very Good (VG)</option>
+          <option>Good Plus (G+)</option>
+          <option>Good (G)</option>
+          <option>Fair (F)</option>
+          <option>Poor (P)</option>
+        </select>
+      </label>
+      <label class="field"><span>Sleeve condition</span>
+        <select class="input">
+          <option>Mint (M)</option>
+          <option>Near Mint (NM or M-)</option>
+          <option>Very Good Plus (VG+)</option>
+          <option selected>Very Good (VG)</option>
+          <option>Good Plus (G+)</option>
+          <option>Good (G)</option>
+          <option>Fair (F)</option>
+          <option>Poor (P)</option>
+        </select>
+      </label>
+      <p class="hint">The Value follows the Media condition and updates as soon as you change it.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="where-h">
+    <div class="section-head"><h2 id="where-h">Where it lives</h2><a class="link" href="shelf.html">Open shelf</a></div>
+    <div class="home-spot">
+      <div class="mini-shelf" role="img" aria-label="Living room shelf, 4 squares wide and 6 high, square C4 marked">
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span class="here"></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="spot">
+        <p class="poster-h">C4</p>
+        <p><b>Living room shelf</b><br>Column C, row 4 from the top. 9 LPs in this square.</p>
+        <a class="link" href="shelf.html">Move to another square</a>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="note-h">
+    <div class="section-head"><h2 id="note-h">Note</h2></div>
+    <div class="stack">
+      <label class="field"><span class="visually-hidden">Note</span>
+        <textarea class="input" rows="3">From Dad’s shelf. Small seam split on the back, plays clean.</textarea>
+      </label>
+    </div>
+  </section>
+
+  <section aria-labelledby="photos-h">
+    <div class="section-head"><h2 id="photos-h">Photos</h2><span class="count">3</span></div>
+    <div class="photos">
+      <button class="photo ph1" type="button" aria-label="Photo 1, the label"></button>
+      <button class="photo ph2" type="button" aria-label="Photo 2, the front"></button>
+      <button class="photo ph3" type="button" aria-label="Photo 3, the seam split"></button>
+      <button class="add-photo" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Add
+      </button>
+    </div>
+  </section>
+
+  <section class="danger-zone" aria-label="Delete">
+    <button class="btn danger" type="button">Delete this Copy</button>
+  </section>
+</main>
+
+<nav class="dock content-grid" aria-label="Main">
+  <div class="dock-inner">
+    <a class="tab" href="home.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4z"/></svg>
+      Home
+    </a>
+    <a class="scan" href="lookup.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M11 9v6M14 9v6M17 9v6"/></svg>
+      Scan
+    </a>
+    <a class="tab" href="collection.html" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>
+      Collection
+    </a>
+  </div>
+</nav>
+
+</body>
+</html>
