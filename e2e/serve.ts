@@ -3,9 +3,10 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import EmbeddedPostgres from "embedded-postgres";
+import { freePort } from "../test/support/free-port.ts";
 
 // Starts a throwaway PostgreSQL, then the real server against it, for Playwright.
-const port = 54330;
+const port = await freePort();
 const password = randomUUID();
 const pg = new EmbeddedPostgres({
   databaseDir: await mkdtemp(join(tmpdir(), "lp-collection-e2e-pg-")),
