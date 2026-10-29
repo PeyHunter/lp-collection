@@ -27,7 +27,7 @@ export function createRealDiscogs({
         Authorization: authorizationHeader({
           oauth_consumer_key: consumerKey,
           oauth_nonce: randomBytes(16).toString("hex"),
-          oauth_signature: `${consumerSecret}&${tokenSecret}`,
+          oauth_signature: `${percentEncode(consumerSecret)}&${percentEncode(tokenSecret)}`,
           oauth_signature_method: "PLAINTEXT",
           oauth_timestamp: String(Math.floor(Date.now() / 1000)),
           ...params,
@@ -83,6 +83,10 @@ export function createRealDiscogs({
 
 function authorizationHeader(params: Record<string, string>) {
   return `OAuth ${Object.entries(params)
-    .map(([name, value]) => `${name}="${encodeURIComponent(value)}"`)
+    .map(([name, value]) => `${name}="${percentEncode(value)}"`)
     .join(", ")}`;
+}
+
+function percentEncode(text: string) {
+  return encodeURIComponent(text).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 }

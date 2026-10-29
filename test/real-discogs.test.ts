@@ -88,3 +88,12 @@ test("the real gateway logs a person in with Discogs' OAuth 1.0a PLAINTEXT hands
     expect(request.headers["content-type"]).toBe("application/x-www-form-urlencoded");
   }
 });
+
+test("the PLAINTEXT signature percent-encodes each secret before joining them with &", async () => {
+  const stub = await startDiscogsStub();
+  const discogs = createRealDiscogs({ consumerKey: "consumer-key", consumerSecret: "a&b=c d!*'()%", apiBaseUrl: stub.url });
+
+  await discogs.startLogin("https://lp.example/api/login/callback");
+
+  expect(oauthParams(stub.received[0]!.headers).oauth_signature).toBe("a%26b%3Dc%20d%21%2A%27%28%29%25&");
+});
