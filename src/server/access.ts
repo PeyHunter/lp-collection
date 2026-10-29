@@ -13,6 +13,7 @@ const loginAttemptLifetime = 15 * minute;
 // Browsers cap a cookie's Max-Age at 400 days.
 const sessionLifetime = 400 * day;
 const sessionCookie = "lp_session";
+const loginCookie = "lp_login";
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -170,6 +171,13 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     const createdAt = now();
     await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(createdAt.getTime() - loginAttemptLifetime)));
     await db.insert(loginAttempts).values({ requestToken: login.requestToken, requestSecret: login.requestSecret, inviteId, createdAt });
+    setCookie(c, loginCookie, login.requestToken, {
+      httpOnly: true,
+      sameSite: "Lax",
+      path: "/api/login",
+      maxAge: loginAttemptLifetime / 1000,
+      secure: requestOrigin(c).startsWith("https:"),
+    });
     return c.redirect(login.authorizeUrl, 302);
   });
 
@@ -177,7 +185,8 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     const requestToken = c.req.query("oauth_token");
     const verifier = c.req.query("oauth_verifier");
     const code = c.req.query("invite");
-    if (!requestToken || !verifier) return c.redirect("/", 302);
+    if (!requestToken || !verifier || getCookie(c, loginCookie) !== requestToken) return c.redirect("/", 302);
+    deleteCookie(c, loginCookie, { path: "/api/login", secure: requestOrigin(c).startsWith("https:") });
     const [attempt] = await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning();
     if (!attempt || now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect("/", 302);
 

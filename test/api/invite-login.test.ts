@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createTestApp, days } from "../support/test-app.ts";
+import { cookieFrom, createTestApp, days } from "../support/test-app.ts";
 
 type TestApp = Awaited<ReturnType<typeof createTestApp>>;
 
@@ -78,27 +78,25 @@ test("an Invite works only once", async () => {
 test("an Invite used up while the second person was on Discogs still refuses them", async () => {
   const app = await createTestApp();
   const invite = await createInvite(app, await logInAsAppOwner(app));
-  const strangerStart = await app.request(`/api/login?invite=${invite.code}`);
+  const strangerLogin = await app.startLogin({ invite: invite.code });
   await app.logIn("friend", { invite: invite.code });
 
-  const strangerCallback = await app.request(app.discogs.authorizeAs(strangerStart.headers.get("location")!, "stranger"));
+  const strangerCallback = await strangerLogin.finish("stranger");
 
   expect(strangerCallback.status).toBe(302);
   expect(strangerCallback.headers.get("location")).toBe(`/invite/${invite.code}`);
-  expect(strangerCallback.headers.get("set-cookie")).toBeNull();
+  expect(cookieFrom(strangerCallback, "lp_session")).toBeUndefined();
 });
 
 test("two people finishing their login with the same Invite at the same moment: only one gets in", async () => {
   const app = await createTestApp();
   const invite = await createInvite(app, await logInAsAppOwner(app));
   const people = ["friend", "stranger", "neighbour", "cousin"];
-  const starts = await Promise.all(people.map(() => app.request(`/api/login?invite=${invite.code}`)));
+  const logins = await Promise.all(people.map(() => app.startLogin({ invite: invite.code })));
 
-  const callbacks = await Promise.all(
-    people.map((name, index) => app.request(app.discogs.authorizeAs(starts[index]!.headers.get("location")!, name))),
-  );
+  const callbacks = await Promise.all(people.map((name, index) => logins[index]!.finish(name)));
 
-  expect(callbacks.filter((callback) => callback.headers.get("set-cookie") !== null)).toHaveLength(1);
+  expect(callbacks.filter((callback) => cookieFrom(callback, "lp_session") !== undefined)).toHaveLength(1);
 });
 
 test("without an Invite a new person gets no account", async () => {
