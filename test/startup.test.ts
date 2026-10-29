@@ -46,7 +46,7 @@ test("in production the app refuses to run the fake Discogs", () => {
   expect(result.stderr).toContain("The fake Discogs lets anyone log in as anyone");
 });
 
-const discogsKeys ={ DISCOGS_CONSUMER_KEY: "key", DISCOGS_CONSUMER_SECRET: "secret" };
+const discogsKeys = { DISCOGS_CONSUMER_KEY: "key", DISCOGS_CONSUMER_SECRET: "secret" };
 
 test("in production the app refuses to start without its public URL", () => {
   const result = startServer({ NODE_ENV: "production", APP_OWNER_DISCOGS_USERNAME: "owner", ...discogsKeys });
