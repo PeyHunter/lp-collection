@@ -268,8 +268,8 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     if (startedInThisBrowser) setPendingLogins(c, pending.filter((token) => token !== requestToken));
     const codeForThisBrowser = startedInThisBrowser ? code : undefined;
     if (now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect(loginProblemPath(codeForThisBrowser, "expired"), 302);
-    const [claimed] = await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning();
-    if (!claimed) return c.redirect(loginProblemPath(codeForThisBrowser, "expired"), 302);
+    const claim = async () => (await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning()).length > 0;
+    if (startedInThisBrowser && !(await claim())) return c.redirect(loginProblemPath(code, "expired"), 302);
 
     let identity: DiscogsIdentity;
     try {
@@ -279,7 +279,10 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
       return c.redirect(loginProblemPath(codeForThisBrowser, "failed"), 302);
     }
     // Discogs accepted the verifier, so this is the person who authorized; only their browser's cookie is missing.
-    if (!startedInThisBrowser) return c.redirect(loginProblemPath(code, "cookie-missing"), 302);
+    if (!startedInThisBrowser) {
+      await claim();
+      return c.redirect(loginProblemPath(code, "cookie-missing"), 302);
+    }
 
     const userId = await logIn(identity, attempt.inviteId);
     if (!userId) return c.redirect(code === undefined ? "/" : invitePath(code), 302);

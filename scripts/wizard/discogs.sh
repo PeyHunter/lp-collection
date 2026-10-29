@@ -252,7 +252,15 @@ note "A key already in the secret is kept, because a new key would make the stor
 if confirm "Save it now?"; then
   kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$NAMESPACE" >/dev/null
   b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
-  TOKEN_ENCRYPTION_KEY=$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.TOKEN_ENCRYPTION_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  if existing_key=$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.TOKEN_ENCRYPTION_KEY}' 2>&1); then
+    TOKEN_ENCRYPTION_KEY=$(printf '%s' "$existing_key" | base64 -d)
+  elif [[ "$existing_key" == *NotFound* ]]; then
+    TOKEN_ENCRYPTION_KEY=""
+  else
+    warn "Couldn't read the secret ${SECRET_NAME}, so its TOKEN_ENCRYPTION_KEY can't be kept. Nothing was saved."
+    note "$existing_key"
+    exit 1
+  fi
   [[ -n "$TOKEN_ENCRYPTION_KEY" ]] || TOKEN_ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64 | tr -d '\n')
   kubectl apply -f - >/dev/null <<YAML
 apiVersion: v1

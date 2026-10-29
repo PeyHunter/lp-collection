@@ -56,6 +56,7 @@ test("someone who only saw the Discogs authorize address cannot learn the Invite
 
   expect(replay.headers.get("location")).not.toContain(code);
   expect(cookieFrom(replay, "lp_session")).toBeUndefined();
+  expect(cookieFrom(await login.finish("friend"), "lp_session")).toBeDefined();
 });
 
 test("when the login cookie never reaches the callback, a returning User sees an explanation on the home page", async () => {
