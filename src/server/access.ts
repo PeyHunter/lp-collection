@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, isNull, lt, notLike, TransactionRollbackError } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, lte, notLike, or, TransactionRollbackError } from "drizzle-orm";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -137,6 +137,9 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
   async function startSession(c: Context, userId: string) {
     const token = randomBytes(32).toString("base64url");
     const createdAt = now();
+    const replaced = getCookie(c, sessionCookie);
+    const expired = lte(sessions.expiresAt, createdAt);
+    await db.delete(sessions).where(replaced ? or(expired, eq(sessions.tokenHash, sha256(replaced))) : expired);
     await db.insert(sessions).values({
       tokenHash: sha256(token),
       userId,
