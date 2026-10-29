@@ -38,6 +38,22 @@ Neither test command needs a database of your own: they start a throwaway Postgr
 
 GitHub Actions runs all of this, and builds the container image, on every push and pull request.
 
+## Deploy
+
+The app runs on the home k3s cluster at https://lp-collection.peytonhunter.com. A Cloudflare Tunnel carries phones to it, so no port is open at home (see `docs/adr/0003`).
+
+Every change merged to main makes GitHub build a new image, `ghcr.io/peyhunter/lp-collection:sha-<commit>`. The cluster setup lives in `deploy/`: the app, its PostgreSQL database, and the tunnel connector. PostgreSQL keeps its data on k3s-2's disk.
+
+To put the app online the first time, run this on k3s-2 from the repo folder and follow the steps:
+
+```sh
+scripts/wizard/deploy.sh
+```
+
+It creates the Cloudflare Tunnel and the address, stores the passwords and keys in the cluster (never in this repo), runs the Discogs wizard if the keys are missing, and switches the app on in Argo CD. Run it again at any time: it keeps what's already done.
+
+To ship a newer version, change the `sha-` tag in `apps/lp-collection.yaml` in the k3s-gitops repo to the newest one from the Publish runs on GitHub, and push. Argo CD rolls it out.
+
 ## Build the container image
 
 ```sh
