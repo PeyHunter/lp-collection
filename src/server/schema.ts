@@ -1,4 +1,5 @@
-import { integer, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { conditions, defaultCondition, type ReleaseCandidate } from "./discogs.ts";
 
 const at = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
@@ -66,3 +67,43 @@ export const loginAttempts = pgTable("login_attempts", {
   verifierChecks: integer("verifier_checks").notNull().default(0),
   createdAt: at("created_at").notNull(),
 });
+
+export const condition = pgEnum("condition", conditions);
+
+/** Discogs' answer to a barcode Lookup, kept so the same barcode never costs a second Discogs request. */
+export const barcodeLookups = pgTable("barcode_lookups", {
+  barcode: text("barcode").primaryKey(),
+  candidates: jsonb("candidates").$type<ReleaseCandidate[]>().notNull(),
+  lookedUpAt: at("looked_up_at").notNull(),
+});
+
+/** A cache of Discogs release data, keyed by the Discogs release id. */
+export const releases = pgTable("releases", {
+  discogsReleaseId: integer("discogs_release_id").primaryKey(),
+  artist: text("artist").notNull(),
+  title: text("title").notNull(),
+  label: text("label"),
+  catalogNumber: text("catalog_number"),
+  country: text("country"),
+  pressingYear: integer("pressing_year"),
+  originalYear: integer("original_year"),
+  coverImageUrl: text("cover_image_url"),
+  fetchedAt: at("fetched_at").notNull(),
+});
+
+export const copies = pgTable(
+  "copies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    collectionId: uuid("collection_id")
+      .notNull()
+      .references(() => collections.id),
+    discogsReleaseId: integer("discogs_release_id")
+      .notNull()
+      .references(() => releases.discogsReleaseId),
+    mediaCondition: condition("media_condition").notNull().default(defaultCondition),
+    sleeveCondition: condition("sleeve_condition").notNull().default(defaultCondition),
+    createdAt: at("created_at").notNull(),
+  },
+  (table) => [index("copies_collection_created_idx").on(table.collectionId, table.createdAt)],
+);
