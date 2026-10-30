@@ -75,10 +75,10 @@ The Discogs suggested price for a Release in a Copy's Media condition. This is t
 _Avoid_: price, worth
 
 **Currency**:
-The currency a User sees Values in. It defaults to Danish kroner (DKK). Discogs quotes prices only in some currencies (not DKK), so the app converts each price with the European Central Bank's daily rates.
+The currency a User sees Values in. It defaults to Danish kroner (DKK). Discogs quotes prices only in some currencies (not DKK), so the app converts each price with the European Central Bank's daily rates. A Value in another currency is not shown; it is fetched again in the User's currency.
 
 **Value snapshot**:
-One Value fetch for a Copy: the Media condition, the Value (or none), the Lowest listing (or none), the currency and the time. The latest snapshot for the Copy's current Media condition is the Value shown.
+One Value fetch for a Copy: the Media condition, the Value (or none), the Lowest listing (or none), the currency and the time. The latest snapshot for the Copy's current Media condition is the Value shown, when it is in the User's currency.
 _Avoid_: price record
 
 **Seller settings**:

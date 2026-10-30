@@ -5,6 +5,7 @@ const runId = process.argv[2];
 if (!runId) throw new Error("Usage: node .claude/skills/verify-lp-collection/bin/drive-value.ts <run-id>");
 const state = JSON.parse(await readFile(`.verify/${runId}/state.json`, "utf8")) as { appUrl: string };
 const evidence = `.verify/${runId}/evidence`;
+const noSellerSettings = `no-seller-settings-${runId}`;
 await mkdir(evidence, { recursive: true });
 const { defaultBrowserType: _, ...iPhone } = devices["iPhone 15"];
 const browser = await chromium.launch();
@@ -80,7 +81,7 @@ const inviteUrl = await owner.getByLabel("Invite link").inputValue();
 const friend = await newPage();
 await friend.goto(inviteUrl);
 await friend.getByRole("link", { name: "Log in with Discogs" }).click();
-await friend.getByLabel("Discogs username").fill("no-seller-settings");
+await friend.getByLabel("Discogs username").fill(noSellerSettings);
 await friend.getByRole("button", { name: "Authorize" }).click();
 await add(friend, "190295328709");
 await add(friend, "5099969209017");
@@ -97,7 +98,7 @@ const [settings] = await Promise.all([
   friend.waitForEvent("popup"),
   friend.getByRole("link", { name: "Open seller settings on Discogs" }).click(),
 ]);
-await settings.getByLabel("Discogs username").fill("no-seller-settings");
+await settings.getByLabel("Discogs username").fill(noSellerSettings);
 await settings.getByRole("button", { name: "Save seller settings" }).click();
 await settings.close();
 await friend.getByRole("button", { name: "I've saved them, fetch Values" }).click();
@@ -108,11 +109,13 @@ await expect(friend.getByRole("region", { name: "Copies" }).getByRole("listitem"
 await shot(friend, "seller-settings-resolved");
 
 await friend.getByLabel("Currency").selectOption("EUR");
-await add(friend, "190295328709");
-await friend.goto("/");
-const euroRow = friend.getByRole("region", { name: "Copies" }).getByRole("listitem").first();
-await expect(euroRow).toContainText("34 €");
-console.log("after switching to EUR, newest Discovery row:", (await euroRow.innerText()).replaceAll("\n", " | "));
+const friendCopies = friend.getByRole("region", { name: "Copies" });
+await expect(friendCopies.getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("34 €");
+await friend.reload();
+await expect(friendCopies.getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("34 €");
+await expect(friendCopies).not.toContainText("kr");
+await shot(friend, "currency-switched", "Copies");
+console.log("after switching to EUR, rows:", (await friendCopies.innerText()).replaceAll("\n", " | "));
 
 await writeFile(`${evidence}/console-errors.json`, JSON.stringify(consoleErrors, null, 2));
 console.log("console errors:", consoleErrors);
