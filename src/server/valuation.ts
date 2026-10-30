@@ -4,7 +4,7 @@ import { discogsCurrencies, type Condition, type Currency, type DiscogsAuth, typ
 import type { ExchangeRates } from "./exchange-rates.ts";
 import { copies, users, valueSnapshots } from "./schema.ts";
 
-/** The latest Value fetched for a Copy's current Media condition. A null `value` means Discogs had no suggestion. */
+/** The latest Value fetched for a Copy's current Media condition, when it is in the User's currency. A null `value` means Discogs had no suggestion. */
 export type CopyValue = {
   mediaCondition: Condition;
   value: number | null;
@@ -62,7 +62,7 @@ export function createValuation({ database, discogs, exchangeRates, now }: { dat
       }
     },
 
-    async currentValues(filter: { collectionId: string } | { copyId: string }) {
+    async currentValues(filter: { collectionId: string } | { copyId: string }, currency: Currency) {
       const rows = await db
         .selectDistinctOn([valueSnapshots.copyId], {
           copyId: valueSnapshots.copyId,
@@ -76,7 +76,9 @@ export function createValuation({ database, discogs, exchangeRates, now }: { dat
         .innerJoin(copies, and(eq(copies.id, valueSnapshots.copyId), eq(copies.mediaCondition, valueSnapshots.mediaCondition)))
         .where("collectionId" in filter ? eq(copies.collectionId, filter.collectionId) : eq(copies.id, filter.copyId))
         .orderBy(valueSnapshots.copyId, desc(valueSnapshots.fetchedAt), desc(valueSnapshots.id));
-      return new Map<string, CopyValue>(rows.map(({ copyId, fetchedAt, ...value }) => [copyId, { ...value, fetchedAt: fetchedAt.toISOString() }]));
+      return new Map<string, CopyValue>(
+        rows.filter((row) => row.currency === currency).map(({ copyId, fetchedAt, ...value }) => [copyId, { ...value, fetchedAt: fetchedAt.toISOString() }]),
+      );
     },
   };
 }

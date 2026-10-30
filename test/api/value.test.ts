@@ -6,6 +6,7 @@ import { createTestApp } from "../support/test-app.ts";
 
 const discovery = 16893476;
 const gas5 = 1503928;
+const kindOfBlueEurope = 2474032;
 
 const priced: FakeDiscogsScript = {
   releases: sampleReleases,
@@ -239,4 +240,120 @@ test("only Members see a Copy, change its conditions or fetch its Values", async
 
   expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 401]);
   expect(await listCopies(owner)).toMatchObject([{ mediaCondition: "Very Good Plus (VG+)", value: { value: 223.8 } }]);
+});
+
+type ValuesAnswer = { copies: CopyView[]; sellerSettingsMissing: boolean; more: boolean; retryEmptyBefore?: string };
+
+async function fetchValues(user: Member, body?: object) {
+  const response = await user.as("/values", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  expect(response.status).toBe(200);
+  return (await response.json()) as ValuesAnswer;
+}
+
+function priceSuggestionsAsked(app: Awaited<ReturnType<typeof createTestApp>>) {
+  return app.discogs.requests.filter((request) => request.endpoint === "price-suggestions").map((request) => request.discogsReleaseId);
+}
+
+test("a Media condition change while Discogs is unreachable shows no Value instead of the old condition's", async () => {
+  const script: FakeDiscogsScript = { ...priced };
+  const app = await createTestApp({ discogs: script });
+  const owner = await logInWithCollection(app);
+  const { copy } = await saved(owner, discovery);
+
+  script.unavailable = true;
+  const changed = await changeConditions(owner, copy.id, { mediaCondition: "Near Mint (NM or M-)" });
+
+  expect(((await changed.json()) as CopyAnswer).copy).toMatchObject({ mediaCondition: "Near Mint (NM or M-)", value: null });
+  expect(await listCopies(owner)).toMatchObject([{ mediaCondition: "Near Mint (NM or M-)", value: null }]);
+});
+
+test("Copies with no Value for their Media condition get one a few at a time, and a Release with no suggestion isn't asked again", async () => {
+  const script: FakeDiscogsScript = { ...priced };
+  const app = await createTestApp({ discogs: script });
+  const owner = await logInWithCollection(app);
+  await saved(owner, gas5);
+  await saved(owner, discovery);
+  script.unavailable = true;
+  for (let saves = 0; saves < 7; saves++) await saved(owner, discovery);
+  script.unavailable = false;
+  app.discogs.requests.length = 0;
+
+  const first = await fetchValues(owner);
+  const second = await fetchValues(owner);
+  const third = await fetchValues(owner);
+
+  expect([first.more, second.more, third.more]).toEqual([true, false, false]);
+  expect(first.copies.filter((copy) => copy.value?.value === 223.8)).toHaveLength(1 + 5);
+  const valuesOf = (discogsReleaseId: number) =>
+    second.copies.filter((copy) => copy.release.discogsReleaseId === discogsReleaseId).map((copy) => copy.value?.value);
+  expect([valuesOf(discovery), valuesOf(gas5)]).toEqual([Array(8).fill(223.8), [null]]);
+  expect(priceSuggestionsAsked(app)).toEqual(Array(7).fill(discovery));
+});
+
+test("Values are fetched once when the list asks for them twice at the same time", async () => {
+  const script: FakeDiscogsScript = { ...priced };
+  const app = await createTestApp({ discogs: script });
+  const owner = await logInWithCollection(app);
+  await saved(owner, discovery);
+  script.unavailable = true;
+  await saved(owner, discovery);
+  await saved(owner, discovery);
+  Object.assign(script, { unavailable: false, priceSuggestionsDelayMs: 100 });
+  app.discogs.requests.length = 0;
+
+  const answers = await Promise.all([fetchValues(owner), fetchValues(owner)]);
+
+  expect(answers.map((answer) => answer.copies.map((copy) => copy.value?.value))).toEqual([Array(3).fill(223.8), Array(3).fill(223.8)]);
+  expect(priceSuggestionsAsked(app)).toEqual(Array(2).fill(discovery));
+});
+
+test("the seller settings guide fetches again the Copies that Discogs gave no Value, each once", async () => {
+  const script: FakeDiscogsScript = { ...priced, prices: { ...priced.prices } };
+  const app = await createTestApp({ discogs: script });
+  const owner = await logInWithCollection(app);
+  for (let saves = 0; saves < 3; saves++) await saved(owner, gas5);
+  for (let saves = 0; saves < 3; saves++) await saved(owner, kindOfBlueEurope);
+  script.prices![gas5] = priceLadder(20);
+  app.clock.advance(60_000);
+  app.discogs.requests.length = 0;
+
+  expect((await fetchValues(owner)).more).toBe(false);
+  expect(priceSuggestionsAsked(app)).toEqual([]);
+
+  const first = await fetchValues(owner, { retryEmpty: true });
+  app.clock.advance(60_000);
+  const second = await fetchValues(owner, { retryEmptyBefore: first.retryEmptyBefore });
+  const third = await fetchValues(owner, { retryEmptyBefore: first.retryEmptyBefore });
+
+  expect([first.more, second.more, third.more]).toEqual([true, false, false]);
+  const valuesOf = (discogsReleaseId: number) =>
+    third.copies.filter((copy) => copy.release.discogsReleaseId === discogsReleaseId).map((copy) => copy.value?.value);
+  expect([valuesOf(gas5), valuesOf(kindOfBlueEurope)]).toEqual([Array(3).fill(111.9), Array(3).fill(null)]);
+  expect(priceSuggestionsAsked(app).sort()).toEqual([...Array(3).fill(gas5), ...Array(3).fill(kindOfBlueEurope)].sort());
+});
+
+test("after a currency change no Value shows in the old currency, and fetching gives every Copy its Value in the new one", async () => {
+  const app = await createTestApp({ discogs: { ...priced, lowestListings: { ...priced.lowestListings, [gas5]: { amount: 12, currency: "EUR" } } } });
+  const owner = await logInWithCollection(app);
+  await saved(owner, discovery);
+  app.clock.advance(60_000);
+  await saved(owner, gas5);
+
+  await app.request("/api/me/currency", {
+    method: "PUT",
+    headers: { cookie: owner.session, "content-type": "application/json" },
+    body: JSON.stringify({ currency: "USD" }),
+  });
+
+  expect(await listCopies(owner)).toMatchObject([{ value: null }, { value: null }]);
+  const { copies, more } = await fetchValues(owner);
+  expect(more).toBe(false);
+  expect(copies.map((copy) => copy.value)).toMatchObject([
+    { value: null, lowestListing: 13.2, currency: "USD" },
+    { value: 33, lowestListing: 34.1, currency: "USD" },
+  ]);
 });

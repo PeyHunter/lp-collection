@@ -11,6 +11,8 @@ type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
+/** Each Value takes two Discogs requests, about two seconds through the shared queue, so one batch answers in about ten. */
+const valueBatchSize = 5;
 
 function parseBarcode(typed: string | undefined) {
   const digits = (typed ?? "").replaceAll(/[\s-]/g, "");
@@ -43,6 +45,17 @@ function copyView(row: { copy: typeof copies.$inferSelect; release: typeof relea
 
 export type CopyView = ReturnType<typeof copyView>;
 
+/** The guide asks once more for Copies Discogs gave no Value, fetched before it was opened; anything else asks only for Copies with no Value. */
+function parseValuesRequest(body: unknown, now: Date): { retryEmptyBefore?: Date } {
+  const { retryEmpty, retryEmptyBefore } = (body ?? {}) as Record<string, unknown>;
+  if (typeof retryEmptyBefore === "string" && !Number.isNaN(Date.parse(retryEmptyBefore))) return { retryEmptyBefore: new Date(retryEmptyBefore) };
+  return retryEmpty === true ? { retryEmptyBefore: now } : {};
+}
+
+function needsValue(copy: CopyView, retryEmptyBefore: Date | undefined) {
+  return !copy.value || (retryEmptyBefore !== undefined && copy.value.value === null && new Date(copy.value.fetchedAt) < retryEmptyBefore);
+}
+
 function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, before: boolean) {
   return outcome === "valued" ? false : outcome === "seller-settings-missing" ? true : before;
 }
@@ -51,6 +64,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
   const { db } = database;
   const valuation = createValuation({ database, discogs, exchangeRates, now });
   const routes = new Hono<{ Variables: { member: Member } }>();
+  const valueBatches = new Map<string, Promise<{ sellerSettingsMissing: boolean; more: boolean }>>();
 
   routes.use("/api/collections/:collectionId/*", async (c, next) => {
     const user = await sessionUser(database, now, c);
@@ -95,7 +109,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     return true;
   }
 
-  async function collectionCopies(collectionId: string) {
+  async function collectionCopies({ collectionId, currency }: Member) {
     const [rows, values] = await Promise.all([
       db
         .select({ copy: copies, release: releases })
@@ -103,12 +117,12 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
         .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
         .where(eq(copies.collectionId, collectionId))
         .orderBy(desc(copies.createdAt), desc(copies.id)),
-      valuation.currentValues({ collectionId }),
+      valuation.currentValues({ collectionId }, currency),
     ]);
     return rows.map((row) => copyView(row, values.get(row.copy.id)));
   }
 
-  async function oneCopy(collectionId: string, copyId: string) {
+  async function oneCopy({ collectionId, currency }: Member, copyId: string) {
     if (!uuidPattern.test(copyId)) return undefined;
     const [row] = await db
       .select({ copy: copies, release: releases })
@@ -116,7 +130,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
       .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
       .where(and(eq(copies.id, copyId), eq(copies.collectionId, collectionId)));
     if (!row) return undefined;
-    return copyView(row, (await valuation.currentValues({ copyId })).get(copyId));
+    return copyView(row, (await valuation.currentValues({ copyId }, currency)).get(copyId));
   }
 
   routes.get("/api/collections/:collectionId/lookup", async (c) => {
@@ -131,8 +145,8 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
   });
 
   routes.get("/api/collections/:collectionId/copies", async (c) => {
-    const { collectionId, sellerSettingsMissing } = c.var.member;
-    return c.json({ copies: await collectionCopies(collectionId), sellerSettingsMissing });
+    const member = c.var.member;
+    return c.json({ copies: await collectionCopies(member), sellerSettingsMissing: member.sellerSettingsMissing });
   });
 
   routes.post("/api/collections/:collectionId/copies", async (c) => {
@@ -153,43 +167,55 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     const [copy] = await db.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, createdAt: now() }).returning();
     const outcome = await valuation.fetchValue(copy!, member);
     return c.json(
-      { copy: await oneCopy(member.collectionId, copy!.id), sellerSettingsMissing: sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing) },
+      { copy: await oneCopy(member, copy!.id), sellerSettingsMissing: sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing) },
       201,
     );
   });
 
   routes.get("/api/collections/:collectionId/copies/:copyId", async (c) => {
-    const { collectionId, sellerSettingsMissing } = c.var.member;
-    const copy = await oneCopy(collectionId, c.req.param("copyId"));
+    const member = c.var.member;
+    const copy = await oneCopy(member, c.req.param("copyId"));
     if (!copy) return c.json({ error: "No such Copy" }, 404);
-    return c.json({ copy, sellerSettingsMissing });
+    return c.json({ copy, sellerSettingsMissing: member.sellerSettingsMissing });
   });
 
   routes.patch("/api/collections/:collectionId/copies/:copyId", async (c) => {
     const member = c.var.member;
     const copyId = c.req.param("copyId");
-    const before = await oneCopy(member.collectionId, copyId);
+    const before = await oneCopy(member, copyId);
     if (!before) return c.json({ error: "No such Copy" }, 404);
     const changes = parseConditions(await c.req.json().catch(() => undefined));
     if (!changes) return c.json({ error: "Say the new Media condition or Sleeve condition on the Discogs scale." }, 400);
     const [copy] = await db.update(copies).set(changes).where(eq(copies.id, copyId)).returning();
     const outcome = copy!.mediaCondition !== before.mediaCondition || !before.value ? await valuation.fetchValue(copy!, member) : undefined;
     return c.json({
-      copy: await oneCopy(member.collectionId, copyId),
+      copy: await oneCopy(member, copyId),
       sellerSettingsMissing: sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing),
     });
   });
 
-  routes.post("/api/collections/:collectionId/values", async (c) => {
-    const member = c.var.member;
+  async function fetchMissingValues(member: Member, retryEmptyBefore: Date | undefined) {
+    const due = (await collectionCopies(member)).filter((copy) => needsValue(copy, retryEmptyBefore));
     let sellerSettingsMissing = member.sellerSettingsMissing;
-    for (const copy of await collectionCopies(member.collectionId)) {
-      if (copy.value) continue;
+    for (const copy of due.slice(0, valueBatchSize)) {
       const outcome = await valuation.fetchValue({ ...copy, discogsReleaseId: copy.release.discogsReleaseId }, member);
       sellerSettingsMissing = sellerSettingsMissingAfter(outcome, sellerSettingsMissing);
-      if (outcome !== "valued") break;
+      if (outcome !== "valued") return { sellerSettingsMissing, more: false };
     }
-    return c.json({ copies: await collectionCopies(member.collectionId), sellerSettingsMissing });
+    return { sellerSettingsMissing, more: due.length > valueBatchSize };
+  }
+
+  routes.post("/api/collections/:collectionId/values", async (c) => {
+    const member = c.var.member;
+    const { retryEmptyBefore } = parseValuesRequest(await c.req.json().catch(() => undefined), now());
+    const key = [member.userId, member.collectionId, member.currency, retryEmptyBefore?.toISOString()].join(" ");
+    let batch = valueBatches.get(key);
+    if (!batch) {
+      batch = fetchMissingValues(member, retryEmptyBefore).finally(() => valueBatches.delete(key));
+      valueBatches.set(key, batch);
+    }
+    const { sellerSettingsMissing, more } = await batch;
+    return c.json({ copies: await collectionCopies(member), sellerSettingsMissing, more, retryEmptyBefore: retryEmptyBefore?.toISOString() });
   });
 
   return routes;

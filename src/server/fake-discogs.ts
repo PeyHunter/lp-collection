@@ -18,6 +18,7 @@ export type FakeDiscogsScript = {
   unavailable?: boolean;
   loginStartFails?: boolean;
   finishLoginDelayMs?: number;
+  priceSuggestionsDelayMs?: number;
 };
 
 export type FakeDiscogsRequest = (
@@ -122,6 +123,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     sellerSettingsUrl: sellerSettingsPath,
     async priceSuggestions(discogsReleaseId, auth) {
       answer({ endpoint: "price-suggestions", discogsReleaseId, ...auth });
+      if (script.priceSuggestionsDelayMs) await new Promise((resolve) => setTimeout(resolve, script.priceSuggestionsDelayMs));
       if (sellerSettingsMissing(usernameOf(auth) ?? "")) {
         return priceSuggestionsFrom(Response.json({ message: "You must fill out your seller settings first." }, { status: 404 }));
       }
