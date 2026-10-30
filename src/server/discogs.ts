@@ -54,6 +54,12 @@ export type ReleaseCandidate = {
   coverImageUrl: string | null;
 };
 
+export type LookupQuery = { barcode: string } | { catalogNumber: string } | { artist: string; title: string };
+
+export type LookupResult = { candidates: ReleaseCandidate[]; total: number };
+
+export const lookupPageSize = 25;
+
 export type Release = {
   discogsReleaseId: number;
   artist: string;
@@ -92,7 +98,7 @@ export type DiscogsIdentity = {
 
 /** The only way the app talks to Discogs. Tests use a scripted fake. */
 export type DiscogsGateway = {
-  lookupByBarcode(barcode: string, auth: DiscogsAuth): Promise<ReleaseCandidate[]>;
+  lookup(query: LookupQuery, auth: DiscogsAuth): Promise<LookupResult>;
   release(discogsReleaseId: number, auth: DiscogsAuth): Promise<Release | undefined>;
   priceSuggestions(discogsReleaseId: number, auth: DiscogsAuth): Promise<PriceSuggestions>;
   /** The cheapest asking price right now in any condition, or null when nothing is for sale. */

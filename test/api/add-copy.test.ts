@@ -15,6 +15,7 @@ test("a barcode that matches one Release shows that Release with cover, artist, 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
     barcode: discovery,
+    total: 1,
     candidates: [
       {
         discogsReleaseId: 16893476,
@@ -26,6 +27,7 @@ test("a barcode that matches one Release shows that Release with cover, artist, 
         pressingYear: 2021,
         format: "Vinyl, 2×LP, Album, Reissue",
         coverImageUrl: "/fake-discogs/covers/16893476.svg",
+        copiesInCollection: 0,
       },
     ],
   });
@@ -65,7 +67,7 @@ test("a barcode Discogs doesn't know finds no Releases, and something that isn't
   const tenDigits = await owner.as("/lookup?barcode=8869798912");
 
   expect(unknown.status).toBe(200);
-  expect(await unknown.json()).toEqual({ barcode: "4006381333931", candidates: [] });
+  expect(await unknown.json()).toEqual({ barcode: "4006381333931", total: 0, candidates: [] });
   expect(notABarcode.status).toBe(400);
   expect(await notABarcode.json()).toEqual({ error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." });
   expect(tenDigits.status).toBe(400);

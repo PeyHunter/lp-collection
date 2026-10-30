@@ -84,8 +84,10 @@ async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
       response.statusCode = 429;
       return json({ message: "You are making requests too quickly." });
     }
-    if (path === "/database/search?barcode=886979891211&type=release&per_page=50") {
+    if (path === "/database/search?barcode=886979891211&type=release&per_page=25") {
       json(kindOfBlueSearch);
+    } else if (path === "/database/search?catno=CS+8163&format=Vinyl&type=release&per_page=25") {
+      json({ pagination: { page: 1, pages: 13, per_page: 25, items: 312 }, results: [kindOfBlueSearch.results[0]] });
     } else if (path === "/releases/2335811") {
       json(kindOfBlueRelease);
     } else if (path === "/masters/5460") {
@@ -212,8 +214,9 @@ function gateway(url: string, options: { requestGapMs?: number; backoffMs?: numb
 test("a barcode Lookup searches the Discogs database as the User and reads each candidate", async () => {
   const stub = await startDiscogsStub();
 
-  const candidates = await gateway(stub.url).lookupByBarcode("886979891211", auth);
+  const { candidates, total } = await gateway(stub.url).lookup({ barcode: "886979891211" }, auth);
 
+  expect(total).toBe(2);
   expect(candidates).toEqual([
     {
       discogsReleaseId: 2335811,
@@ -239,6 +242,29 @@ test("a barcode Lookup searches the Discogs database as the User and reads each 
     },
   ]);
   expect(oauthParams(stub.received[0]!.headers)).toMatchObject({ oauth_token: "user-token", oauth_signature: "consumer-secret&user-secret" });
+});
+
+test("a Catalog number Lookup searches vinyl Releases by catno and reports how many matched in all", async () => {
+  const stub = await startDiscogsStub();
+
+  const { candidates, total } = await gateway(stub.url).lookup({ catalogNumber: "CS 8163" }, auth);
+
+  expect(total).toBe(312);
+  expect(candidates).toMatchObject([{ discogsReleaseId: 2335811, catalogNumber: "CS 8163" }]);
+});
+
+test("an artist and title Lookup searches vinyl Releases by artist and release title, leaving out a blank one", async () => {
+  const stub = await startDiscogsStub();
+  const discogs = gateway(stub.url);
+
+  const found = await discogs.lookup({ artist: "Miles Davis", title: "Kind of Blue" }, auth);
+  await discogs.lookup({ artist: "", title: "Kind of Blue" }, auth);
+
+  expect(found).toEqual({ candidates: [], total: 0 });
+  expect(stub.received.map((request) => request.path)).toEqual([
+    "/database/search?artist=Miles+Davis&release_title=Kind+of+Blue&format=Vinyl&type=release&per_page=25",
+    "/database/search?release_title=Kind+of+Blue&format=Vinyl&type=release&per_page=25",
+  ]);
 });
 
 test("Release details take the Original year from the master release", async () => {
@@ -297,7 +323,7 @@ test("every request to Discogs waits its turn in one queue, whoever's token it c
 
   await Promise.all([
     discogs.release(2335811, auth),
-    discogs.lookupByBarcode("886979891211", { token: "other", secret: "s" }),
+    discogs.lookup({ barcode: "886979891211" }, { token: "other", secret: "s" }),
     discogs.startLogin("https://lp.example/api/login/callback"),
   ]);
 
@@ -312,8 +338,8 @@ test("a request that would wait longer than the cap fails at once instead of que
 
   const started = performance.now();
   const [first, second] = await Promise.allSettled([
-    discogs.lookupByBarcode("886979891211", auth),
-    discogs.lookupByBarcode("886979891211", auth),
+    discogs.lookup({ barcode: "886979891211" }, auth),
+    discogs.lookup({ barcode: "886979891211" }, auth),
   ]);
 
   expect(first.status).toBe("fulfilled");
@@ -325,7 +351,7 @@ test("a request that would wait longer than the cap fails at once instead of que
 test("after Discogs answers 429 Too Many Requests the gateway backs off and tries again", async () => {
   const stub = await startDiscogsStub({ tooManyRequestsFirst: 2 });
 
-  const candidates = await gateway(stub.url, { backoffMs: [10, 10, 10] }).lookupByBarcode("886979891211", auth);
+  const { candidates } = await gateway(stub.url, { backoffMs: [10, 10, 10] }).lookup({ barcode: "886979891211" }, auth);
 
   expect(candidates).toHaveLength(2);
   expect(stub.received).toHaveLength(3);
@@ -334,7 +360,7 @@ test("after Discogs answers 429 Too Many Requests the gateway backs off and trie
 test("the gateway gives up when Discogs keeps answering 429", async () => {
   const stub = await startDiscogsStub({ tooManyRequestsFirst: 10 });
 
-  await expect(gateway(stub.url, { backoffMs: [10] }).lookupByBarcode("886979891211", auth)).rejects.toThrow(/HTTP 429/);
+  await expect(gateway(stub.url, { backoffMs: [10] }).lookup({ barcode: "886979891211" }, auth)).rejects.toThrow(/HTTP 429/);
   expect(stub.received).toHaveLength(2);
 });
 
@@ -342,7 +368,7 @@ test("the gateway stops backing off once the next retry would pass the cap", asy
   const stub = await startDiscogsStub({ tooManyRequestsFirst: 10 });
 
   const started = performance.now();
-  await expect(gateway(stub.url, { backoffMs: [100, 5_000], maxWaitMs: 1_000 }).lookupByBarcode("886979891211", auth)).rejects.toThrow(/HTTP 429/);
+  await expect(gateway(stub.url, { backoffMs: [100, 5_000], maxWaitMs: 1_000 }).lookup({ barcode: "886979891211" }, auth)).rejects.toThrow(/HTTP 429/);
 
   expect(performance.now() - started).toBeLessThan(1_000);
   expect(stub.received).toHaveLength(2);
