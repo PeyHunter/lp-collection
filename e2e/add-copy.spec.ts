@@ -35,13 +35,13 @@ test("a User types a barcode, picks one of several pressings and finds the new C
   await european2010.getByRole("button", { name: "Add to Collection" }).click();
 
   await expect(page.getByRole("status")).toHaveText("Added Kind Of Blue to your Collection.");
-  const copy = page.getByRole("listitem").filter({ hasText: "1959 · Columbia · 88697 98912 1" });
+  const copy = page.getByRole("listitem").filter({ hasText: "1959 · pressed 2010 · Columbia · 88697 98912 1" });
   await expect(copy).toContainText("Miles Davis");
-  await expect(copy).toContainText("1959 · Columbia · 88697 98912 1");
+  await expect(copy).toContainText("1959 · pressed 2010 · Columbia · 88697 98912 1");
   await expect(copy).toContainText("Media VG+ · Sleeve VG+");
 
   await page.reload();
-  await expect(page.getByRole("listitem").filter({ hasText: "1959 · Columbia · 88697 98912 1" })).toContainText("Media VG+ · Sleeve VG+");
+  await expect(page.getByRole("listitem").filter({ hasText: "1959 · pressed 2010 · Columbia · 88697 98912 1" })).toContainText("Media VG+ · Sleeve VG+");
   await expect(page.getByRole("status")).toHaveCount(0);
 });
 

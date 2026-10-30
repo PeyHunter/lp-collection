@@ -92,8 +92,19 @@ export const releases = pgTable("releases", {
   pressingYear: integer("pressing_year"),
   originalYear: integer("original_year"),
   coverImageUrl: text("cover_image_url"),
+  /** Null for a Release cached before genres were kept; the next Value fetch fills them in. */
+  genres: text("genres").array(),
+  styles: text("styles").array(),
   fetchedAt: at("fetched_at").notNull(),
-});
+  /** What the Collection search matches: the lowercased fields, with the Catalog number also written without spaces or dashes. */
+  searchText: text("search_text").generatedAlwaysAs(
+    sql`release_search_text("artist", "title", "label", "catalog_number", "genres", "styles")`,
+  ),
+  /** The artist as a record shelf files it: lowercased, without a leading "The". */
+  artistSortKey: text("artist_sort_key")
+    .notNull()
+    .generatedAlwaysAs(sql`regexp_replace(lower("artist"), '^the\\s+', '')`),
+}, (table) => [index("releases_search_text_idx").using("gin", sql`${table.searchText} gin_trgm_ops`)]);
 
 const money = (name: string) => numeric(name, { precision: 12, scale: 2, mode: "number" });
 
@@ -135,7 +146,18 @@ export const valueSnapshots = pgTable(
     currency: currency("currency").notNull(),
     fetchedAt: at("fetched_at").notNull(),
   },
-  (table) => [index("value_snapshots_copy_fetched_idx").on(table.copyId, table.fetchedAt)],
+  (table) => [
+    // The latest snapshot per Copy, currency and Media condition is the first entry; Value and Lowest listing ride along so the list reads only the index.
+    index("value_snapshots_current_idx").on(
+      table.copyId,
+      table.currency,
+      table.mediaCondition,
+      table.fetchedAt.desc().nullsFirst(),
+      table.id.desc().nullsFirst(),
+      table.value,
+      table.lowestListing,
+    ),
+  ],
 );
 
 export const photos = pgTable(

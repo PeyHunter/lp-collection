@@ -36,4 +36,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Value](./value.md) covers the Value and Lowest listing on each row and on the Copy page, changing conditions, "No Value yet", the seller settings guide and the currency setting.
 - [Photos](./photos.md) covers taking or picking photos of a Copy, the Discogs cover when there are none, deleting a photo, deleting a Copy with its photos, and who can fetch them.
 - [Copy details](./copy-details.md) covers the note, Purchase price and purchase date on a Copy, its Gain next to the Value, clearing them, and deleting the Copy.
+- [Search, sort and filter](./search-sort.md) covers the search box, the sort chips and direction, Period and genre filters, the group headings, paging as the User scrolls, and Original and Pressing year on each row.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.

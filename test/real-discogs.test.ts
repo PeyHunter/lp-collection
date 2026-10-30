@@ -42,6 +42,8 @@ const kindOfBlueRelease = {
   country: "US",
   year: 2010,
   master_id: 5460,
+  genres: ["Jazz"],
+  styles: ["Modal", "Hard Bop"],
   images: [
     { type: "secondary", uri: "https://i.discogs.com/back.jpeg" },
     { type: "primary", uri: "https://i.discogs.com/front.jpeg" },
@@ -282,6 +284,8 @@ test("Release details take the Original year from the master release", async () 
     pressingYear: 2010,
     originalYear: 1959,
     coverImageUrl: "https://i.discogs.com/front.jpeg",
+    genres: ["Jazz"],
+    styles: ["Modal", "Hard Bop"],
   });
   expect(stub.received.map((request) => request.path)).toEqual(["/releases/2335811", "/masters/5460"]);
 });
@@ -298,6 +302,8 @@ test("a Release with no master release and no year has no Original year, and its
     pressingYear: null,
     originalYear: null,
     coverImageUrl: null,
+    genres: [],
+    styles: [],
   });
   expect(stub.received).toHaveLength(1);
 });

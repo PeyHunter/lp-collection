@@ -62,10 +62,9 @@ export function createValuation({ database, discogs, exchangeRates, now }: { dat
       }
     },
 
-    async currentValues(filter: { collectionId: string } | { copyId: string }, currency: Currency) {
-      const rows = await db
-        .selectDistinctOn([valueSnapshots.copyId], {
-          copyId: valueSnapshots.copyId,
+    async currentValue(copyId: string, currency: Currency): Promise<CopyValue | undefined> {
+      const [row] = await db
+        .select({
           mediaCondition: valueSnapshots.mediaCondition,
           value: valueSnapshots.value,
           lowestListing: valueSnapshots.lowestListing,
@@ -74,14 +73,10 @@ export function createValuation({ database, discogs, exchangeRates, now }: { dat
         })
         .from(valueSnapshots)
         .innerJoin(copies, and(eq(copies.id, valueSnapshots.copyId), eq(copies.mediaCondition, valueSnapshots.mediaCondition)))
-        .where(
-          and(
-            eq(valueSnapshots.currency, currency),
-            "collectionId" in filter ? eq(copies.collectionId, filter.collectionId) : eq(copies.id, filter.copyId),
-          ),
-        )
-        .orderBy(valueSnapshots.copyId, desc(valueSnapshots.fetchedAt), desc(valueSnapshots.id));
-      return new Map<string, CopyValue>(rows.map(({ copyId, fetchedAt, ...value }) => [copyId, { ...value, fetchedAt: fetchedAt.toISOString() }]));
+        .where(and(eq(valueSnapshots.currency, currency), eq(copies.id, copyId)))
+        .orderBy(desc(valueSnapshots.fetchedAt), desc(valueSnapshots.id))
+        .limit(1);
+      return row && { ...row, fetchedAt: row.fetchedAt.toISOString() };
     },
   };
 }

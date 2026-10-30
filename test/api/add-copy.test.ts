@@ -115,6 +115,8 @@ test("saving a picked Release creates a Copy with both conditions Very Good Plus
       pressingYear: 2010,
       originalYear: 1959,
       coverImageUrl: "/fake-discogs/covers/2474032.svg",
+      genres: ["Jazz"],
+      styles: ["Modal", "Hard Bop"],
     },
   });
   expect(await listCopies(owner)).toEqual([copy]);
