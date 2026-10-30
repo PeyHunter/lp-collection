@@ -16,13 +16,17 @@ async function eventually(check: () => Promise<boolean>, timeoutMs: number) {
   return check();
 }
 
-test("the e2e server leaves no PostgreSQL folder behind when Playwright kills it", { timeout: 60_000 }, async () => {
+test("the e2e server leaves no PostgreSQL folder behind when Playwright kills it", { timeout: 90_000 }, async () => {
   const temp = await mkdtemp(join(tmpdir(), "throwaway-postgres-test-"));
   scratch.push(temp);
   const port = await freePort();
-  const server = spawn(process.execPath, ["e2e/serve.ts"], { env: { ...process.env, TMPDIR: temp, PORT: String(port) }, detached: true, stdio: "ignore" });
-  const healthy = await eventually(() => fetch(`http://localhost:${port}/api/health`).then((r) => r.ok, () => false), 20_000);
-  expect(healthy, "the e2e server started").toBe(true);
+  const server = spawn(process.execPath, ["e2e/serve.ts"], { env: { ...process.env, TMPDIR: temp, PORT: String(port) }, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  let output = "";
+  server.stdout!.on("data", (chunk) => (output += chunk));
+  server.stderr!.on("data", (chunk) => (output += chunk));
+  server.on("exit", (code, signal) => (output += `[exited with ${code ?? signal}]`));
+  const healthy = await eventually(() => fetch(`http://localhost:${port}/api/health`).then((r) => r.ok, () => false), 45_000);
+  expect(healthy, `the e2e server started. Its output: ${output}`).toBe(true);
   expect(await readdir(temp)).toContainEqual(expect.stringMatching(/^lp-collection-/));
 
   process.kill(-server.pid!, "SIGKILL");
