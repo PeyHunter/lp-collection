@@ -517,12 +517,27 @@ main.content-grid { row-gap: var(--space-xl); align-content: start; padding-bloc
 .release dd { font-weight: 600; }
 .release dd.big { font-family: var(--display); font-size: var(--text-xl); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
 
-.value-figure { min-block-size: 2.75rem; display: flex; align-items: baseline; }
+.value-figure { min-block-size: 2.75rem; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2xs) var(--space-m); }
+.gain-figure { font-size: var(--text-sm); font-weight: 600; color: var(--ink-dim); }
+.gain-figure b { font-family: var(--display); font-size: var(--text-l); font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
+.gain-figure.up b { color: var(--gain); }
+.gain-figure.down b { color: var(--loss); }
 .amount { font-family: var(--display); font-size: var(--text-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
 .value-figure .no-value { font-size: var(--text-sm); }
 .lowest { font-size: var(--text-sm); color: var(--ink-dim); }
 .lowest b { font-weight: 600; color: var(--ink); }
-select.input:disabled { opacity: 0.6; }
+.input:disabled { opacity: 0.6; }
+.form { display: grid; gap: var(--space-s); }
+.form-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.field-row .input.currency { flex: none; inline-size: auto; }
+textarea.input {
+  field-sizing: content;
+  min-block-size: 3lh;
+  max-block-size: 12lh;
+  padding-block: var(--space-s);
+  line-height: 1.4;
+  resize: none;
+}
 .account .field { justify-self: stretch; }
 
 .photos { display: grid; gap: var(--space-m); grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr)); }

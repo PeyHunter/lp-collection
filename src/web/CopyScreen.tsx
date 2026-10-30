@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { CopyView } from "../server/collection.ts";
 import { conditions, sleeveConditions, type Condition, type SleeveCondition } from "../server/discogs.ts";
 import type { Me } from "./App.tsx";
+import { GainFigure, NoteSection, PurchaseLine, PurchaseSection, type DetailChanges } from "./CopyDetails.tsx";
 import { Cover } from "./Cover.tsx";
 import { Grade } from "./Grade.tsx";
 import { Header } from "./Header.tsx";
@@ -17,7 +18,7 @@ type ConditionChange = { mediaCondition: Condition } | { sleeveCondition: Sleeve
 
 type Saving = { kind: "idle" } | { kind: "saving" } | { kind: "failed" };
 
-/** One Copy. Each part of it is its own section, so later details (note, photos, purchase) add a section here. */
+/** One Copy. Each part of it is its own section; the Value comes right after the title so it shows without scrolling. */
 export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
   const [state, setState] = useState<CopyState>({ kind: "loading" });
   const [saving, setSaving] = useState<Saving>({ kind: "idle" });
@@ -50,6 +51,21 @@ export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
     setSaving({ kind: "idle" });
   }
 
+  async function saveDetails(changes: DetailChanges) {
+    const response = await fetch(copyUrl, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(changes),
+    }).catch(() => undefined);
+    if (!response?.ok) {
+      const body = (await response?.json().catch(() => undefined)) as { error?: string } | undefined;
+      return body?.error ?? "Check your connection and try again.";
+    }
+    const { copy } = (await response.json()) as Loaded;
+    setState((current) => (current.kind === "loaded" ? { ...current, copy } : current));
+    return undefined;
+  }
+
   const added = state.kind === "loaded" ? `Added ${new Date(state.copy.addedAt).toLocaleDateString("en-GB", { dateStyle: "medium" })}` : "Copy";
 
   return (
@@ -68,13 +84,16 @@ export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
         )}
         {state.kind === "loaded" && (
           <>
-            <ReleaseSection copy={state.copy} />
+            <TitleSection copy={state.copy} />
             {state.sellerSettingsMissing ? (
               <SellerSettingsGuide url={me.sellerSettingsUrl} collectionId={me.collection.id} onValued={() => setAttempt((count) => count + 1)} />
             ) : (
               <ValueSection copy={state.copy} updating={saving.kind === "saving"} />
             )}
+            <ReleaseSection copy={state.copy} />
             <ConditionSection copy={state.copy} saving={saving} onChange={(change) => changeCondition(state, change)} />
+            <PurchaseSection key={`purchase-${state.copy.id}`} copy={state.copy} userCurrency={me.currency} onSave={saveDetails} />
+            <NoteSection key={`note-${state.copy.id}`} copy={state.copy} onSave={saveDetails} />
             <PhotosSection copy={state.copy} copyUrl={copyUrl} onChanged={(copy) => setState({ ...state, copy })} />
             <DeleteCopySection copy={state.copy} copyUrl={copyUrl} />
           </>
@@ -84,14 +103,7 @@ export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
   );
 }
 
-function ReleaseSection({ copy: { release, pictureUrl } }: { copy: CopyView }) {
-  const facts = [
-    ["Original year", release.originalYear],
-    ["Pressing year", release.pressingYear],
-    ["Label", release.label],
-    ["Catalog number", release.catalogNumber],
-    ["Country", release.country],
-  ] as const;
+function TitleSection({ copy: { release, pictureUrl } }: { copy: CopyView }) {
   return (
     <section className="poster title-block" aria-labelledby="title-heading">
       <Cover url={pictureUrl} className="big-cover" />
@@ -100,6 +112,20 @@ function ReleaseSection({ copy: { release, pictureUrl } }: { copy: CopyView }) {
         {release.title}
       </h2>
       <p className="by">{release.artist}</p>
+    </section>
+  );
+}
+
+function ReleaseSection({ copy: { release } }: { copy: CopyView }) {
+  const facts = [
+    ["Original year", release.originalYear],
+    ["Pressing year", release.pressingYear],
+    ["Label", release.label],
+    ["Catalog number", release.catalogNumber],
+    ["Country", release.country],
+  ] as const;
+  return (
+    <section aria-label="Release">
       <dl className="release">
         {facts
           .filter(([, fact]) => fact !== null)
@@ -128,9 +154,12 @@ function ValueSection({ copy, updating }: { copy: CopyView; updating: boolean })
         {updating ? (
           <p className="loading">Fetching the Value from Discogs…</p>
         ) : value?.value != null ? (
-          <p>
-            <Amount amount={value.value} currency={value.currency} />
-          </p>
+          <>
+            <p>
+              <Amount amount={value.value} currency={value.currency} />
+            </p>
+            {copy.gain !== null && <GainFigure gain={copy.gain} currency={value.currency} />}
+          </>
         ) : (
           <p className="no-value">No Value yet</p>
         )}
@@ -143,6 +172,7 @@ function ValueSection({ copy, updating }: { copy: CopyView; updating: boolean })
       {!updating && value && value.value === null && (
         <p className="hint">Discogs has no suggested price for this Release in this condition yet.</p>
       )}
+      {!updating && <PurchaseLine copy={copy} />}
     </section>
   );
 }
