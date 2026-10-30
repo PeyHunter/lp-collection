@@ -176,6 +176,10 @@ A list row is the cover, then the title, artist, and meta line, then the Value. 
 
 The bottom bar is sticky at the bottom with a 2px `--ink` rule on top, `--sunk` at 92% behind it, and the bottom safe-area inset as padding. It holds Shelves, Scan, and Collection. Shelves sits in the first cell until a home screen takes it. Scan sits in the middle as a pill of `--accent-fill`, 3.5rem tall, with an uppercase Unbounded label. The current tab is `--ink`, and the other tabs are `--ink-dim`. On Lookup, Scan is the current page and gets a ring. At large text sizes Scan may move off center: a side cell never gets narrower than its label, and the Scan pill's side padding shrinks with the bar (`min(1.75rem, 7cqi)`), so all three labels fit at 150% text size.
 
+### Values switch
+
+The "Values" switch sits at the end of the header on the Collection and on a Copy. It is an uppercase `--text-xs` label and a pill track, 44px tall in all. On, the track fills with `--accent-fill` and the knob is `--on-accent`. Off, the track is `--sunk` with a `--line` border and an `--ink-dim` knob. Off hides every Value, Gain, Purchase price, Value sort, Value group heading, seller settings guide and currency picker, and leaves no gap where they were.
+
 ### Buttons
 
 | Kind | Look | Use |
