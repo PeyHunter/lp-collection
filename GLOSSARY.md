@@ -60,7 +60,7 @@ One shelving unit in a Collection, with one photo of its front and a grid of row
 _Avoid_: rack, unit (in the UI)
 
 **Section**:
-One square of a Shelf, labelled by row letter and column number from the top left ("C4"). A Copy lives in at most one Section.
+One square of a Shelf, labelled by column letter and row number, counted from the top left ("C4" is the third column from the left, fourth row from the top). A Copy lives in at most one Section.
 _Avoid_: cube, bin, slot
 
 **Not on a shelf**:

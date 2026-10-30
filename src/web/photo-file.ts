@@ -1,7 +1,7 @@
-const longEdge = 2048;
+const copyPhotoLongEdge = 2048;
 const quality = 0.85;
 
-export async function shrinkToJpegWithoutLocation(file: Blob): Promise<Blob> {
+export async function shrinkToJpegWithoutLocation(file: Blob, longEdge = copyPhotoLongEdge): Promise<Blob> {
   const decoded = await createImageBitmap(file, { imageOrientation: "from-image" });
   const scale = Math.min(1, longEdge / Math.max(decoded.width, decoded.height));
   const canvas = document.createElement("canvas");

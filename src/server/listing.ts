@@ -150,6 +150,7 @@ type ListedRow = {
   purchase_price: string | null;
   purchase_currency: Currency | null;
   purchase_date: string | null;
+  section_id: string | null;
   created_at: string;
   discogs_release_id: number;
   artist: string;
@@ -194,6 +195,7 @@ function listedCopy(row: ListedRow): ListedCopy {
       purchasePrice: row.purchase_price === null ? null : Number(row.purchase_price),
       purchaseCurrency: row.purchase_currency,
       purchaseDate: row.purchase_date,
+      sectionId: row.section_id,
       createdAt: new Date(row.created_at),
     },
     release: {
@@ -291,7 +293,7 @@ export function createListing({ db }: Database) {
         order by ${order}
         limit ${query.limit + 1}
       )
-      select c.id, c.collection_id, c.media_condition, c.sleeve_condition, c.note, c.purchase_price, c.purchase_currency, c.purchase_date::text as purchase_date, c.created_at,
+      select c.id, c.collection_id, c.media_condition, c.sleeve_condition, c.note, c.purchase_price, c.purchase_currency, c.purchase_date::text as purchase_date, c.section_id, c.created_at,
         r.discogs_release_id, r.artist, r.title, r.label, r.catalog_number, r.country, r.pressing_year, r.original_year,
         r.cover_image_url, r.genres, r.styles, r.fetched_at as release_fetched_at,
         v.media_condition as value_media_condition, v.value, v.lowest_listing, v.currency as value_currency, v.fetched_at as value_fetched_at,
