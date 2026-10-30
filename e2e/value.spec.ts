@@ -16,7 +16,6 @@ test.beforeAll(async ({ browser, baseURL }) => {
   owner = context.request;
 });
 
-/** Each test logs in as a new invited User, so it starts with an empty Collection however often it runs on one server. */
 async function logInAsNewUser(page: Page, name: string) {
   const invite = await owner.post("/api/invites");
   expect(invite.ok()).toBe(true);

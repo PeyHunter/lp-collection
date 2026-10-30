@@ -26,7 +26,6 @@ export function RowValue({ value, sellerSettingsMissing, fetching }: { value: Co
 
 export type ValuesAnswer = { copies: CopyView[]; sellerSettingsMissing: boolean; more: boolean; retryEmptyBefore?: string };
 
-/** Asks for missing Values a batch at a time until none are left, Discogs stops answering, or the caller aborts. Undefined when a request failed. */
 export async function fetchValues(
   collectionId: string,
   { retryEmpty = false, signal, onBatch }: { retryEmpty?: boolean; signal?: AbortSignal; onBatch?: (answer: ValuesAnswer) => void } = {},

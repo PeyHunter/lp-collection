@@ -11,7 +11,6 @@ type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
-/** Each Value takes two Discogs requests, about two seconds through the shared queue, so one batch answers in about ten. */
 const valueBatchSize = 5;
 
 function parseBarcode(typed: string | undefined) {
@@ -45,7 +44,6 @@ function copyView(row: { copy: typeof copies.$inferSelect; release: typeof relea
 
 export type CopyView = ReturnType<typeof copyView>;
 
-/** The guide asks once more for Copies Discogs gave no Value, fetched before it was opened; anything else asks only for Copies with no Value. */
 function parseValuesRequest(body: unknown, now: Date): { retryEmptyBefore?: Date } {
   const { retryEmpty, retryEmptyBefore } = (body ?? {}) as Record<string, unknown>;
   if (typeof retryEmptyBefore === "string" && !Number.isNaN(Date.parse(retryEmptyBefore))) return { retryEmptyBefore: new Date(retryEmptyBefore) };

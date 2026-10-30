@@ -4,7 +4,7 @@ import { discogsCurrencies, type Condition, type Currency, type DiscogsAuth, typ
 import type { ExchangeRates } from "./exchange-rates.ts";
 import { copies, users, valueSnapshots } from "./schema.ts";
 
-/** The latest Value fetched for a Copy's current Media condition, when it is in the User's currency. A null `value` means Discogs had no suggestion. */
+/** The latest Value fetched for a Copy's current Media condition. A null `value` means Discogs had no suggestion. */
 export type CopyValue = {
   mediaCondition: Condition;
   value: number | null;

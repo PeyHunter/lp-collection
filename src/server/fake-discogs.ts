@@ -13,7 +13,6 @@ export type FakeDiscogsScript = {
   releases?: FakeRelease[];
   prices?: Record<number, FakePrices>;
   lowestListings?: Record<number, Money>;
-  /** Whether a Discogs account starts without seller settings, so Discogs refuses to suggest prices until they are saved. */
   sellerSettingsMissingFor?: (discogsUsername: string) => boolean;
   unavailable?: boolean;
   loginStartFails?: boolean;
