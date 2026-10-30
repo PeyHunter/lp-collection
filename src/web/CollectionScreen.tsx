@@ -74,7 +74,7 @@ export function CollectionScreen({
 
         {handoff && (
           <p className="notice done" role="status">
-            Added {handoff.title} to your Collection.
+            {handoff.kind === "saved" ? `Added ${handoff.title} to your Collection.` : `Deleted ${handoff.title} from your Collection.`}
           </p>
         )}
 
@@ -102,7 +102,7 @@ export function CollectionScreen({
                 <CopyRow
                   key={copy.id}
                   copy={copy}
-                  fresh={copy.id === handoff?.savedCopyId}
+                  fresh={handoff?.kind === "saved" && copy.id === handoff.copyId}
                   sellerSettingsMissing={state.sellerSettingsMissing}
                   fetching={state.fetchingValues}
                 />
@@ -130,7 +130,7 @@ function CopyRow({ copy, fresh, sellerSettingsMissing, fetching }: { copy: CopyV
   const facts = [release.originalYear, release.label, release.catalogNumber].filter((fact) => fact !== null);
   return (
     <li className={fresh ? "row fresh" : "row"}>
-      <Cover url={release.coverImageUrl} />
+      <Cover url={copy.pictureUrl} />
       <span className="row-text">
         <a className="row-title row-link" href={`/copies/${copy.id}`} onClick={followLink}>
           {release.title}
