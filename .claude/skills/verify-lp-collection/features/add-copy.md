@@ -40,3 +40,4 @@ Preconditions:
 - The fake covers are SVGs served by the fake at `/fake-discogs/covers/<id>.svg`. One sample Release has no cover and shows the drawn record.
 - A full-page screenshot draws the sticky bottom bar in the middle of the page. Take viewport screenshots, scrolled to what you show.
 - The real Discogs search needs a logged-in User's token, so the real Lookup is not drivable here. `test/real-discogs.test.ts` covers the gateway against a local stub.
+- `/lookup` also starts the camera. Without a fake camera the screen shows "The camera didn't start." above the typed field, which does not affect typing. [scan.md](./scan.md) covers the camera.
