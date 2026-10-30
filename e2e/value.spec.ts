@@ -82,7 +82,11 @@ test("a User without Discogs seller settings is guided once to fill them in, the
   await expect(friend.getByText("No Value yet")).toHaveCount(0);
   await expect(friend.getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Waits for seller settings");
 
-  const [settings] = await Promise.all([friend.waitForEvent("popup"), guide.getByRole("link", { name: "Open seller settings on Discogs" }).click()]);
+  const link = guide.getByRole("link", { name: "Open seller settings on Discogs" });
+  await expect(link).toHaveAttribute("href", "/fake-discogs/settings/seller");
+  await expect(link).toHaveAttribute("target", "_blank");
+  const settings = await context.newPage();
+  await settings.goto("/fake-discogs/settings/seller");
   await settings.getByLabel("Discogs username").fill("no-seller-settings");
   await settings.getByRole("button", { name: "Save seller settings" }).click();
   await settings.close();
