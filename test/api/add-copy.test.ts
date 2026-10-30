@@ -98,7 +98,11 @@ test("saving a picked Release creates a Copy with both conditions Very Good Plus
     mediaCondition: "Very Good Plus (VG+)",
     sleeveCondition: "Very Good Plus (VG+)",
     addedAt: "2026-03-01T12:00:00.000Z",
+    note: null,
+    purchasePrice: null,
+    purchaseDate: null,
     value: { mediaCondition: "Very Good Plus (VG+)", value: null, lowestListing: null, currency: "DKK", fetchedAt: "2026-03-01T12:00:00.000Z" },
+    gain: null,
     photos: [],
     pictureUrl: "/fake-discogs/covers/2474032.svg",
     release: {

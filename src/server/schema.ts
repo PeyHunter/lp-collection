@@ -1,4 +1,5 @@
-import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, check, date, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { conditions, currencies, defaultCondition, defaultCurrency, sleeveConditions, type ReleaseCandidate } from "./discogs.ts";
 
 const at = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
@@ -94,6 +95,8 @@ export const releases = pgTable("releases", {
   fetchedAt: at("fetched_at").notNull(),
 });
 
+const money = (name: string) => numeric(name, { precision: 12, scale: 2, mode: "number" });
+
 export const copies = pgTable(
   "copies",
   {
@@ -106,12 +109,17 @@ export const copies = pgTable(
       .references(() => releases.discogsReleaseId),
     mediaCondition: condition("media_condition").notNull().default(defaultCondition),
     sleeveCondition: sleeveCondition("sleeve_condition").notNull().default(defaultCondition),
+    note: text("note"),
+    purchasePrice: money("purchase_price"),
+    purchaseCurrency: currency("purchase_currency"),
+    purchaseDate: date("purchase_date", { mode: "string" }),
     createdAt: at("created_at").notNull(),
   },
-  (table) => [index("copies_collection_created_idx").on(table.collectionId, table.createdAt)],
+  (table) => [
+    index("copies_collection_created_idx").on(table.collectionId, table.createdAt),
+    check("copies_purchase_price_has_currency", sql`(${table.purchasePrice} is null) = (${table.purchaseCurrency} is null)`),
+  ],
 );
-
-const money = (name: string) => numeric(name, { precision: 12, scale: 2, mode: "number" });
 
 /** One Value fetch for a Copy, kept so the Value history can be drawn. A null Value means Discogs had no suggestion. */
 export const valueSnapshots = pgTable(
