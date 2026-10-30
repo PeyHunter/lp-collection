@@ -1,10 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, isNull, lt, TransactionRollbackError } from "drizzle-orm";
+import { isIPv6 } from "node:net";
+import { and, eq, gt, isNull, like, lt, lte, notLike, or, sql, TransactionRollbackError } from "drizzle-orm";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppDependencies } from "./app.ts";
-import type { DiscogsGateway, DiscogsIdentity } from "./discogs.ts";
-import { collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
+import type { Database } from "./db.ts";
+import { sealedPrefix, type SecretBox } from "./secret-box.ts";
+import type { DiscogsIdentity, LoginStart } from "./discogs.ts";
+import { appOwner, collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
 
 const minute = 60 * 1000;
 const day = 24 * 60 * minute;
@@ -14,6 +18,17 @@ const loginAttemptLifetime = 15 * minute;
 const sessionLifetime = 400 * day;
 const sessionCookie = "lp_session";
 const loginCookie = "lp_login";
+const maxPendingLogins = 5;
+const maxVerifierChecksWithoutCookie = 3;
+const loginLimits = {
+  perUser: { count: 30, windowMs: 15 * minute },
+  perInvite: { count: 5, windowMs: 15 * minute },
+  loggedOutPerDevice: { count: 10, windowMs: 15 * minute },
+  // Discogs allows the home IP about 25 unauthenticated requests a minute; this leaves room for everyone else's calls.
+  loggedOutTotal: { count: 10, windowMs: minute },
+};
+
+type LoginSpender = { kind: "user"; userId: string } | { kind: "invite"; inviteId: string } | { kind: "logged-out"; device: string };
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -48,11 +63,25 @@ function decideLogin(facts: {
   return { kind: "refused" };
 }
 
-export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUsername, publicUrl }: AppDependencies) {
+export function createAccessRoutes({ database, discogs, secretBox, now, appOwnerDiscogsUsername, publicUrl }: AppDependencies) {
   const { db } = database;
   const routes = new Hono();
   const secure = publicUrl.protocol === "https:";
-  const isAppOwner = (discogsUsername: string) => discogsUsername.toLowerCase() === appOwnerDiscogsUsername.toLowerCase();
+  const configuredOwner = appOwnerDiscogsUsername.toLowerCase();
+
+  async function pinnedAppOwner() {
+    const [pinned] = await db.select().from(appOwner).where(eq(appOwner.configuredDiscogsUsername, configuredOwner));
+    return pinned?.discogsUserId;
+  }
+
+  async function pinAppOwnerAtFirstLogin(identity: DiscogsIdentity) {
+    if (identity.discogsUsername.toLowerCase() !== configuredOwner) return;
+    await db.insert(appOwner).values({ configuredDiscogsUsername: configuredOwner, discogsUserId: identity.discogsUserId }).onConflictDoNothing();
+  }
+
+  async function isAppOwner(user: { discogsUserId: number }) {
+    return (await pinnedAppOwner()) === user.discogsUserId;
+  }
 
   async function findInvite(code: string) {
     const [invite] = await db.select().from(invites).where(eq(invites.codeHash, sha256(code)));
@@ -75,41 +104,56 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     return db.transaction(async (tx) => {
       const [user] = await tx
         .insert(users)
-        .values({ ...discogsFields(identity), discogsUserId: identity.discogsUserId, createdAt: at })
+        .values({ ...discogsFields(identity, secretBox), discogsUserId: identity.discogsUserId, createdAt: at })
+        .onConflictDoNothing({ target: users.discogsUserId })
         .returning({ id: users.id });
+      if (!user) return { kind: "already-a-user" } as const;
       if (via.kind === "invite") {
         const [claimedWhileStillValid] = await tx
           .update(invites)
-          .set({ usedAt: at, usedBy: user!.id })
+          .set({ usedAt: at, usedBy: user.id })
           .where(and(eq(invites.id, via.inviteId), isNull(invites.usedAt), gt(invites.expiresAt, at)))
           .returning({ id: invites.id });
         if (!claimedWhileStillValid) tx.rollback();
       }
-      const [collection] = await tx.insert(collections).values({ ownerId: user!.id, createdAt: at }).returning({ id: collections.id });
-      await tx.insert(memberships).values({ collectionId: collection!.id, userId: user!.id });
-      return user!.id;
+      const [collection] = await tx.insert(collections).values({ ownerId: user.id, createdAt: at }).returning({ id: collections.id });
+      await tx.insert(memberships).values({ collectionId: collection!.id, userId: user.id });
+      return { kind: "signed-up", userId: user.id } as const;
     });
   }
 
-  async function logIn(identity: DiscogsIdentity, inviteId: string | null): Promise<string | undefined> {
+  async function existingUserId(identity: DiscogsIdentity) {
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.discogsUserId, identity.discogsUserId));
+    return existing?.id;
+  }
+
+  async function logInReturningUser(identity: DiscogsIdentity, userId: string) {
+    await db.update(users).set(discogsFields(identity, secretBox)).where(eq(users.id, userId));
+    return userId;
+  }
+
+  async function logIn(identity: DiscogsIdentity, inviteId: string | null): Promise<string | undefined> {
     const [invite] = inviteId ? await db.select().from(invites).where(eq(invites.id, inviteId)) : [];
+    await pinAppOwnerAtFirstLogin(identity);
     const decision = decideLogin({
-      existingUserId: existing?.id,
-      isAppOwner: isAppOwner(identity.discogsUsername),
+      existingUserId: await existingUserId(identity),
+      isAppOwner: await isAppOwner(identity),
       invite: invite && { id: invite.id, status: inviteStatus(invite, now()).status },
     });
     switch (decision.kind) {
       case "returning-user":
-        await db.update(users).set(discogsFields(identity)).where(eq(users.id, decision.userId));
-        return decision.userId;
-      case "new-user":
+        return logInReturningUser(identity, decision.userId);
+      case "new-user": {
+        let signUpResult: Awaited<ReturnType<typeof signUp>>;
         try {
-          return await signUp(identity, decision.via);
+          signUpResult = await signUp(identity, decision.via);
         } catch (error) {
           if (error instanceof TransactionRollbackError) return undefined;
           throw error;
         }
+        if (signUpResult.kind === "signed-up") return signUpResult.userId;
+        return logInReturningUser(identity, (await existingUserId(identity))!);
+      }
       case "refused":
         return undefined;
     }
@@ -118,6 +162,9 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
   async function startSession(c: Context, userId: string) {
     const token = randomBytes(32).toString("base64url");
     const createdAt = now();
+    const replaced = getCookie(c, sessionCookie);
+    const expired = lte(sessions.expiresAt, createdAt);
+    await db.delete(sessions).where(replaced ? or(expired, eq(sessions.tokenHash, sha256(replaced))) : expired);
     await db.insert(sessions).values({
       tokenHash: sha256(token),
       userId,
@@ -139,7 +186,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     const [collection] = await db.select({ id: collections.id }).from(collections).where(eq(collections.ownerId, user.id));
     return c.json({
       discogsUsername: user.discogsUsername,
-      canCreateInvites: isAppOwner(user.discogsUsername),
+      canCreateInvites: await isAppOwner(user),
       collection: { id: collection!.id },
     });
   });
@@ -147,7 +194,7 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
   routes.post("/api/invites", async (c) => {
     const user = await currentUser(c);
     if (!user) return c.json({ error: "Not logged in" }, 401);
-    if (!isAppOwner(user.discogsUsername)) return c.json({ error: "Only the app's Owner can create Invites" }, 403);
+    if (!(await isAppOwner(user))) return c.json({ error: "Only the app's Owner can create Invites" }, 403);
     const code = randomBytes(32).toString("base64url");
     const createdAt = now();
     const expiresAt = new Date(createdAt.getTime() + inviteLifetime);
@@ -160,50 +207,130 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
     return c.json(status, inviteHttpStatus[status.status]);
   });
 
-  routes.get("/api/login", async (c) => {
-    const code = c.req.query("invite");
-    let inviteId: string | null = null;
-    if (code !== undefined) {
-      const invite = await findInvite(code);
-      if (inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
-      inviteId = invite!.id;
-    }
-    const login = await discogs.startLogin(loginCallbackUrl(publicUrl, code));
-    const createdAt = now();
-    await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(createdAt.getTime() - loginAttemptLifetime)));
-    await db.insert(loginAttempts).values({ requestToken: login.requestToken, requestSecret: login.requestSecret, inviteId, createdAt });
-    setCookie(c, loginCookie, login.requestToken, {
+  function pendingLogins(c: Context) {
+    return (getCookie(c, loginCookie) ?? "").split(" ").filter(Boolean);
+  }
+
+  function setPendingLogins(c: Context, requestTokens: string[]) {
+    if (requestTokens.length === 0) return deleteCookie(c, loginCookie, { path: "/api/login", secure });
+    setCookie(c, loginCookie, requestTokens.slice(-maxPendingLogins).join(" "), {
       httpOnly: true,
       sameSite: "Lax",
       path: "/api/login",
       maxAge: loginAttemptLifetime / 1000,
       secure,
     });
+  }
+
+  const perUser = fixedWindowLimit(loginLimits.perUser, now);
+  const perInvite = fixedWindowLimit(loginLimits.perInvite, now);
+  const loggedOutPerDevice = fixedWindowLimit(loginLimits.loggedOutPerDevice, now);
+  const loggedOutTotal = fixedWindowLimit(loginLimits.loggedOutTotal, now);
+
+  function spendLoginBudget(spender: LoginSpender): Extract<LoginProblem, "too-many" | "busy"> | undefined {
+    switch (spender.kind) {
+      case "user":
+        return perUser(spender.userId) ? undefined : "too-many";
+      case "invite":
+        return perInvite(spender.inviteId) ? undefined : "too-many";
+      case "logged-out":
+        if (!loggedOutPerDevice(spender.device)) return "too-many";
+        return loggedOutTotal("all") ? undefined : "busy";
+    }
+  }
+
+  function loggedOut(c: Context): LoginSpender {
+    return { kind: "logged-out", device: deviceKey(clientAddress(c)) };
+  }
+
+  routes.get("/api/login", async (c) => {
+    const code = c.req.query("invite");
+    const invite = code === undefined ? undefined : await findInvite(code);
+    if (code !== undefined && inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
+    const user = await currentUser(c);
+    const problem = spendLoginBudget(user ? { kind: "user", userId: user.id } : invite ? { kind: "invite", inviteId: invite.id } : loggedOut(c));
+    if (problem) return c.redirect(loginProblemPath(code, problem), 302);
+    const inviteId = invite?.id ?? null;
+    let login: LoginStart;
+    try {
+      login = await discogs.startLogin(new URL("/api/login/callback", publicUrl).href);
+    } catch (error) {
+      console.error(`Discogs could not start a login: ${error instanceof Error ? error.message : String(error)}`);
+      return c.redirect(loginProblemPath(code, "discogs-unavailable"), 302);
+    }
+    const createdAt = now();
+    await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(createdAt.getTime() - loginAttemptLifetime)));
+    await db.insert(loginAttempts).values({
+      requestToken: login.requestToken,
+      requestSecret: secretBox.seal(login.requestSecret),
+      inviteId,
+      inviteCode: code === undefined ? null : secretBox.seal(code),
+      createdAt,
+    });
+    setPendingLogins(c, [...pendingLogins(c), login.requestToken]);
     return c.redirect(login.authorizeUrl, 302);
   });
 
   routes.get("/api/login/callback", async (c) => {
     const requestToken = c.req.query("oauth_token");
     const verifier = c.req.query("oauth_verifier");
-    const code = c.req.query("invite");
-    if (!requestToken || !verifier || getCookie(c, loginCookie) !== requestToken) return c.redirect("/", 302);
-    deleteCookie(c, loginCookie, { path: "/api/login", secure });
-    const [attempt] = await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning();
-    if (!attempt || now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect("/", 302);
+    if (!requestToken || !verifier) return c.redirect(loginProblemPath(undefined, "failed"), 302);
+    const [attempt] = await db.select().from(loginAttempts).where(eq(loginAttempts.requestToken, requestToken));
+    if (!attempt) return c.redirect(loginProblemPath(undefined, "expired"), 302);
+    const opened = openAttempt(attempt);
+    if (!opened) {
+      await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken));
+      return c.redirect(loginProblemPath(undefined, "expired"), 302);
+    }
+    const { code, requestSecret } = opened;
+    const pending = pendingLogins(c);
+    const startedInThisBrowser = pending.includes(requestToken);
+    if (startedInThisBrowser) setPendingLogins(c, pending.filter((token) => token !== requestToken));
+    const codeForThisBrowser = startedInThisBrowser ? code : undefined;
+    if (now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect(loginProblemPath(codeForThisBrowser, "expired"), 302);
+    const claim = async () => (await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning()).length > 0;
+    if (startedInThisBrowser && !(await claim())) return c.redirect(loginProblemPath(code, "expired"), 302);
+    if (!startedInThisBrowser) {
+      if (!(await reserveVerifierCheck(requestToken))) return c.redirect(loginProblemPath(undefined, "expired"), 302);
+      const problem = spendLoginBudget(attempt.inviteId ? { kind: "invite", inviteId: attempt.inviteId } : loggedOut(c));
+      if (problem) return c.redirect(loginProblemPath(undefined, problem), 302);
+    }
 
     let identity: DiscogsIdentity;
     try {
-      identity = await discogs.finishLogin({ requestToken, requestSecret: attempt.requestSecret, verifier });
+      identity = await discogs.finishLogin({ requestToken, requestSecret, verifier });
     } catch (error) {
       console.error(`Discogs login failed: ${error instanceof Error ? error.message : String(error)}`);
-      return c.redirect("/", 302);
+      return c.redirect(loginProblemPath(codeForThisBrowser, "failed"), 302);
+    }
+    // Discogs accepted the verifier, so this is the person who authorized; only their browser's cookie is missing.
+    if (!startedInThisBrowser) {
+      await claim();
+      return c.redirect(loginProblemPath(code, "cookie-missing"), 302);
     }
 
     const userId = await logIn(identity, attempt.inviteId);
-    if (!userId) return c.redirect(attempt.inviteId && code !== undefined ? invitePath(code) : "/", 302);
+    if (!userId) return c.redirect(code === undefined ? "/" : invitePath(code), 302);
     await startSession(c, userId);
     return c.redirect("/", 302);
   });
+
+  function openAttempt(attempt: typeof loginAttempts.$inferSelect) {
+    try {
+      return { requestSecret: secretBox.open(attempt.requestSecret), code: attempt.inviteCode === null ? undefined : secretBox.open(attempt.inviteCode) };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function reserveVerifierCheck(requestToken: string) {
+    const reserved = await db
+      .update(loginAttempts)
+      .set({ verifierChecks: sql`${loginAttempts.verifierChecks} + 1` })
+      .where(and(eq(loginAttempts.requestToken, requestToken), lt(loginAttempts.verifierChecks, maxVerifierChecksWithoutCookie)))
+      .returning({ requestToken: loginAttempts.requestToken });
+    return reserved.length > 0;
+  }
 
   routes.post("/api/logout", async (c) => {
     const token = getCookie(c, sessionCookie);
@@ -215,18 +342,57 @@ export function createAccessRoutes({ database, discogs, now, appOwnerDiscogsUser
   return routes;
 }
 
-function discogsFields(identity: DiscogsIdentity) {
+function discogsFields(identity: DiscogsIdentity, box: SecretBox) {
   return {
     discogsUsername: identity.discogsUsername,
-    discogsAccessToken: identity.accessToken,
-    discogsAccessSecret: identity.accessSecret,
+    discogsAccessToken: box.seal(identity.accessToken),
+    discogsAccessSecret: box.seal(identity.accessSecret),
   };
 }
 
-function loginCallbackUrl(publicUrl: URL, inviteToShowOnRefusal: string | undefined) {
-  const url = new URL("/api/login/callback", publicUrl);
-  if (inviteToShowOnRefusal !== undefined) url.searchParams.set("invite", inviteToShowOnRefusal);
-  return url.href;
+type LoginProblem = "cookie-missing" | "expired" | "failed" | "too-many" | "busy" | "discogs-unavailable";
+
+function loginProblemPath(inviteCode: string | undefined, problem: LoginProblem) {
+  return `${inviteCode === undefined ? "/" : invitePath(inviteCode)}?login=${problem}`;
+}
+
+/** Behind the Cloudflare Tunnel (ADR-0003) every request comes from cloudflared, and Cloudflare names the phone in CF-Connecting-IP. */
+function clientAddress(c: Context) {
+  const viaCloudflare = c.req.header("cf-connecting-ip");
+  if (viaCloudflare) return viaCloudflare;
+  try {
+    return getConnInfo(c).remote.address ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** One home or phone network gets a whole IPv6 /64, so its addresses count as one device. */
+function deviceKey(address: string) {
+  if (!isIPv6(address)) return address;
+  const mappedIPv4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+  if (mappedIPv4) return mappedIPv4[1]!;
+  const [head, tail] = address.split("::");
+  const groups = (part: string | undefined) => (part ? part.split(":").flatMap((group) => (group.includes(".") ? ["0", "0"] : [group])) : []);
+  const headGroups = groups(head);
+  const tailGroups = groups(tail);
+  const zeros = tail === undefined ? [] : Array<string>(8 - headGroups.length - tailGroups.length).fill("0");
+  const network = [...headGroups, ...zeros, ...tailGroups].slice(0, 4).map((group) => parseInt(group, 16).toString(16));
+  return `${network.join(":")}::/64`;
+}
+
+function fixedWindowLimit({ count: limit, windowMs }: { count: number; windowMs: number }, now: () => Date) {
+  const windows = new Map<string, { windowStart: number; count: number }>();
+  return function allow(key: string) {
+    const at = now().getTime();
+    for (const [stale, window] of windows) {
+      if (at - window.windowStart >= windowMs) windows.delete(stale);
+    }
+    const window = windows.get(key) ?? { windowStart: at, count: 0 };
+    window.count += 1;
+    windows.set(key, window);
+    return window.count <= limit;
+  };
 }
 
 function invitePath(code: string) {
@@ -235,4 +401,34 @@ function invitePath(code: string) {
 
 function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
+}
+
+export async function storedTokensOpenWith({ db }: Database, box: SecretBox) {
+  const [stored] = await db
+    .select({ token: users.discogsAccessToken })
+    .from(users)
+    .where(like(users.discogsAccessToken, `${sealedPrefix}%`))
+    .limit(1);
+  if (!stored) return true;
+  try {
+    box.open(stored.token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function sealStoredDiscogsTokens({ db }: Database, box: SecretBox) {
+  const stored = await db.select({ id: users.id, token: users.discogsAccessToken, secret: users.discogsAccessSecret }).from(users);
+  for (const user of stored) {
+    if (box.isSealed(user.token) && box.isSealed(user.secret)) continue;
+    await db
+      .update(users)
+      .set({
+        discogsAccessToken: box.isSealed(user.token) ? user.token : box.seal(user.token),
+        discogsAccessSecret: box.isSealed(user.secret) ? user.secret : box.seal(user.secret),
+      })
+      .where(eq(users.id, user.id));
+  }
+  await db.delete(loginAttempts).where(notLike(loginAttempts.requestSecret, `${sealedPrefix}%`));
 }

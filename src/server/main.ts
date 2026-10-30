@@ -1,9 +1,12 @@
+import { randomBytes } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { sealStoredDiscogsTokens, storedTokensOpenWith } from "./access.ts";
 import { createApp } from "./app.ts";
 import { connectDatabase, migrate } from "./db.ts";
 import { createFakeDiscogs, type FakeDiscogs } from "./fake-discogs.ts";
 import { createRealDiscogs } from "./real-discogs.ts";
+import { createSecretBox } from "./secret-box.ts";
 import type { DiscogsGateway } from "./discogs.ts";
 
 type Config = {
@@ -12,6 +15,7 @@ type Config = {
   appOwnerDiscogsUsername: string;
   publicUrl: URL;
   discogs: { kind: "real"; consumerKey: string; consumerSecret: string } | { kind: "fake" };
+  tokenEncryptionKey: Buffer;
 };
 
 function readConfig(env: NodeJS.ProcessEnv): Config | { error: string } {
@@ -25,7 +29,23 @@ function readConfig(env: NodeJS.ProcessEnv): Config | { error: string } {
   const port = Number(env.PORT ?? 3000);
   const publicUrl = readPublicUrl(env, port);
   if ("error" in publicUrl) return publicUrl;
-  return { databaseUrl: DATABASE_URL, port, appOwnerDiscogsUsername: APP_OWNER_DISCOGS_USERNAME, publicUrl, discogs };
+  const tokenEncryptionKey = readTokenEncryptionKey(env, discogs);
+  if ("error" in tokenEncryptionKey) return tokenEncryptionKey;
+  return { databaseUrl: DATABASE_URL, port, appOwnerDiscogsUsername: APP_OWNER_DISCOGS_USERNAME, publicUrl, discogs, tokenEncryptionKey };
+}
+
+function readTokenEncryptionKey(env: NodeJS.ProcessEnv, discogs: Config["discogs"]): Buffer | { error: string } {
+  const { TOKEN_ENCRYPTION_KEY } = env;
+  if (!TOKEN_ENCRYPTION_KEY) {
+    if (discogs.kind === "fake") return randomBytes(32);
+    return {
+      error:
+        "TOKEN_ENCRYPTION_KEY is not set, so the app cannot encrypt the Discogs tokens it stores. Run the Discogs wizard (scripts/wizard/discogs.sh) to generate one, or generate one with: openssl rand -base64 32",
+    };
+  }
+  const key = Buffer.from(TOKEN_ENCRYPTION_KEY, "base64");
+  if (key.length !== 32) return { error: "TOKEN_ENCRYPTION_KEY must be 32 bytes in base64. Generate one with: openssl rand -base64 32" };
+  return key;
 }
 
 function readDiscogs(env: NodeJS.ProcessEnv): Config["discogs"] | { error: string } {
@@ -55,7 +75,10 @@ function readPublicUrl(env: NodeJS.ProcessEnv, port: number): URL | { error: str
   }
   const url = URL.parse(env.PUBLIC_URL);
   if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) {
-    return { error: `PUBLIC_URL must be the address phones open, starting with https:// (got "${env.PUBLIC_URL}").` };
+    return { error: `PUBLIC_URL must be the address phones open, starting with https:// or http:// (got "${env.PUBLIC_URL}").` };
+  }
+  if (env.NODE_ENV === "production" && url.protocol !== "https:") {
+    return { error: `In production PUBLIC_URL must start with https://, so the login cookie is only sent over an encrypted connection (got "${env.PUBLIC_URL}").` };
   }
   return new URL(url.origin);
 }
@@ -77,8 +100,17 @@ if (config.discogs.kind === "real") {
 
 const database = connectDatabase(config.databaseUrl);
 await migrate(database);
+const secretBox = createSecretBox(config.tokenEncryptionKey);
+if (!(await storedTokensOpenWith(database, secretBox))) {
+  console.error(
+    "LP-Collection cannot start: TOKEN_ENCRYPTION_KEY cannot open the Discogs tokens already stored. Start the app with the key it used before (TOKEN_ENCRYPTION_KEY in the lp-collection-discogs secret). If that key is lost, clear the stored tokens so every User logs in again: UPDATE users SET discogs_access_token = '', discogs_access_secret = '';",
+  );
+  await database.close();
+  process.exit(1);
+}
+await sealStoredDiscogsTokens(database, secretBox);
 
-const app = createApp({ database, discogs, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl });
+const app = createApp({ database, discogs, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl });
 if (fake) app.route("/", fake.pages);
 // The built phone UI; any path the API doesn't own falls back to the single page.
 app.use("*", serveStatic({ root: "dist/web" }));

@@ -99,6 +99,19 @@ test("two people finishing their login with the same Invite at the same moment: 
   expect(callbacks.filter((callback) => cookieFrom(callback, "lp_session") !== undefined)).toHaveLength(1);
 });
 
+test("one person finishing their first login in several tabs at once gets in everywhere, with one Collection", async () => {
+  const app = await createTestApp();
+  const logins = await Promise.all([1, 2, 3, 4].map(() => app.startLogin()));
+
+  const callbacks = await Promise.all(logins.map((login) => login.finish(app.appOwnerDiscogsUsername)));
+
+  expect(callbacks.map((callback) => callback.status)).toEqual([302, 302, 302, 302]);
+  const sessions = callbacks.map((callback) => cookieFrom(callback, "lp_session"));
+  const collections = await Promise.all(sessions.map(async (session) => (await me(app, session)).body?.collection.id));
+  expect(new Set(collections).size).toBe(1);
+  expect(collections[0]).toEqual(expect.any(String));
+});
+
 test("without an Invite a new person gets no account", async () => {
   const app = await createTestApp();
 
@@ -174,6 +187,6 @@ test("a login left unfinished for more than 15 minutes is refused", async () => 
   const callback = await login.finish(app.appOwnerDiscogsUsername);
 
   expect(callback.status).toBe(302);
-  expect(callback.headers.get("location")).toBe("/");
+  expect(callback.headers.get("location")).toBe("/?login=expired");
   expect(cookieFrom(callback, "lp_session")).toBeUndefined();
 });

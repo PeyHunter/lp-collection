@@ -11,6 +11,11 @@ export const users = pgTable("users", {
   createdAt: at("created_at").notNull(),
 });
 
+export const appOwner = pgTable("app_owner", {
+  configuredDiscogsUsername: text("configured_discogs_username").primaryKey(),
+  discogsUserId: integer("discogs_user_id").notNull(),
+});
+
 export const collections = pgTable("collections", {
   id: uuid("id").primaryKey().defaultRandom(),
   ownerId: uuid("owner_id")
@@ -57,5 +62,7 @@ export const loginAttempts = pgTable("login_attempts", {
   requestToken: text("request_token").primaryKey(),
   requestSecret: text("request_secret").notNull(),
   inviteId: uuid("invite_id").references(() => invites.id),
+  inviteCode: text("invite_code"),
+  verifierChecks: integer("verifier_checks").notNull().default(0),
   createdAt: at("created_at").notNull(),
 });

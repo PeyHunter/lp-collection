@@ -8,6 +8,20 @@
       "when": 1793310063750,
       "tag": "0000_invite_login",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793314594940,
+      "tag": "0001_login_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793316412802,
+      "tag": "0002_login_verifier_checks",
+      "breakpoints": true
     }
   ]
 }

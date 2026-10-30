@@ -40,3 +40,24 @@ test("the app's Owner invites a friend, who gets their own Collection on their i
   await expect(friend.getByRole("heading", { name: "This Invite has already been used." })).toBeVisible();
   await friendContext.close();
 });
+
+test("an invitee whose browser lost the login cookie is told why and can log in again from their Invite", async ({ page, browser, baseURL }) => {
+  await page.goto("/");
+  await logInOnFakeDiscogs(page, "owner");
+  await page.getByRole("button", { name: "Create Invite" }).click();
+  const inviteUrl = await page.getByLabel("Invite link").inputValue();
+
+  const friendContext = await browser.newContext({ ...iPhone, baseURL });
+  const friend = await friendContext.newPage();
+  await friend.goto(inviteUrl);
+  await friend.getByRole("link", { name: "Log in with Discogs" }).click();
+  await friendContext.clearCookies();
+  await friend.getByLabel("Discogs username").fill("cookieless-friend");
+  await friend.getByRole("button", { name: "Authorize" }).click();
+
+  await expect(friend.getByRole("heading", { name: "You're invited to LP-Collection" })).toBeVisible();
+  await expect(friend.getByRole("alert")).toContainText("Your Discogs login didn't finish because this browser didn't keep its login cookie.");
+  await logInOnFakeDiscogs(friend, "cookieless-friend");
+  await expect(friend.getByText("Logged in as cookieless-friend.")).toBeVisible();
+  await friendContext.close();
+});

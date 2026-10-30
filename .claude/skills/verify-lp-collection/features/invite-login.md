@@ -11,6 +11,8 @@ Nobody can sign up without an Invite (ADR-0001). The app's Owner logs in with Di
 - `invite-refused` shows "This Invite has already been used.", "This Invite has expired." or "This Invite link isn't valid." instead of a log-in link.
 - `session` keeps the User logged in after a reload. The cookie `lp_session` lasts 400 days.
 - `logout` ends the session and returns to the invite-only message.
+- `login-problem` explains a login that did not finish, in an alert above the page. The callback sends an invitee back to their Invite page and everyone else to `/`, with `?login=cookie-missing` (the browser lost the `lp_login` cookie), `expired`, `failed`, `too-many` (per 15 minutes: more than 10 logged-out Discogs calls from one device, an IPv6 /64 counting as one device, more than 5 from one Invite, or more than 30 login starts by one logged-in User), `busy` (more than 10 logged-out Discogs calls a minute from everyone without an Invite together) or `discogs-unavailable`. A login with a valid Invite spends only that Invite's budget, so `busy` never reaches an invitee. An unknown, used or expired Invite goes back to its Invite page before any budget or Discogs call.
+- `two-tabs` lets a login started in a second tab finish without breaking the first one.
 
 ## How to get to it (user POV)
 
@@ -34,6 +36,8 @@ Preconditions:
 - **Stays logged in.** Reload in the invitee's context. "Your Collection" is still shown. This is the read-back that the User was stored.
 - **Logs out.** Tap "Log out". Expect "LP-Collection is invite only." and, after a reload, still no "Your Collection".
 - **Reused Invite.** Open the same Invite link again in a third fresh context. Expect the heading "This Invite has already been used." and no log-in link. Save `curl -s -i <appUrl>/api/invites/<code>` as `invite-used.http.txt`; it answers `410` with `{"status":"used"}`.
+- **Lost login cookie.** In a fresh context as the Owner, create a new Invite. In another fresh context, open it and tap "Log in with Discogs". On the Fake Discogs page, clear the context's cookies (`context.clearCookies()`), fill a new username and tap "Authorize". Expect the heading "You're invited to LP-Collection" and an alert starting "Your Discogs login didn't finish because this browser didn't keep its login cookie." The address ends in `?login=cookie-missing`. Tap "Log in with Discogs" again and authorize: it now logs in.
+- **Too many logins.** With no session, `curl -s -o /dev/null -w '%{redirect_url}\n' <appUrl>/api/login` eleven times. The first ten go to `/fake-discogs/authorize`; the eleventh goes to `/?login=too-many`. Run `look.ts <run-id> '/?login=too-many' too-many`; the alert says "You started too many logins." Do this last, because it blocks logins from this computer for 15 minutes.
 - **Unknown Invite.** Run `look.ts <run-id> /invite/not-a-real-code invite-unknown`. The heading is "This Invite link isn't valid."
 
 ## Gotchas
@@ -45,4 +49,7 @@ Preconditions:
 - Use a fresh browser context per person. Contexts share no cookies, like two phones. One context reused for the invitee is still logged in as the Owner.
 - The fake keeps its pending logins in memory. A relaunch between tapping "Log in with Discogs" and "Authorize" shows "This login has expired."
 - "Copy link" needs clipboard permission in a scripted browser. Read the "Invite link" field instead of the clipboard.
+- Logged-out login starts are limited to 10 per 15 minutes per device and 10 a minute in total, and every browser context on this computer is the same device. Login starts with a valid Invite count against that Invite instead. A long drive can hit the limit; relaunch with a new run id.
+- A callback without the `lp_login` cookie reaches Discogs at most 3 times per login attempt, and each of those calls spends the same budget as a login start (the Invite's, for a login started with one). Later ones answer `?login=expired`. Count the `Discogs login failed` lines in the run log to see how many reached Discogs.
+- The callback URL no longer carries the Invite code. The app keeps the code, encrypted, with the pending login.
 - The real Discogs login is not drivable here. It needs the keys that `scripts/wizard/discogs.sh` stores in the cluster.
