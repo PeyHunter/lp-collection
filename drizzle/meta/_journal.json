@@ -57,6 +57,13 @@
       "when": 1793362693613,
       "tag": "0007_search_sort",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793363262138,
+      "tag": "0008_shelves",
+      "breakpoints": true
     }
   ]
 }

@@ -4,7 +4,9 @@ import { createCollectionRoutes } from "./collection.ts";
 import type { Database } from "./db.ts";
 import type { DiscogsGateway } from "./discogs.ts";
 import type { ExchangeRates } from "./exchange-rates.ts";
+import { membersOnly } from "./member.ts";
 import type { SecretBox } from "./secret-box.ts";
+import { createShelfRoutes } from "./shelves.ts";
 
 export type AppDependencies = {
   database: Database;
@@ -27,7 +29,9 @@ export function createApp(dependencies: AppDependencies) {
   });
 
   app.route("/", createAccessRoutes(dependencies));
+  app.use("/api/collections/:collectionId/*", membersOnly(dependencies));
   app.route("/", createCollectionRoutes(dependencies));
+  app.route("/", createShelfRoutes(dependencies));
 
   return app;
 }

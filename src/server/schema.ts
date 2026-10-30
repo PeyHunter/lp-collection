@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { conditions, currencies, defaultCondition, defaultCurrency, sleeveConditions, type ReleaseCandidate } from "./discogs.ts";
 
 const at = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
@@ -108,6 +108,44 @@ export const releases = pgTable("releases", {
 
 const money = (name: string) => numeric(name, { precision: 12, scale: 2, mode: "number" });
 
+/** A point on a Shelf photo as fractions of its width and height, so it survives any re-encode of the photo. */
+export type PhotoPoint = { x: number; y: number };
+/** The Shelf's outer corners in the order top left, top right, bottom right, bottom left. */
+export type ShelfCorners = [PhotoPoint, PhotoPoint, PhotoPoint, PhotoPoint];
+
+export const shelves = pgTable(
+  "shelves",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    collectionId: uuid("collection_id")
+      .notNull()
+      .references(() => collections.id),
+    name: text("name").notNull(),
+    columns: integer("columns").notNull(),
+    rows: integer("rows").notNull(),
+    corners: jsonb("corners").$type<ShelfCorners>().notNull(),
+    photoFileKey: text("photo_file_key").notNull().unique(),
+    photoWidth: integer("photo_width").notNull(),
+    photoHeight: integer("photo_height").notNull(),
+    createdAt: at("created_at").notNull(),
+  },
+  (table) => [index("shelves_collection_created_idx").on(table.collectionId, table.createdAt)],
+);
+
+/** One square of a Shelf, kept by its column and row so a new photo or new corners never change which Copies it holds. */
+export const sections = pgTable(
+  "sections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shelfId: uuid("shelf_id")
+      .notNull()
+      .references(() => shelves.id, { onDelete: "cascade" }),
+    column: integer("column").notNull(),
+    row: integer("row").notNull(),
+  },
+  (table) => [unique("sections_shelf_column_row_unique").on(table.shelfId, table.column, table.row)],
+);
+
 export const copies = pgTable(
   "copies",
   {
@@ -124,10 +162,12 @@ export const copies = pgTable(
     purchasePrice: money("purchase_price"),
     purchaseCurrency: currency("purchase_currency"),
     purchaseDate: date("purchase_date", { mode: "string" }),
+    sectionId: uuid("section_id").references(() => sections.id, { onDelete: "set null" }),
     createdAt: at("created_at").notNull(),
   },
   (table) => [
     index("copies_collection_created_idx").on(table.collectionId, table.createdAt),
+    index("copies_section_idx").on(table.sectionId),
     check("copies_purchase_price_has_currency", sql`(${table.purchasePrice} is null) = (${table.purchaseCurrency} is null)`),
   ],
 );

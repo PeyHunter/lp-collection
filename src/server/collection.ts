@@ -1,21 +1,17 @@
 import { and, asc, count, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
 import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
 import type { Condition, DiscogsAuth, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
-import type { SecretBox } from "./secret-box.ts";
 import { createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
-import { barcodeLookupCache, copies, memberships, photos, releases, users } from "./schema.ts";
-import { createValuation, type CopyValue, type ValuationOutcome, type Valuer } from "./valuation.ts";
-
-type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean };
+import { uuidPattern, type Member, type MemberEnv } from "./member.ts";
+import { barcodeLookupCache, copies, photos, releases } from "./schema.ts";
+import { createValuation, type CopyValue, type ValuationOutcome } from "./valuation.ts";
 
 const { searchText: _, artistSortKey: __, ...releaseColumns } = getTableColumns(releases);
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
 const valueBatchSize = 5;
 const failedValueRetryMs = 15 * 60_000;
@@ -52,10 +48,6 @@ function parseLookup(params: Record<string, string>): { query: LookupQuery } | {
     return { error: `That's longer than any artist or title. Type at most ${maxTypedLength} characters each.` };
   }
   return { query };
-}
-
-function discogsAuth(user: typeof users.$inferSelect, box: SecretBox): DiscogsAuth {
-  return { token: box.open(user.discogsAccessToken), secret: box.open(user.discogsAccessSecret) };
 }
 
 type PhotoView = { id: string; url: string; width: number; height: number };
@@ -123,12 +115,12 @@ export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number };
 
 export type LookupView = LookupQuery & { total: number; candidates: LookupCandidate[] };
 
-export function createCollectionRoutes({ database, discogs, exchangeRates, secretBox, now, photosDir }: AppDependencies) {
+export function createCollectionRoutes({ database, discogs, exchangeRates, now, photosDir }: AppDependencies) {
   const { db } = database;
   const photoStore = createPhotoStore(photosDir);
   const valuation = createValuation({ database, discogs, exchangeRates, now });
   const listing = createListing(database);
-  const routes = new Hono<{ Variables: { member: Member } }>();
+  const routes = new Hono<MemberEnv>();
   const valueBatches = new Map<string, Promise<{ sellerSettingsMissing: boolean; valued: string[]; more: boolean }>>();
   const failedAt = new Map<string, Date>();
 
@@ -138,27 +130,6 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     failedAt.delete(key);
     return false;
   }
-
-  routes.use("/api/collections/:collectionId/*", async (c, next) => {
-    const user = await sessionUser(database, now, c);
-    if (!user) return c.json({ error: "Not logged in" }, 401);
-    const collectionId = c.req.param("collectionId");
-    const [membership] = uuidPattern.test(collectionId)
-      ? await db
-          .select()
-          .from(memberships)
-          .where(and(eq(memberships.collectionId, collectionId), eq(memberships.userId, user.id)))
-      : [];
-    if (!membership) return c.json({ error: "No such Collection" }, 404);
-    c.set("member", {
-      userId: user.id,
-      currency: user.currency,
-      sellerSettingsMissing: user.sellerSettingsMissing,
-      auth: discogsAuth(user, secretBox),
-      collectionId,
-    });
-    await next();
-  });
 
   async function lookUp(query: LookupQuery, auth: DiscogsAuth): Promise<LookupResult> {
     if (!("barcode" in query)) return discogs.lookup(query, auth);
