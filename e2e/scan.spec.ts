@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { fakeCamera, logInAsOwner, watchCameras } from "./camera.ts";
 
-test.use({ ...fakeCamera({ tilt: 6, offset: [0, 0], curve: 0.6, glare: { at: [0.55, 0.45], radius: 70, strength: 0.5 }, barcode: "5099969209017" }), permissions: ["camera"] });
+test.use({ ...fakeCamera({ tiltDegrees: 6, offset: [0, 0], curve: 0.6, glare: { at: [0.55, 0.45], radiusPx: 70, strength: 0.5 }, barcode: "5099969209017" }), permissions: ["camera"] });
 
 test("the Owner scans a sleeve's barcode and adds the matching Release without typing", async ({ page }) => {
   const cameras = await watchCameras(page);

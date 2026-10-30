@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { fakeCamera, logInAsOwner, watchCameras } from "./camera.ts";
 
-test.use({ ...fakeCamera({ tilt: -4, offset: [0.42, 0.05], curve: 0, barcode: "5099969209017" }), permissions: ["camera"] });
+test.use({ ...fakeCamera({ tiltDegrees: -4, offset: [0.42, 0.05], curve: 0, barcode: "5099969209017" }), permissions: ["camera"] });
 
 test("with the barcode only half in view the camera keeps looking, and leaving the Lookup screen turns it off", async ({ page }) => {
   const cameras = await watchCameras(page);

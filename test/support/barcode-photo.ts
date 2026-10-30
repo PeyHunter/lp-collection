@@ -5,7 +5,6 @@ const leftEven = leftOdd.map((code) => [...code].map((bit) => (bit === "1" ? "0"
 const right = leftOdd.map((code) => [...code].map((bit) => (bit === "1" ? "0" : "1")).join(""));
 const parity = ["OOOOOO", "OOEOEE", "OOEEOE", "OOEEEO", "OEOOEE", "OEEOOE", "OEEEOO", "OEOEOE", "OEOEEO", "OEEOEO"];
 
-/** The 95 modules of an EAN-13 symbol; a 12-digit UPC-A is the EAN-13 with a leading 0. */
 export function ean13Modules(barcode: string) {
   const digits = (barcode.length === 12 ? `0${barcode}` : barcode).split("").map(Number);
   if (digits.length !== 13) throw new Error(`not an EAN-13 or UPC-A: ${barcode}`);
@@ -16,29 +15,21 @@ export function ean13Modules(barcode: string) {
   return `101${left.join("")}01010${rightHalf.join("")}101`;
 }
 
-
 export type Shot = {
   width: number;
   height: number;
-  /** Width of one module in pixels before any warp. */
-  module: number;
-  /** Rotation of the sleeve in degrees. */
-  tilt: number;
-  /** How far the barcode centre sits from the image centre, as fractions of the image. */
+  modulePx: number;
+  tiltDegrees: number;
   offset: [number, number];
-  /** 0 is flat; larger bends the sleeve around a vertical axis, squeezing the bars near the edges. */
   curve: number;
-  /** A bright highlight: centre as fractions of the image, radius in pixels, strength 0 to 1. */
-  glare?: { at: [number, number]; radius: number; strength: number };
-  /** Room light: 1 is bright, lower is dimmer. */
+  glare?: { at: [number, number]; radiusPx: number; strength: number };
   light: number;
   noise: number;
   blur: number;
-  /** false draws a sleeve with no barcode on it. */
   barcode: string | false;
 };
 
-export const straight: Omit<Shot, "barcode"> = { width: 640, height: 480, module: 4, tilt: 0, offset: [0, 0], curve: 0, light: 1, noise: 6, blur: 1 };
+export const straight: Omit<Shot, "barcode"> = { width: 640, height: 480, modulePx: 4, tiltDegrees: 0, offset: [0, 0], curve: 0, light: 1, noise: 6, blur: 1 };
 
 function random(seed: number) {
   let state = seed >>> 0;
@@ -48,21 +39,20 @@ function random(seed: number) {
   };
 }
 
-/** Draws a phone-camera-like view of a sleeve with the barcode on a white label: tilt, curve, glare, dim light and noise. */
 export function barcodePhoto(shot: Shot): Pixels {
-  const { width, height, module } = shot;
+  const { width, height, modulePx: module } = shot;
   const modules = shot.barcode === false ? "" : ean13Modules(shot.barcode);
   const quiet = 11;
   const labelWidth = (modules.length + quiet * 2) * module;
   const labelHeight = module * 40;
   const barTop = module * 4;
   const barBottom = labelHeight - module * 6;
-  const angle = (shot.tilt * Math.PI) / 180;
+  const angle = (shot.tiltDegrees * Math.PI) / 180;
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
   const centreX = width * (0.5 + shot.offset[0]);
   const centreY = height * (0.5 + shot.offset[1]);
-  const noise = random(modules.length * 7919 + Math.round(shot.tilt * 100) + 1);
+  const noise = random(modules.length * 7919 + Math.round(shot.tiltDegrees * 100) + 1);
   const gray = new Float32Array(width * height);
 
   for (let y = 0; y < height; y++) {
@@ -90,7 +80,7 @@ export function barcodePhoto(shot: Shot): Pixels {
       if (shot.glare) {
         const gx = x - width * shot.glare.at[0];
         const gy = y - height * shot.glare.at[1];
-        const falloff = Math.exp(-(gx * gx + gy * gy) / (2 * shot.glare.radius * shot.glare.radius));
+        const falloff = Math.exp(-(gx * gx + gy * gy) / (2 * shot.glare.radiusPx * shot.glare.radiusPx));
         value += (255 - value) * shot.glare.strength * falloff;
       }
       gray[y * width + x] = value + (noise() - 0.5) * 2 * shot.noise;
@@ -130,7 +120,6 @@ function boxBlur(source: Float32Array, width: number, height: number, radius: nu
   return out;
 }
 
-/** One still frame as a YUV4MPEG2 file, which Chromium's fake camera plays on a loop. */
 export function y4m(pixels: Pixels) {
   const { width, height, data } = pixels;
   const luma = Buffer.alloc(width * height);

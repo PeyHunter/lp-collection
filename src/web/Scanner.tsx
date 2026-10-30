@@ -36,7 +36,6 @@ function subscribeToVisibility(listener: () => void) {
   return () => document.removeEventListener("visibilitychange", listener);
 }
 
-/** The rear camera, scanning until it reads an EAN-13 or UPC-A barcode. It is off whenever the screen is closed or the app is in the background. */
 export function Scanner({ onRead }: { onRead: (barcode: string) => void }) {
   const [camera, setCamera] = useState<Camera>({ kind: "starting" });
   const visible = useSyncExternalStore(subscribeToVisibility, () => document.visibilityState === "visible");

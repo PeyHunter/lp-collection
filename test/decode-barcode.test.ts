@@ -20,13 +20,13 @@ async function readAsTheCameraWould(photo: Pixels) {
 
 const photos: Record<string, Omit<Shot, "barcode">> = {
   straight,
-  "tilted 12 degrees and off centre": { ...straight, tilt: 12, offset: [0.03, -0.02] },
+  "tilted 12 degrees and off centre": { ...straight, tiltDegrees: 12, offset: [0.03, -0.02] },
   "on a curved sleeve": { ...straight, curve: 1 },
-  "under a highlight on a shiny sleeve": { ...straight, glare: { at: [0.45, 0.5], radius: 60, strength: 0.75 } },
+  "under a highlight on a shiny sleeve": { ...straight, glare: { at: [0.45, 0.5], radiusPx: 60, strength: 0.75 } },
   "in dim room light": { ...straight, light: 0.45, noise: 12 },
-  "held sideways": { ...straight, tilt: 90, module: 3 },
-  "tilted, curved and shiny": { ...straight, tilt: 6, curve: 0.6, glare: { at: [0.55, 0.45], radius: 70, strength: 0.5 } },
-  "tilted, curved, dim and shiny at once": { ...straight, tilt: -9, curve: 0.9, light: 0.6, glare: { at: [0.6, 0.45], radius: 50, strength: 0.7 }, noise: 10 },
+  "held sideways": { ...straight, tiltDegrees: 90, modulePx: 3 },
+  "tilted, curved and shiny": { ...straight, tiltDegrees: 6, curve: 0.6, glare: { at: [0.55, 0.45], radiusPx: 70, strength: 0.5 } },
+  "tilted, curved, dim and shiny at once": { ...straight, tiltDegrees: -9, curve: 0.9, light: 0.6, glare: { at: [0.6, 0.45], radiusPx: 50, strength: 0.7 }, noise: 10 },
 };
 
 describe.each([
