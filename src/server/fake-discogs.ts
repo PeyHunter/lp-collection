@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { conditions, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type Money, type Release } from "./discogs.ts";
+import { conditions, lookupPageSize, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type LookupQuery, type Money, type Release } from "./discogs.ts";
 import { converter, sampleRatesPerEuro } from "./exchange-rates.ts";
 import { priceSuggestionsFrom } from "./real-discogs.ts";
 
@@ -22,7 +22,7 @@ export type FakeDiscogsScript = {
 };
 
 export type FakeDiscogsRequest = (
-  | { endpoint: "search"; barcode: string }
+  | ({ endpoint: "search" } & LookupQuery)
   | { endpoint: "release"; discogsReleaseId: number }
   | { endpoint: "price-suggestions"; discogsReleaseId: number }
   | { endpoint: "stats"; discogsReleaseId: number; currency: DiscogsCurrency }
@@ -138,11 +138,13 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       const lowest = script.lowestListings?.[discogsReleaseId];
       return lowest ? convert(lowest, currency) : null;
     },
-    async lookupByBarcode(barcode, auth) {
-      answer({ endpoint: "search", barcode, ...auth });
-      return releases
-        .filter((release) => release.barcodes.includes(barcode))
-        .map(({ originalYear: _, barcodes: __, ...candidate }) => candidate);
+    async lookup(query, auth) {
+      answer({ endpoint: "search", ...query, ...auth });
+      const matches = releases.filter((release) => matchesQuery(release, query));
+      return {
+        candidates: matches.slice(0, lookupPageSize).map(({ originalYear: _, barcodes: __, ...candidate }) => candidate),
+        total: matches.length,
+      };
     },
     async release(discogsReleaseId, auth) {
       answer({ endpoint: "release", discogsReleaseId, ...auth });
@@ -195,6 +197,16 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
 }
 
 const coverPath = "/fake-discogs/covers";
+
+function looseText(text: string) {
+  return text.toLowerCase().replaceAll(/[^\p{L}\p{N}]/gu, "");
+}
+
+function matchesQuery(release: FakeRelease, query: LookupQuery) {
+  if ("barcode" in query) return release.barcodes.includes(query.barcode);
+  if ("catalogNumber" in query) return release.catalogNumber !== null && looseText(release.catalogNumber) === looseText(query.catalogNumber);
+  return looseText(release.artist).includes(looseText(query.artist)) && looseText(release.title).includes(looseText(query.title));
+}
 
 function fakeCoverUrl(discogsReleaseId: number) {
   return `${coverPath}/${discogsReleaseId}.svg`;
@@ -270,6 +282,32 @@ export const sampleReleases: FakeRelease[] = [
     format: "Vinyl, LP, Album",
     coverImageUrl: fakeCoverUrl(1503928),
     barcodes: ["5099969209017"],
+  },
+  {
+    discogsReleaseId: 1095979,
+    artist: "The Beatles",
+    title: "Sgt. Pepper's Lonely Hearts Club Band",
+    label: "Parlophone",
+    catalogNumber: "PCS 7027",
+    country: "UK",
+    pressingYear: 1967,
+    originalYear: 1967,
+    format: "Vinyl, LP, Album, Stereo",
+    coverImageUrl: fakeCoverUrl(1095979),
+    barcodes: [],
+  },
+  {
+    discogsReleaseId: 3482901,
+    artist: "The Beatles",
+    title: "Sgt. Pepper's Lonely Hearts Club Band",
+    label: "Odeon",
+    catalogNumber: "SHZE 401",
+    country: "Germany",
+    pressingYear: 1967,
+    originalYear: 1967,
+    format: "Vinyl, LP, Album, Stereo",
+    coverImageUrl: null,
+    barcodes: [],
   },
 ];
 

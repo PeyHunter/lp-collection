@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
-import { conditions, sleeveConditions, type Condition, type DiscogsAuth, type ReleaseCandidate, type SleeveCondition } from "./discogs.ts";
+import { conditions, sleeveConditions, type Condition, type DiscogsAuth, type LookupQuery, type LookupResult, type SleeveCondition } from "./discogs.ts";
 import type { SecretBox } from "./secret-box.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { barcodeLookupCache, copies, memberships, photos, releases, users } from "./schema.ts";
@@ -16,8 +16,10 @@ const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
 const valueBatchSize = 5;
 const failedValueRetryMs = 15 * 60_000;
 
-function parseBarcode(typed: string | undefined) {
-  const digits = (typed ?? "").replaceAll(/[\s-]/g, "");
+const maxTypedLength = 100;
+
+function parseBarcode(typed: string) {
+  const digits = typed.replaceAll(/[\s-]/g, "");
   return /^(\d{8}|\d{12,14})$/.test(digits) ? digits : undefined;
 }
 
@@ -27,6 +29,33 @@ function parseConditions(body: unknown): { mediaCondition?: Condition; sleeveCon
   if (mediaCondition !== undefined && !(conditions as readonly unknown[]).includes(mediaCondition)) return undefined;
   if (sleeveCondition !== undefined && !(sleeveConditions as readonly unknown[]).includes(sleeveCondition)) return undefined;
   return { mediaCondition: mediaCondition as Condition | undefined, sleeveCondition: sleeveCondition as SleeveCondition | undefined };
+}
+
+function tidy(typed: string | undefined) {
+  return (typed ?? "").replaceAll(/\s+/g, " ").trim();
+}
+
+function parseLookup(params: Record<string, string>): { query: LookupQuery } | { error: string } {
+  const { barcode, catalogNumber, artist, title } = params;
+  const ways = [barcode !== undefined, catalogNumber !== undefined, artist !== undefined || title !== undefined].filter(Boolean).length;
+  if (ways === 0) return { error: "Say what to look up: a barcode, a Catalog number, or an artist and title." };
+  if (ways > 1) return { error: "Look up one thing at a time: a barcode, a Catalog number, or an artist and title." };
+  if (barcode !== undefined) {
+    const digits = parseBarcode(barcode);
+    return digits ? { query: { barcode: digits } } : { error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." };
+  }
+  if (catalogNumber !== undefined) {
+    const typed = tidy(catalogNumber);
+    if (!typed) return { error: "Type the Catalog number from the spine or the label." };
+    if (typed.length > maxTypedLength) return { error: `That's longer than any Catalog number. Type at most ${maxTypedLength} characters.` };
+    return { query: { catalogNumber: typed } };
+  }
+  const query = { artist: tidy(artist), title: tidy(title) };
+  if (!query.artist && !query.title) return { error: "Type the artist, the title, or both." };
+  if (query.artist.length > maxTypedLength || query.title.length > maxTypedLength) {
+    return { error: `That's longer than any artist or title. Type at most ${maxTypedLength} characters each.` };
+  }
+  return { query };
 }
 
 function discogsAuth(user: typeof users.$inferSelect, box: SecretBox): DiscogsAuth {
@@ -107,14 +136,26 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     await next();
   });
 
-  async function lookUpBarcode(barcode: string, auth: DiscogsAuth): Promise<ReleaseCandidate[]> {
+  async function lookUp(query: LookupQuery, auth: DiscogsAuth): Promise<LookupResult> {
+    if (!("barcode" in query)) return discogs.lookup(query, auth);
+    const { barcode } = query;
     const [cached] = await db.select().from(barcodeLookupCache).where(eq(barcodeLookupCache.barcode, barcode));
-    if (cached) return cached.candidates;
-    const candidates = await discogs.lookupByBarcode(barcode, auth);
-    if (candidates.length > 0) {
-      await db.insert(barcodeLookupCache).values({ barcode, candidates, lookedUpAt: now() }).onConflictDoNothing();
+    if (cached) return { candidates: cached.candidates, total: cached.candidates.length };
+    const found = await discogs.lookup(query, auth);
+    if (found.candidates.length > 0) {
+      await db.insert(barcodeLookupCache).values({ barcode, candidates: found.candidates, lookedUpAt: now() }).onConflictDoNothing();
     }
-    return candidates;
+    return found;
+  }
+
+  async function copiesInCollection(collectionId: string, discogsReleaseIds: number[]) {
+    if (discogsReleaseIds.length === 0) return new Map<number, number>();
+    const rows = await db
+      .select({ discogsReleaseId: copies.discogsReleaseId, copies: count() })
+      .from(copies)
+      .where(and(eq(copies.collectionId, collectionId), inArray(copies.discogsReleaseId, discogsReleaseIds)))
+      .groupBy(copies.discogsReleaseId);
+    return new Map(rows.map((row) => [row.discogsReleaseId, row.copies]));
   }
 
   async function cacheRelease(discogsReleaseId: number, auth: DiscogsAuth) {
@@ -163,14 +204,23 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
   }
 
   routes.get("/api/collections/:collectionId/lookup", async (c) => {
-    const barcode = parseBarcode(c.req.query("barcode"));
-    if (!barcode) return c.json({ error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." }, 400);
+    const parsed = parseLookup(c.req.query());
+    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    const { query } = parsed;
+    const { auth, collectionId } = c.var.member;
+    let found: LookupResult;
     try {
-      return c.json({ barcode, candidates: await lookUpBarcode(barcode, c.var.member.auth) });
+      found = await lookUp(query, auth);
     } catch (error) {
-      console.error(`Discogs Lookup of barcode ${barcode} failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`Discogs Lookup of ${JSON.stringify(query)} failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: discogsUnreachable }, 502);
     }
+    const owned = await copiesInCollection(
+      collectionId,
+      found.candidates.map((candidate) => candidate.discogsReleaseId),
+    );
+    const candidates = found.candidates.map((candidate) => ({ ...candidate, copiesInCollection: owned.get(candidate.discogsReleaseId) ?? 0 }));
+    return c.json({ ...query, total: found.total, candidates });
   });
 
   routes.get("/api/collections/:collectionId/copies", async (c) => {

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { conditions, isCurrency, type Condition, type DiscogsAuth, type DiscogsGateway, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
+import { conditions, isCurrency, lookupPageSize, type Condition, type DiscogsAuth, type DiscogsGateway, type LookupQuery, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
 
 export type RealDiscogsOptions = {
   consumerKey: string;
@@ -104,11 +104,11 @@ export function createRealDiscogs({
         | undefined;
       return moneyFrom(stats?.lowest_price);
     },
-    async lookupByBarcode(barcode, auth) {
-      const search = (await getAs(auth, `/database/search?${new URLSearchParams({ barcode, type: "release", per_page: "50" })}`)) as
-        | { results?: SearchResult[] }
-        | undefined;
-      return (search?.results ?? []).map(candidateFrom);
+    async lookup(query, auth) {
+      const params = new URLSearchParams({ ...searchTerms(query), type: "release", per_page: String(lookupPageSize) });
+      const search = (await getAs(auth, `/database/search?${params}`)) as { results?: SearchResult[]; pagination?: { items?: number } } | undefined;
+      const candidates = (search?.results ?? []).map(candidateFrom);
+      return { candidates, total: search?.pagination?.items ?? candidates.length };
     },
     async release(discogsReleaseId, auth) {
       const release = (await getAs(auth, `/releases/${discogsReleaseId}`)) as DiscogsRelease | undefined;
@@ -191,6 +191,17 @@ function moneyFrom(price: unknown): Money | null {
   const { currency, value } = (price ?? {}) as { currency?: unknown; value?: unknown };
   if (!isCurrency(currency) || typeof value !== "number" || !(value > 0)) return null;
   return { amount: Math.round(value * 100) / 100, currency };
+}
+
+/** A barcode is exact, so it searches every format. Typed text matches CDs and cassettes too, so it searches vinyl only. */
+function searchTerms(query: LookupQuery): Record<string, string> {
+  if ("barcode" in query) return { barcode: query.barcode };
+  if ("catalogNumber" in query) return { catno: query.catalogNumber, format: "Vinyl" };
+  return {
+    ...(query.artist && { artist: query.artist }),
+    ...(query.title && { release_title: query.title }),
+    format: "Vinyl",
+  };
 }
 
 function candidateFrom(result: SearchResult): ReleaseCandidate {
