@@ -10,7 +10,6 @@ export type MemberEnv = { Variables: { member: Member } };
 
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Lets a request into /api/collections/:collectionId/* only for a logged-in Member of that Collection. */
 export function membersOnly({ database, secretBox, now }: AppDependencies) {
   return createMiddleware<MemberEnv>(async (c, next) => {
     const user = await sessionUser(database, now, c);
