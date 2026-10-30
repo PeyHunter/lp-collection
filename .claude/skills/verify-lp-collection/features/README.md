@@ -35,4 +35,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Scan a barcode with the camera](./scan.md) covers the camera on the Lookup screen, reading EAN-13 and UPC-A, turning the camera off, and typing when the camera is blocked.
 - [Value](./value.md) covers the Value and Lowest listing on each row and on the Copy page, changing conditions, "No Value yet", the seller settings guide and the currency setting.
 - [Photos](./photos.md) covers taking or picking photos of a Copy, the Discogs cover when there are none, deleting a photo, deleting a Copy with its photos, and who can fetch them.
+- [Copy details](./copy-details.md) covers the note, Purchase price and purchase date on a Copy, its Gain next to the Value, clearing them, and deleting the Copy.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.

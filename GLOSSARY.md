@@ -93,11 +93,11 @@ The cheapest asking price on the Discogs marketplace for a Release right now. It
 _Avoid_: value
 
 **Purchase price**:
-What a User paid for a Copy, with the date they bought it. It's optional.
+What a User paid for a Copy, in the currency they paid in, with the date they bought it. Both are optional.
 _Avoid_: cost
 
 **Gain**:
-A Copy's current Value minus its Purchase price. It can be negative.
+A Copy's current Value minus its Purchase price. It can be negative. It is shown in the User's Currency, so a Purchase price in another currency is converted with the European Central Bank's daily rates.
 _Avoid_: profit, return
 
 **Collection value**:
