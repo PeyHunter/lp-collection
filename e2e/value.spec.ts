@@ -107,7 +107,7 @@ async function bigPhoto(page: Page) {
   return { name: "IMG_0001.PNG", mimeType: "image/png", buffer: Buffer.from(base64, "base64") };
 }
 
-test("a User adds a photo of a Copy, sees it instead of the cover, deletes it, then deletes the Copy", async ({ page }) => {
+test("a User adds a photo of a Copy, sees it instead of the cover, deletes it, then deletes the Copy", async ({ page, logInAsNewUser }) => {
   await logInAsNewUser(page, "photographer");
   await addByBarcode(page, "190295328709", "Discovery");
   const row = page.getByRole("listitem").filter({ hasText: "Discovery" });
