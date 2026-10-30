@@ -1,16 +1,53 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CopyView } from "../server/collection.ts";
 import { currencies, type Currency } from "../server/discogs.ts";
+import type { ListGroup, SortName } from "../server/listing.ts";
 import type { Me } from "./App.tsx";
 import { Header } from "./Header.tsx";
 import { Cover } from "./Cover.tsx";
 import { Grade } from "./Grade.tsx";
+import { queryFromSearch, searchFromQuery, useCopyList, type ListQuery } from "./copy-list.ts";
+import { ListControls, periodName } from "./ListControls.tsx";
 import { followLink, useHandoff } from "./navigation.ts";
-import { fetchValues, RowValue, SellerSettingsGuide } from "./Value.tsx";
+import { currencyUnit, RowValue, SellerSettingsGuide } from "./Value.tsx";
 
-type Copies = { copies: CopyView[]; sellerSettingsMissing: boolean };
+const monthFormat = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+const bandFormat = new Intl.NumberFormat("da-DK");
 
-type CopiesState = { kind: "loading" } | { kind: "failed" } | ({ kind: "loaded"; fetchingValues: boolean } & Copies);
+function GroupHeading({ sort, groupKey, currency, sellerSettingsMissing }: { sort: SortName; groupKey: string; currency: Currency; sellerSettingsMissing: boolean }) {
+  const unit = <small>{currencyUnit(currency)}</small>;
+  if (groupKey === "unknown") return <>Year unknown</>;
+  switch (sort) {
+    case "value":
+      if (groupKey === "none") return sellerSettingsMissing ? <>Waits for seller settings</> : <>No Value yet</>;
+      if (groupKey === "0") return <>Under 10{unit}</>;
+      return (
+        <>
+          {bandFormat.format(Number(groupKey))}+{unit}
+        </>
+      );
+    case "period":
+      return (
+        <>
+          The {periodName(Number(groupKey)).slice(0, -1)}
+          <span className="lower">s</span>
+        </>
+      );
+    case "added":
+      return <>{monthFormat.format(new Date(`${groupKey}-01T00:00:00Z`))}</>;
+    default:
+      return <>{groupKey}</>;
+  }
+}
+
+function inGroups(copies: CopyView[], groups: ListGroup[]) {
+  let start = 0;
+  return groups.map((group) => {
+    const slice = copies.slice(start, start + group.length);
+    start += group.length;
+    return { group, copies: slice };
+  });
+}
 
 export function CollectionScreen({
   me,
@@ -21,36 +58,34 @@ export function CollectionScreen({
   onCurrencyChanged: (currency: Currency) => void;
   onLoggedOut: () => void;
 }) {
-  const [state, setState] = useState<CopiesState>({ kind: "loading" });
+  const [query, setQuery] = useState(() => queryFromSearch(location.search));
   const [attempt, setAttempt] = useState(0);
+  const [controlsKey, setControlsKey] = useState(0);
   const handoff = useHandoff();
+  const { list, values, loadMore } = useCopyList(me.collection.id, query, `${me.currency} ${attempt}`);
+  const moreButton = useRef<HTMLButtonElement>(null);
+
+  const changeQuery = useCallback((next: ListQuery) => {
+    setQuery(next);
+    const search = searchFromQuery(next);
+    history.replaceState(history.state, "", search ? `/?${search}` : "/");
+  }, []);
 
   useEffect(() => {
-    const abort = new AbortController();
-    async function load() {
-      const response = await fetch(`/api/collections/${me.collection.id}/copies`, { signal: abort.signal }).catch(() => undefined);
-      if (abort.signal.aborted) return;
-      if (!response?.ok) return setState({ kind: "failed" });
-      const loaded = (await response.json()) as Copies;
-      const fetchingValues = !loaded.sellerSettingsMissing && loaded.copies.some((copy) => !copy.value);
-      setState({ kind: "loaded", ...loaded, fetchingValues });
-      if (!fetchingValues) return;
-      await fetchValues(me.collection.id, {
-        signal: abort.signal,
-        onBatch: ({ copies, sellerSettingsMissing, more }) => setState({ kind: "loaded", copies, sellerSettingsMissing, fetchingValues: more }),
-      });
-      if (!abort.signal.aborted) setState((state) => (state.kind === "loaded" ? { ...state, fetchingValues: false } : state));
-    }
-    load();
-    return () => abort.abort();
-  }, [me.collection.id, me.currency, attempt]);
+    const button = moreButton.current;
+    if (!button) return;
+    const observer = new IntersectionObserver(([entry]) => entry?.isIntersecting && loadMore(), { rootMargin: "600px 0px" });
+    observer.observe(button);
+    return () => observer.disconnect();
+  }, [loadMore]);
 
   async function logOut() {
     await fetch("/api/logout", { method: "POST" });
     onLoggedOut();
   }
 
-  const count = state.kind === "loaded" ? state.copies.length : undefined;
+  const filtered = query.q.trim() !== "" || query.period !== null || query.genre !== null;
+  const loaded = list.kind === "loaded" ? list : undefined;
 
   return (
     <>
@@ -61,14 +96,15 @@ export function CollectionScreen({
           <h2 id="records-heading" className="poster-h">
             The <span className="accent">records</span>
           </h2>
-          {count !== undefined && (
+          {loaded && (
             <p className="sub">
-              <b className="tnum">{count}</b> {count === 1 ? "LP" : "LPs"}
+              <b className="tnum">{loaded.total}</b> {loaded.total === 1 ? "LP" : "LPs"}
+              {filtered ? " found" : ""}
             </p>
           )}
         </section>
 
-        {state.kind === "loaded" && state.sellerSettingsMissing && (
+        {loaded?.sellerSettingsMissing && (
           <SellerSettingsGuide url={me.sellerSettingsUrl} collectionId={me.collection.id} onValued={() => setAttempt((count) => count + 1)} />
         )}
 
@@ -78,9 +114,11 @@ export function CollectionScreen({
           </p>
         )}
 
-        <section className="section" aria-label="Copies" aria-busy={state.kind === "loading"}>
-          {state.kind === "loading" && <p className="loading">Loading your Collection…</p>}
-          {state.kind === "failed" && (
+        {loaded && (loaded.total > 0 || filtered) && <ListControls key={controlsKey} query={query} facets={loaded.facets} onChange={changeQuery} />}
+
+        <section className="section" aria-label="Copies" aria-busy={list.kind === "loading"}>
+          {list.kind === "loading" && <p className="loading">Loading your Collection…</p>}
+          {list.kind === "failed" && (
             <div className="notice error" role="alert">
               <p>Your Collection couldn't load. Check your connection and try again.</p>
               <button className="btn quiet" type="button" onClick={() => setAttempt((count) => count + 1)}>
@@ -88,7 +126,7 @@ export function CollectionScreen({
               </button>
             </div>
           )}
-          {state.kind === "loaded" && state.copies.length === 0 && (
+          {loaded && loaded.total === 0 && !filtered && (
             <div className="empty">
               <p>No Copies yet.</p>
               <a className="btn primary" href="/lookup" onClick={followLink}>
@@ -96,18 +134,60 @@ export function CollectionScreen({
               </a>
             </div>
           )}
-          {state.kind === "loaded" && state.copies.length > 0 && (
-            <ol className="rows">
-              {state.copies.map((copy) => (
-                <CopyRow
-                  key={copy.id}
-                  copy={copy}
-                  fresh={handoff?.kind === "saved" && copy.id === handoff.copyId}
-                  sellerSettingsMissing={state.sellerSettingsMissing}
-                  fetching={state.fetchingValues}
-                />
+          {loaded && loaded.total === 0 && filtered && (
+            <div className="empty">
+              <p>
+                No Copies match{query.q.trim() ? ` “${query.q.trim()}”` : ""}
+                {query.period !== null ? ` in the ${periodName(query.period)}` : ""}
+                {query.genre !== null ? ` in ${query.genre}` : ""}.
+              </p>
+              <button
+                className="btn quiet"
+                type="button"
+                onClick={() => {
+                  changeQuery({ ...query, q: "", period: null, genre: null });
+                  setControlsKey((count) => count + 1);
+                }}
+              >
+                Show every Copy
+              </button>
+            </div>
+          )}
+          {loaded && loaded.copies.length > 0 && (
+            <div className="groups">
+              {inGroups(loaded.copies, loaded.groups).map(({ group, copies }) => (
+                <section className={group.key === "none" || group.key === "unknown" ? "group muted" : "group"} key={group.key}>
+                  <h3 className="group-h">
+                    <span className="poster-h">
+                      <GroupHeading sort={query.sort} groupKey={group.key} currency={me.currency} sellerSettingsMissing={loaded.sellerSettingsMissing} />
+                    </span>
+                    <span className="n tnum">
+                      {group.total} {group.total === 1 ? "LP" : "LPs"}
+                    </span>
+                  </h3>
+                  <ol className="rows">
+                    {copies.map((copy) => (
+                      <CopyRow
+                        key={copy.id}
+                        copy={copy}
+                        fresh={handoff?.kind === "saved" && copy.id === handoff.copyId}
+                        sellerSettingsMissing={loaded.sellerSettingsMissing}
+                        fetching={values.fetching}
+                      />
+                    ))}
+                  </ol>
+                </section>
               ))}
-            </ol>
+            </div>
+          )}
+          {loaded?.next && (
+            <button ref={moreButton} className="btn quiet more" type="button" onClick={loadMore} disabled={loaded.more === "loading"}>
+              {loaded.more === "loading"
+                ? "Loading more…"
+                : loaded.more === "failed"
+                  ? "More didn't load. Try again"
+                  : `Show more (${loaded.total - loaded.copies.length} left)`}
+            </button>
           )}
         </section>
 
@@ -127,9 +207,14 @@ export function CollectionScreen({
 
 function CopyRow({ copy, fresh, sellerSettingsMissing, fetching }: { copy: CopyView; fresh: boolean; sellerSettingsMissing: boolean; fetching: boolean }) {
   const { release } = copy;
-  const facts = [release.originalYear, release.label, release.catalogNumber].filter((fact) => fact !== null);
+  const row = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (fresh) row.current?.scrollIntoView({ block: "center" });
+  }, [fresh]);
+  const years = [release.originalYear, release.pressingYear !== null ? `pressed ${release.pressingYear}` : null];
+  const facts = [...years, release.label, release.catalogNumber].filter((fact) => fact !== null);
   return (
-    <li className={fresh ? "row fresh" : "row"}>
+    <li ref={row} className={fresh ? "row fresh" : "row"}>
       <Cover url={copy.pictureUrl} />
       <span className="row-text">
         <a className="row-title row-link" href={`/copies/${copy.id}`} onClick={followLink}>

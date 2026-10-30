@@ -5,6 +5,10 @@ import type { Currency } from "../server/discogs.ts";
 const units: Partial<Record<Currency, string>> = { DKK: "kr", SEK: "kr", NOK: "kr", EUR: "€", GBP: "£", USD: "$" };
 const wholeNumber = new Intl.NumberFormat("da-DK", { maximumFractionDigits: 0 });
 
+export function currencyUnit(currency: Currency) {
+  return units[currency] ?? currency;
+}
+
 export function formatAmount(amount: number, currency: Currency) {
   return `${wholeNumber.format(amount)} ${units[currency] ?? currency}`;
 }
