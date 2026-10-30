@@ -6,7 +6,7 @@ This folder is the maintained source for verifying what LP-Collection users can 
 
 - A run launched with `bin/launch.ts <run-id>` and `bin/doctor.ts <run-id>` reporting `HEALTHY`.
 - The database is fresh: migrations applied, no Users, Collections or Copies.
-- Discogs is the fake gateway (`DISCOGS=fake`), which finds no Releases. Its login page accepts any username, and `owner` is the app's Owner.
+- Discogs is the fake gateway (`DISCOGS=fake`), which knows a few sample Releases (`sampleReleases` in `src/server/fake-discogs.ts`). Its login page accepts any username, and `owner` is the app's Owner.
 
 ## Driving conventions
 
@@ -31,4 +31,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 
 - [Open the app](./open-app.md) covers the home screen a user sees on their phone.
 - [Invite and log in](./invite-login.md) covers the app's Owner creating an Invite, the invited person logging in with Discogs into their own empty Collection, staying logged in, and logging out.
+- [Add a Copy by typed barcode](./add-copy.md) covers the Lookup screen, picking one of several pressings, saving the Copy at Very Good Plus, and the Collection list.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.

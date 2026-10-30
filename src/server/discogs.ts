@@ -1,8 +1,46 @@
-/** A Release as a Lookup returns it, before the User picks one. */
+/** The Discogs grading scale, best first, spelled as the Discogs API spells it. */
+export const conditions = [
+  "Mint (M)",
+  "Near Mint (NM or M-)",
+  "Very Good Plus (VG+)",
+  "Very Good (VG)",
+  "Good Plus (G+)",
+  "Good (G)",
+  "Fair (F)",
+  "Poor (P)",
+] as const;
+
+export type Condition = (typeof conditions)[number];
+
+export const defaultCondition: Condition = "Very Good Plus (VG+)";
+
 export type ReleaseCandidate = {
   discogsReleaseId: number;
   artist: string;
   title: string;
+  label: string | null;
+  catalogNumber: string | null;
+  country: string | null;
+  pressingYear: number | null;
+  format: string | null;
+  coverImageUrl: string | null;
+};
+
+export type Release = {
+  discogsReleaseId: number;
+  artist: string;
+  title: string;
+  label: string | null;
+  catalogNumber: string | null;
+  country: string | null;
+  pressingYear: number | null;
+  originalYear: number | null;
+  coverImageUrl: string | null;
+};
+
+export type DiscogsAuth = {
+  token: string;
+  secret: string;
 };
 
 export type LoginStart = {
@@ -26,7 +64,8 @@ export type DiscogsIdentity = {
 
 /** The only way the app talks to Discogs. Tests use a scripted fake. */
 export type DiscogsGateway = {
-  lookupByBarcode(barcode: string): Promise<ReleaseCandidate[]>;
+  lookupByBarcode(barcode: string, auth: DiscogsAuth): Promise<ReleaseCandidate[]>;
+  release(discogsReleaseId: number, auth: DiscogsAuth): Promise<Release | undefined>;
   startLogin(callbackUrl: string): Promise<LoginStart>;
   finishLogin(callback: LoginCallback): Promise<DiscogsIdentity>;
 };

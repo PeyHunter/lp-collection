@@ -4,7 +4,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { sealStoredDiscogsTokens, storedTokensOpenWith } from "./access.ts";
 import { createApp } from "./app.ts";
 import { connectDatabase, migrate } from "./db.ts";
-import { createFakeDiscogs, type FakeDiscogs } from "./fake-discogs.ts";
+import { createFakeDiscogs, sampleReleases, type FakeDiscogs } from "./fake-discogs.ts";
 import { createRealDiscogs } from "./real-discogs.ts";
 import { createSecretBox } from "./secret-box.ts";
 import type { DiscogsGateway } from "./discogs.ts";
@@ -94,8 +94,8 @@ let discogs: DiscogsGateway;
 if (config.discogs.kind === "real") {
   discogs = createRealDiscogs(config.discogs);
 } else {
-  console.log("DISCOGS=fake: using the fake Discogs, whose login page asks only for a username.");
-  discogs = fake = createFakeDiscogs();
+  console.log("DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases.");
+  discogs = fake = createFakeDiscogs({ releases: sampleReleases });
 }
 
 const database = connectDatabase(config.databaseUrl);

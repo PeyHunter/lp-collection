@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { CollectionScreen } from "./CollectionScreen.tsx";
+import { Header } from "./Header.tsx";
+import { LookupScreen } from "./LookupScreen.tsx";
+import { followLink, useRoute, type Route } from "./navigation.ts";
 
-type Route = { page: "home" } | { page: "invite"; code: string };
-
-function routeFrom(pathname: string): Route {
-  const invite = /^\/invite\/([^/]+)\/?$/.exec(pathname);
-  return invite ? { page: "invite", code: decodeURIComponent(invite[1]!) } : { page: "home" };
-}
+export type Me = { discogsUsername: string; canCreateInvites: boolean; collection: { id: string } };
 
 const loginProblems = {
   "cookie-missing":
@@ -23,107 +22,99 @@ function loginProblemFrom(search: string) {
 }
 
 export function App() {
-  const route = routeFrom(location.pathname);
+  const route = useRoute();
+  return route.page === "invite" ? <InvitePage code={route.code} /> : <SessionGate route={route} />;
+}
+
+function Page({ children }: { children: ReactNode }) {
   const loginProblem = loginProblemFrom(location.search);
   return (
-    <main>
-      <h1>LP-Collection</h1>
-      {loginProblem && <p role="alert">{loginProblem}</p>}
-      {route.page === "invite" ? <InvitePage code={route.code} /> : <HomePage />}
-    </main>
+    <>
+      <Header title="LP-Collection" />
+      <main className="content-grid">
+        {loginProblem && (
+          <p className="notice error" role="alert">
+            {loginProblem}
+          </p>
+        )}
+        {children}
+      </main>
+    </>
   );
 }
 
-type Me = { discogsUsername: string; canCreateInvites: boolean; collection: { id: string } };
+type Session = { kind: "loading" } | { kind: "unreachable" } | { kind: "signed-out" } | { kind: "signed-in"; me: Me };
 
-type HomeScreen = { kind: "loading" } | { kind: "unreachable" } | { kind: "signed-out" } | { kind: "signed-in"; me: Me };
-
-function HomePage() {
-  const [screen, setScreen] = useState<HomeScreen>({ kind: "loading" });
+function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
+  const [session, setSession] = useState<Session>({ kind: "loading" });
 
   useEffect(() => {
     fetch("/api/me")
       .then(async (response) => {
-        if (response.status === 401) return setScreen({ kind: "signed-out" });
-        if (!response.ok) return setScreen({ kind: "unreachable" });
-        setScreen({ kind: "signed-in", me: (await response.json()) as Me });
+        if (response.status === 401) return setSession({ kind: "signed-out" });
+        if (!response.ok) return setSession({ kind: "unreachable" });
+        setSession({ kind: "signed-in", me: (await response.json()) as Me });
       })
-      .catch(() => setScreen({ kind: "unreachable" }));
+      .catch(() => setSession({ kind: "unreachable" }));
   }, []);
 
-  async function logOut() {
-    await fetch("/api/logout", { method: "POST" });
-    setScreen({ kind: "signed-out" });
-  }
-
-  switch (screen.kind) {
+  switch (session.kind) {
     case "loading":
       return null;
     case "unreachable":
-      return <p>LP-Collection can't reach its server right now. Try again in a moment.</p>;
+      return (
+        <Page>
+          <p className="notice error">LP-Collection can't reach its server right now. Try again in a moment.</p>
+        </Page>
+      );
     case "signed-out":
       return (
-        <>
-          <p>LP-Collection is invite only. Ask the app's Owner for an Invite link.</p>
-          <p>
-            Already a User? <a href="/api/login">Log in with Discogs</a>
-          </p>
-        </>
+        <Page>
+          <section className="section">
+            <p>LP-Collection is invite only. Ask the app's Owner for an Invite link.</p>
+            <p>
+              Already a User?{" "}
+              <a className="link" href="/api/login">
+                Log in with Discogs
+              </a>
+            </p>
+          </section>
+        </Page>
       );
     case "signed-in":
       return (
         <>
-          <h2>Your Collection</h2>
-          <p>No Copies yet.</p>
-          {screen.me.canCreateInvites && <InviteCreator />}
-          <p>Logged in as {screen.me.discogsUsername}.</p>
-          <button type="button" onClick={logOut}>
-            Log out
-          </button>
+          {route.page === "lookup" ? (
+            <LookupScreen collectionId={session.me.collection.id} />
+          ) : (
+            <CollectionScreen me={session.me} onLoggedOut={() => setSession({ kind: "signed-out" })} />
+          )}
+          <Dock current={route.page} />
         </>
       );
   }
 }
 
-type CreatedInvite = { url: string; expiresAt: string };
-
-type InviteCreatorState = { kind: "idle" } | { kind: "creating" } | { kind: "failed" } | { kind: "created"; invite: CreatedInvite; copied: boolean };
-
-function InviteCreator() {
-  const [state, setState] = useState<InviteCreatorState>({ kind: "idle" });
-
-  async function create() {
-    setState({ kind: "creating" });
-    const response = await fetch("/api/invites", { method: "POST" }).catch(() => undefined);
-    if (!response?.ok) return setState({ kind: "failed" });
-    setState({ kind: "created", invite: (await response.json()) as CreatedInvite, copied: false });
-  }
-
-  async function copy(invite: CreatedInvite) {
-    await navigator.clipboard.writeText(invite.url);
-    setState({ kind: "created", invite, copied: true });
-  }
-
+function Dock({ current }: { current: Route["page"] }) {
   return (
-    <section aria-labelledby="invite-heading">
-      <h2 id="invite-heading">Invite someone</h2>
-      <button type="button" onClick={create} disabled={state.kind === "creating"}>
-        Create Invite
-      </button>
-      {state.kind === "failed" && <p>The Invite couldn't be created. Try again.</p>}
-      {state.kind === "created" && (
-        <>
-          <p>
-            <label htmlFor="invite-link">Invite link</label>{" "}
-            <input id="invite-link" readOnly value={state.invite.url} onFocus={(event) => event.currentTarget.select()} />{" "}
-            <button type="button" onClick={() => copy(state.invite)}>
-              {state.copied ? "Copied" : "Copy link"}
-            </button>
-          </p>
-          <p>Works once. Expires {formatDate(state.invite.expiresAt)}.</p>
-        </>
-      )}
-    </section>
+    <nav className="dock content-grid" aria-label="Main">
+      <div className="dock-inner">
+        <a className="scan" href="/lookup" onClick={followLink} aria-current={current === "lookup" ? "page" : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M11 9v6M14 9v6M17 9v6" />
+          </svg>
+          Scan
+        </a>
+        <a className="tab end" href="/" onClick={followLink} aria-current={current === "collection" ? "page" : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" />
+            <circle cx="12" cy="12" r="3" />
+            <circle cx="12" cy="12" r="0.5" fill="currentColor" />
+          </svg>
+          Collection
+        </a>
+      </div>
+    </nav>
   );
 }
 
@@ -153,28 +144,38 @@ function InvitePage({ code }: { code: string }) {
     case "loading":
       return null;
     case "unreachable":
-      return <p>LP-Collection can't reach its server right now. Try again in a moment.</p>;
+      return (
+        <Page>
+          <p className="notice error">LP-Collection can't reach its server right now. Try again in a moment.</p>
+        </Page>
+      );
     case "checked":
       if (screen.invite.status === "valid") {
         return (
-          <>
-            <h2>You're invited to LP-Collection</h2>
-            <p>Log in with your Discogs account to get a Collection of your own.</p>
-            <p>
-              <a href={`/api/login?invite=${encodeURIComponent(code)}`}>Log in with Discogs</a>
-            </p>
-          </>
+          <Page>
+            <section className="section">
+              <div className="section-head">
+                <h2>You're invited to LP-Collection</h2>
+              </div>
+              <p>Log in with your Discogs account to get a Collection of your own.</p>
+              <p>
+                <a className="btn primary" href={`/api/login?invite=${encodeURIComponent(code)}`}>
+                  Log in with Discogs
+                </a>
+              </p>
+            </section>
+          </Page>
         );
       }
       return (
-        <>
-          <h2>{refusals[screen.invite.status]}</h2>
-          <p>LP-Collection is invite only. Ask the app's Owner for a new Invite link.</p>
-        </>
+        <Page>
+          <section className="section">
+            <div className="section-head">
+              <h2>{refusals[screen.invite.status]}</h2>
+            </div>
+            <p>LP-Collection is invite only. Ask the app's Owner for a new Invite link.</p>
+          </section>
+        </Page>
       );
   }
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" });
 }

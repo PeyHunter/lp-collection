@@ -21,7 +21,16 @@ All CSS follows the project's good-css skill (`.claude/skills/good-css/`). The r
 | Display: poster type, headings, numbers that matter | Unbounded | 600, 700, 800, 900 |
 | Body: everything else | Instrument Sans | 400, 500, 600, 700 |
 
-The prototypes load both fonts from Google Fonts. The real app must self-host them: ship the variable `woff2` files with the app, declare them with `@font-face` and `font-display: swap`, and preload the two files the first screen uses. Self-hosting keeps the app working offline as a home-screen app and sends no requests to Google. The reset sets `font-synthesis: none`, so load every weight above or the browser renders it as regular.
+The prototypes load both fonts from Google Fonts. The real app self-hosts them: the variable `woff2` files live in `src/web/public/fonts/` with their OFL licenses, split into a Latin and a Latin Extended file per font by `unicode-range`. `src/web/styles.css` declares them with `@font-face` and `font-display: swap`, and `src/web/index.html` preloads the two Latin files. Self-hosting keeps the app working offline as a home-screen app and sends no requests to Google. The reset sets `font-synthesis: none`, so load every weight above or the browser renders it as regular.
+
+Use the font tokens, never a font name:
+
+```css
+:root {
+	--display: "Unbounded", ui-sans-serif, system-ui, sans-serif;
+	--body:    "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+}
+```
 
 ## Color tokens
 
@@ -43,6 +52,8 @@ The app has one theme, dark. `color-scheme: dark` is set on `:root` and in a `<m
 	--gain:        oklch(82% 0.12 140);
 	--loss:        oklch(74% 0.13 25);
 	--press:       color-mix(in oklch, var(--ink) 6%, transparent);
+	--black:       oklch(0% 0 none);
+	--white:       oklch(100% 0 none);
 }
 ```
 
@@ -62,6 +73,10 @@ The app has one theme, dark. `color-scheme: dark` is set on `:root` and in a `<m
 | `--gain`, `--loss` | A rising or falling Value, a positive or negative Gain | 9.9:1, 6.8:1 |
 
 The contrast numbers are WCAG 2 ratios, computed from the token values. `--accent` is below 4.5:1, so use it only for large text. Cream text on `--accent` measures 3.7:1, so filled controls use the darker `--accent-fill`.
+
+Never put `--ink-faint` text on `--surface`. It already sits near the 4.5:1 floor on `--bg`, and the lighter `--surface` takes contrast away. The same goes for any tinted row or card. Use `--ink-dim` for secondary text there.
+
+Darken or lighten with `--black` and `--white`, never the keywords `black` and `white`, as in `color-mix(in oklch, var(--accent-fill), var(--black) 14%)` for a pressed fill. Their hue is `none`, so the mix keeps the accent's hue.
 
 ## Type scale
 
@@ -93,6 +108,16 @@ The body text is 1rem. Every size is in `rem`, so it follows the reader's text-s
 Poster type sizes come from container units, so a line fills the width of its block at any phone size. The element that holds poster type sets `container-type: inline-size`. The prototypes size each line by hand, such as `31cqi` for "612" and `13.2cqi` for "187 LABELS". Size a new line so that its longest real value still fits. Set `white-space: nowrap` and `text-overflow: ellipsis` on a poster line that shows user data, such as a group heading.
 
 Put `font-variant-numeric: tabular-nums` (the `.tnum` class) on Values, counts, and Catalog numbers.
+
+## Motion
+
+```css
+:root {
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+```
+
+Press feedback scales with `scale` over 160ms on `--ease-out`, inside `@media (prefers-reduced-motion: no-preference)`.
 
 ## Spacing and radii
 
@@ -149,7 +174,7 @@ A list row is the cover, then the title, artist, and meta line, then the Value. 
 
 ### Bottom bar with Scan
 
-The bottom bar is sticky at the bottom with a 2px `--ink` rule on top, `--sunk` at 92% behind it, and the bottom safe-area inset as padding. It holds Home, Scan, and Collection. Scan sits in the middle as a pill of `--accent-fill`, 3.5rem tall, with an uppercase Unbounded label. The current tab is `--ink`, and the other tabs are `--ink-dim`. On Lookup, Scan is the current page and gets a ring.
+The bottom bar is sticky at the bottom with a 2px `--ink` rule on top, `--sunk` at 92% behind it, and the bottom safe-area inset as padding. It holds Home, Scan, and Collection. Until the home screen exists, the Home cell stays empty. Scan sits in the middle as a pill of `--accent-fill`, 3.5rem tall, with an uppercase Unbounded label. The current tab is `--ink`, and the other tabs are `--ink-dim`. On Lookup, Scan is the current page and gets a ring. At large text sizes Scan may move off center: a side cell never gets narrower than its label, so the empty Home cell gives up its room first.
 
 ### Buttons
 
@@ -165,6 +190,19 @@ Buttons are at least 3rem tall. Press scales them to 0.97, and the transition si
 ### Fields and chips
 
 Inputs and selects are 3rem tall on `--sunk` with a `--line` border, at `max(16px, 1rem)` so iOS does not zoom. A select keeps the native picker. The note field grows with its text (`field-sizing: content`). Sort options are radio chips. The checked chip fills with `--ink`.
+
+### Loading, empty and error states
+
+Every screen that fetches has all three, in the place the content would go.
+
+- **Loading.** One line of `--ink-dim` text that names what is coming ("Loading your Collection…", "Asking Discogs…"). It pulses gently, only under `prefers-reduced-motion: no-preference`. The region around it sets `aria-busy`. The button that started it is disabled and says what it is doing ("Looking…", "Adding…").
+- **Empty.** A sentence in `--ink-dim` that says what is missing, then the next step as a primary button or a hint. The empty Collection says "No Copies yet." with "Add your first record". A Lookup with no match names the barcode and says to check the digits.
+- **Error.** A `--surface` card with a thin `--loss` border and `role="alert"`, saying what failed and what to do. A failed load gets a quiet "Try again" button. A failed save keeps the picked Release, so one tap retries.
+- **Done.** After a save, the next screen shows a `--surface` card with a thin `--gain` border and `role="status"` ("Added Kind of Blue to your Collection."), and tints the new row with 10% `--accent`. The tint and the pressed background reach `--space-s` past the row on each side, so the cover and the Value never touch their edges while the row text stays in line with the rows around it. A reload clears it.
+
+### Lookup candidates
+
+A candidate is a list row whose title is a button. The meta line wraps, so the year, country, label, Catalog number and format all show. Tapping a candidate marks it with an `--accent` check and opens a save panel under it: a `--accent` bordered card that says which conditions the Copy will be saved with, and the primary "Add to Collection" button. A single match opens its panel at once.
 
 ### Shelf (first sketch)
 

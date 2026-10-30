@@ -88,16 +88,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     return invite;
   }
 
-  async function currentUser(c: Context) {
-    const token = getCookie(c, sessionCookie);
-    if (!token) return undefined;
-    const [row] = await db
-      .select({ user: users })
-      .from(sessions)
-      .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.tokenHash, sha256(token)), gt(sessions.expiresAt, now())));
-    return row?.user;
-  }
+  const currentUser = (c: Context) => sessionUser(database, now, c);
 
   async function signUp(identity: DiscogsIdentity, via: Extract<LoginDecision, { kind: "new-user" }>["via"]) {
     const at = now();
@@ -340,6 +331,17 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
   });
 
   return routes;
+}
+
+export async function sessionUser({ db }: Database, now: () => Date, c: Context) {
+  const token = getCookie(c, sessionCookie);
+  if (!token) return undefined;
+  const [row] = await db
+    .select({ user: users })
+    .from(sessions)
+    .innerJoin(users, eq(users.id, sessions.userId))
+    .where(and(eq(sessions.tokenHash, sha256(token)), gt(sessions.expiresAt, now())));
+  return row?.user;
 }
 
 function discogsFields(identity: DiscogsIdentity, box: SecretBox) {

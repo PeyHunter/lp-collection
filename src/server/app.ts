@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { createAccessRoutes } from "./access.ts";
+import { createCollectionRoutes } from "./collection.ts";
 import type { Database } from "./db.ts";
 import type { DiscogsGateway } from "./discogs.ts";
 import type { SecretBox } from "./secret-box.ts";
@@ -23,6 +24,7 @@ export function createApp(dependencies: AppDependencies) {
   });
 
   app.route("/", createAccessRoutes(dependencies));
+  app.route("/", createCollectionRoutes(dependencies));
 
   return app;
 }
