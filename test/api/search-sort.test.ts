@@ -57,6 +57,8 @@ async function collectionOfSeven(discogs: FakeDiscogsScript = { ...script }) {
   return { app, owner };
 }
 
+const readOnly = collectionOfSeven();
+
 async function list(user: Member, params: Record<string, string> = {}) {
   const response = await user.as(`/copies?${new URLSearchParams(params)}`);
   expect(response.status).toBe(200);
@@ -76,7 +78,7 @@ async function everyPage(user: Member, params: Record<string, string>) {
 }
 
 test("the Collection sorts by Value high first by default, and Copies with no Value come last in either direction", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   const highFirst = await list(owner);
   const lowFirst = await list(owner, { sort: "value", dir: "asc" });
@@ -103,21 +105,21 @@ test("the Value sort uses the Value the viewer sees: the current Media condition
 });
 
 test("artist sorts A to Z ignoring a leading The, then by Original year, and reverses Z to A", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   expect(titles(await list(owner, { sort: "artist" }))).toEqual(["Abbey Road", "Gas 5", "Hounds Of Love", "Trans-Europe Express", "Kind Of Blue", "Bitches Brew", "Demo 100%_"]);
   expect(titles(await list(owner, { sort: "artist", dir: "desc" }))).toEqual(["Demo 100%_", "Kind Of Blue", "Bitches Brew", "Trans-Europe Express", "Hounds Of Love", "Gas 5", "Abbey Road"]);
 });
 
 test("Original year sorts oldest or newest first, with an unknown year last", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   expect(titles(await list(owner, { sort: "year" }))).toEqual(["Kind Of Blue", "Abbey Road", "Bitches Brew", "Gas 5", "Trans-Europe Express", "Hounds Of Love", "Demo 100%_"]);
   expect(titles(await list(owner, { sort: "year", dir: "desc" }))).toEqual(["Hounds Of Love", "Trans-Europe Express", "Gas 5", "Bitches Brew", "Abbey Road", "Kind Of Blue", "Demo 100%_"]);
 });
 
 test("Period sorts by the decade of the Original year, artist A to Z inside each Period, and says how many Copies each Period has", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   const page = await list(owner, { sort: "period" });
 
@@ -133,7 +135,7 @@ test("Period sorts by the decade of the Original year, artist A to Z inside each
 });
 
 test("recently added sorts newest first, or oldest first", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   const newest = titles(await list(owner, { sort: "added" }));
 
@@ -142,7 +144,7 @@ test("recently added sorts newest first, or oldest first", async () => {
 });
 
 test("every Copy carries both its Original year and its Pressing year, and its genres", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   const [abbey] = (await list(owner, { q: "abbey" })).copies;
 
@@ -150,7 +152,7 @@ test("every Copy carries both its Original year and its Pressing year, and its g
 });
 
 test("one search box matches artist, title, label, Catalog number, genre and style, in any case", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
   const search = async (q: string) => titles(await list(owner, { q, sort: "artist" })).sort();
 
   expect(await search("DAVIS")).toEqual(["Bitches Brew", "Kind Of Blue"]);
@@ -168,7 +170,7 @@ test("one search box matches artist, title, label, Catalog number, genre and sty
 });
 
 test("Period and genre filters combine with each other, with search and with every sort", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   expect(titles(await list(owner, { genre: "Rock", sort: "year", dir: "desc" }))).toEqual(["Hounds Of Love", "Gas 5", "Abbey Road"]);
   expect(titles(await list(owner, { genre: "Rock", period: "1970" }))).toEqual(["Gas 5"]);
@@ -181,7 +183,7 @@ test("Period and genre filters combine with each other, with search and with eve
 });
 
 test("the first page offers the Collection's Periods and genres with how many Copies each has, whatever the search", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   const { facets, next } = await list(owner, { q: "road", genre: "Rock" });
   const { facets: onLaterPages } = await list(owner, { limit: "2", cursor: (await list(owner, { limit: "2" })).next! });
@@ -205,7 +207,7 @@ test("the first page offers the Collection's Periods and genres with how many Co
 });
 
 test("Value groups say how many Copies each band has, with no Value its own group", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   const page = await list(owner);
 
@@ -220,7 +222,7 @@ test("Value groups say how many Copies each band has, with no Value its own grou
 });
 
 test("pages follow on from each other with no Copy missing or repeated, for every sort and direction", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   for (const sort of ["value", "artist", "year", "period", "added"]) {
     for (const dir of ["asc", "desc"]) {
@@ -234,7 +236,7 @@ test("pages follow on from each other with no Copy missing or repeated, for ever
 });
 
 test("a group split across two pages keeps its total on both", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
 
   const [first, second] = await everyPage(owner, { sort: "period", limit: "4" });
 
@@ -268,7 +270,7 @@ test("a page asks for at most 100 Copies and defaults to 50", async () => {
 });
 
 test("a sort, direction, filter, page size or cursor the app doesn't know is refused", async () => {
-  const { owner } = await collectionOfSeven();
+  const { owner } = await readOnly;
   const { next } = await list(owner, { limit: "2" });
 
   const refused: Record<string, string>[] = [

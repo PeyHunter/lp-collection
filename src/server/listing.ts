@@ -235,21 +235,20 @@ function runsOf(rows: ListedRow[]): ListGroup[] {
 
 export function createListing({ db }: Database) {
   async function facets(collectionId: string): Promise<Facets> {
-    const [periods, genres] = await Promise.all([
-      db.execute<{ period: number; count: string }>(sql`
-        select r.original_year / 10 * 10 as period, count(*) as count
+    const { rows } = await db.execute<{ period: number | null; genre: string | null; count: string }>(sql`
+      with mine as (
+        select r.original_year, r.genres
         from copies c join releases r on r.discogs_release_id = c.discogs_release_id
-        where c.collection_id = ${collectionId} and r.original_year is not null
-        group by 1 order by 1`),
-      db.execute<{ genre: string; count: string }>(sql`
-        select genre, count(*) as count
-        from copies c join releases r on r.discogs_release_id = c.discogs_release_id, unnest(r.genres) genre
         where c.collection_id = ${collectionId}
-        group by genre order by count(*) desc, genre`),
-    ]);
+      )
+      select original_year / 10 * 10 as period, null as genre, count(*) as count
+      from mine where original_year is not null group by 1
+      union all
+      select null, genre, count(*) from mine, unnest(genres) genre group by genre
+      order by period, count desc, genre`);
     return {
-      periods: periods.rows.map(({ period, count }) => ({ period: Number(period), count: Number(count) })),
-      genres: genres.rows.map(({ genre, count }) => ({ genre, count: Number(count) })),
+      periods: rows.filter((row) => row.period !== null).map(({ period, count }) => ({ period: Number(period), count: Number(count) })),
+      genres: rows.filter((row) => row.genre !== null).map(({ genre, count }) => ({ genre: genre!, count: Number(count) })),
     };
   }
 

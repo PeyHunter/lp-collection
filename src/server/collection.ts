@@ -438,7 +438,11 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
       valueBatches.set(key, batch);
     }
     const { sellerSettingsMissing, valued, more } = await batch;
-    const copies = (await Promise.all(valued.map((copyId) => oneCopy(member, copyId)))).filter((copy) => copy !== undefined);
+    const copies: CopyView[] = [];
+    for (const copyId of valued) {
+      const copy = await oneCopy(member, copyId);
+      if (copy) copies.push(copy);
+    }
     return c.json({ copies, sellerSettingsMissing, more, retryEmptyBefore: retryEmptyBefore?.toISOString() });
   });
 
