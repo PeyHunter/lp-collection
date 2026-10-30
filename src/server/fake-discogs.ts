@@ -9,6 +9,7 @@ export type FakeDiscogsScript = {
   releases?: FakeRelease[];
   unavailable?: boolean;
   loginStartFails?: boolean;
+  finishLoginDelayMs?: number;
 };
 
 export type FakeDiscogsRequest = (
@@ -107,6 +108,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     },
     async finishLogin({ requestToken, requestSecret, verifier }) {
       calls.finishLogin += 1;
+      if (script.finishLoginDelayMs) await new Promise((resolve) => setTimeout(resolve, script.finishLoginDelayMs));
       const login = pending.get(requestToken);
       if (!login || login.requestSecret !== requestSecret) throw new Error("Fake Discogs refused an unknown request token");
       if (!login.authorized || login.authorized.verifier !== verifier) throw new Error("Fake Discogs refused a wrong verifier");

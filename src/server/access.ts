@@ -261,22 +261,21 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     const cookielessSpender: LoginSpender | undefined = startedInThisBrowser ? undefined : attempt.inviteId ? { kind: "invite", inviteId: attempt.inviteId } : loggedOut(c);
     if (cookielessSpender) {
       if (!(await reserveVerifierCheck(requestToken))) return c.redirect(loginProblemPath(undefined, "expired"), 302);
-      const problem = loginBudget.check(cookielessSpender);
+      const problem = loginBudget.take(cookielessSpender);
       if (problem) return c.redirect(loginProblemPath(undefined, problem), 302);
-      // The Invite already paid for this login's start, so it pays again only for a verifier Discogs refuses.
-      if (cookielessSpender.kind === "logged-out") loginBudget.spend(cookielessSpender);
     }
 
     let identity: DiscogsIdentity;
     try {
       identity = await discogs.finishLogin({ requestToken, requestSecret, verifier });
     } catch (error) {
-      if (cookielessSpender?.kind === "invite") loginBudget.spend(cookielessSpender);
       console.error(`Discogs login failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.redirect(loginProblemPath(codeForThisBrowser, "failed"), 302);
     }
     // Discogs accepted the verifier, so this is the person who authorized; only their browser's cookie is missing.
     if (!startedInThisBrowser) {
+      // The Invite already paid for this login's start, so it pays again only for a verifier Discogs refuses.
+      if (cookielessSpender?.kind === "invite") loginBudget.refund(cookielessSpender);
       await claim();
       return c.redirect(loginProblemPath(code, "cookie-missing"), 302);
     }

@@ -38,21 +38,16 @@ export function createLoginBudget(now: () => Date) {
     }
   }
 
-  function check(spender: LoginSpender) {
-    return chargesFor(spender).find((charge) => !charge.hasRoom())?.problem;
-  }
-
-  function spend(spender: LoginSpender) {
-    for (const charge of chargesFor(spender)) charge.spend();
-  }
-
   return {
-    check,
-    spend,
+    /** Checks and spends in one synchronous step, so concurrent requests cannot all pass the check before any of them spends. */
     take(spender: LoginSpender) {
-      const problem = check(spender);
-      if (!problem) spend(spender);
+      const charges = chargesFor(spender);
+      const problem = charges.find((charge) => !charge.hasRoom())?.problem;
+      if (!problem) for (const charge of charges) charge.spend();
       return problem;
+    },
+    refund(spender: Extract<LoginSpender, { kind: "invite" }>) {
+      perInvite.of(spender.inviteId).refund();
     },
     size: () => perUser.size() + perInvite.size() + loggedOutPerDevice.size() + loggedOutTotal.size(),
   };
@@ -76,6 +71,10 @@ function fixedWindows({ count, windowMs }: Limit, clock: () => number) {
         const window = current(key);
         if (window) window.spent += 1;
         else windows.set(key, { start: clock(), spent: 1 });
+      },
+      refund() {
+        const window = current(key);
+        if (window && window.spent > 0) window.spent -= 1;
       },
     }),
     size: () => windows.size,

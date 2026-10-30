@@ -251,3 +251,24 @@ test("callbacks for an Invite's login that Discogs refuses still spend that Invi
   expect(allowed).toMatch(/^\/fake-discogs\//);
   expect(limited).toBe(`/invite/${code}?login=too-many`);
 });
+
+test("concurrent callbacks without the login cookie cannot make an Invite reach Discogs more than its budget allows", async () => {
+  const app = await createTestApp({ discogs: { finishLoginDelayMs: 100 } });
+  const code = await createInvite(app);
+  const before = app.discogs.calls.startLogin + app.discogs.calls.finishLogin;
+
+  const requestTokens: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    const [authorizeUrl] = await startLogins(app, 1, fromPhone(`192.0.2.${i}`), `/api/login?invite=${code}`);
+    requestTokens.push(new URL(authorizeUrl!, "http://fake").searchParams.get("oauth_token")!);
+  }
+  await Promise.all(
+    requestTokens.flatMap((requestToken) =>
+      [0, 1, 2].map((i) => app.request(`/api/login/callback?oauth_token=${requestToken}&oauth_verifier=junk-${i}`, { headers: fromPhone(`203.0.113.${i}`) })),
+    ),
+  );
+  const [afterwards] = await startLogins(app, 1, fromPhone("192.0.2.50"), `/api/login?invite=${code}`);
+
+  expect(app.discogs.calls.startLogin + app.discogs.calls.finishLogin - before).toBe(5);
+  expect(afterwards).toBe(`/invite/${code}?login=too-many`);
+});
