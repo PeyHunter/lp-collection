@@ -1,6 +1,8 @@
-import { devices, expect, test, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { expect, test, type Page } from "@playwright/test";
+import { loggedOut, ownerSession } from "./login.ts";
 
-const { defaultBrowserType: _browser, ...iPhone } = devices["iPhone 15"];
+test.use({ storageState: ownerSession });
 
 async function logInOnFakeDiscogs(page: Page, discogsUsername: string) {
   await page.getByRole("link", { name: "Log in with Discogs" }).click();
@@ -9,25 +11,23 @@ async function logInOnFakeDiscogs(page: Page, discogsUsername: string) {
   await page.getByRole("button", { name: "Authorize" }).click();
 }
 
-test("the app's Owner invites a friend, who gets their own Collection on their iPhone", async ({ page, browser, baseURL }) => {
+test("the app's Owner invites a friend, who gets their own Collection on their iPhone", async ({ page, browser }) => {
   await page.goto("/");
-  await expect(page.getByText("LP-Collection is invite only.")).toBeVisible();
-  await logInOnFakeDiscogs(page, "owner");
-  await expect(page.getByRole("heading", { name: "Your Collection" })).toBeVisible();
   await page.getByRole("button", { name: "Create Invite" }).click();
   const inviteUrl = await page.getByLabel("Invite link").inputValue();
   await expect(page.getByText(/^Works once\. Expires /)).toBeVisible();
 
-  const friendContext = await browser.newContext({ ...iPhone, baseURL });
+  const friendContext = await browser.newContext({ storageState: loggedOut });
   const friend = await friendContext.newPage();
   await friend.goto(inviteUrl);
   await expect(friend.getByRole("heading", { name: "You're invited to LP-Collection" })).toBeVisible();
-  await logInOnFakeDiscogs(friend, "friend");
+  const username = `friend-${randomUUID().slice(0, 8)}`;
+  await logInOnFakeDiscogs(friend, username);
 
   await expect(friend.getByRole("heading", { name: "LP-Collection" })).toBeVisible();
   await expect(friend.getByRole("heading", { name: "Your Collection" })).toBeVisible();
   await expect(friend.getByText("No Copies yet.")).toBeVisible();
-  await expect(friend.getByText("Logged in as friend.")).toBeVisible();
+  await expect(friend.getByText(`Logged in as ${username}.`)).toBeVisible();
   await expect(friend.getByRole("button", { name: "Create Invite" })).toHaveCount(0);
 
   await friend.reload();
@@ -41,23 +41,23 @@ test("the app's Owner invites a friend, who gets their own Collection on their i
   await friendContext.close();
 });
 
-test("an invitee whose browser lost the login cookie is told why and can log in again from their Invite", async ({ page, browser, baseURL }) => {
+test("an invitee whose browser lost the login cookie is told why and can log in again from their Invite", async ({ page, browser }) => {
   await page.goto("/");
-  await logInOnFakeDiscogs(page, "owner");
   await page.getByRole("button", { name: "Create Invite" }).click();
   const inviteUrl = await page.getByLabel("Invite link").inputValue();
 
-  const friendContext = await browser.newContext({ ...iPhone, baseURL });
+  const friendContext = await browser.newContext({ storageState: loggedOut });
   const friend = await friendContext.newPage();
   await friend.goto(inviteUrl);
   await friend.getByRole("link", { name: "Log in with Discogs" }).click();
   await friendContext.clearCookies();
-  await friend.getByLabel("Discogs username").fill("cookieless-friend");
+  const username = `cookieless-friend-${randomUUID().slice(0, 8)}`;
+  await friend.getByLabel("Discogs username").fill(username);
   await friend.getByRole("button", { name: "Authorize" }).click();
 
   await expect(friend.getByRole("heading", { name: "You're invited to LP-Collection" })).toBeVisible();
   await expect(friend.getByRole("alert")).toContainText("Your Discogs login didn't finish because this browser didn't keep its login cookie.");
-  await logInOnFakeDiscogs(friend, "cookieless-friend");
-  await expect(friend.getByText("Logged in as cookieless-friend.")).toBeVisible();
+  await logInOnFakeDiscogs(friend, username);
+  await expect(friend.getByText(`Logged in as ${username}.`)).toBeVisible();
   await friendContext.close();
 });

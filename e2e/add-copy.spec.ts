@@ -1,12 +1,5 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
-
-async function logInAsOwner(page: Page) {
-  await page.goto("/");
-  await page.getByRole("link", { name: "Log in with Discogs" }).click();
-  await page.getByLabel("Discogs username").fill("owner");
-  await page.getByRole("button", { name: "Authorize" }).click();
-  await expect(page.getByRole("heading", { name: "Your Collection" })).toBeVisible();
-}
+import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "./login.ts";
 
 async function pixelAt(page: Page, x: number, y: number) {
   const png = await page.screenshot({ clip: { x, y, width: 1, height: 1 } });
@@ -25,8 +18,8 @@ async function box(locator: Locator) {
   return found!;
 }
 
-test("the Owner types a barcode, picks one of several pressings and finds the new Copy in the Collection", async ({ page }) => {
-  await logInAsOwner(page);
+test("a User types a barcode, picks one of several pressings and finds the new Copy in the Collection", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "collector");
 
   await page.getByRole("link", { name: "Scan" }).click();
   await expect(page.getByRole("heading", { name: "Add a record" })).toBeVisible();
@@ -52,8 +45,8 @@ test("the Owner types a barcode, picks one of several pressings and finds the ne
   await expect(page.getByRole("status")).toHaveCount(0);
 });
 
-test("the tint on a just-saved Copy leaves room around the cover and the Value", async ({ page }) => {
-  await logInAsOwner(page);
+test("the tint on a just-saved Copy leaves room around the cover and the Value", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "collector");
   await page.getByRole("link", { name: "Scan" }).click();
   await page.getByRole("textbox", { name: "Barcode" }).fill("190295328709");
   await page.getByRole("button", { name: "Look up" }).click();
@@ -71,8 +64,8 @@ test("the tint on a just-saved Copy leaves room around the cover and the Value",
   expect(await pixelAt(page, value.x + value.width + 6, middle)).not.toBe(background);
 });
 
-test("at 150% text size the bottom bar labels fit inside the screen", async ({ page }) => {
-  await logInAsOwner(page);
+test("at 150% text size the bottom bar labels fit inside the screen", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "collector");
   await page.addStyleTag({ content: "html { font-size: 150%; }" });
 
   const viewport = page.viewportSize()!;

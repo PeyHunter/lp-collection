@@ -2,13 +2,15 @@ import { defineConfig, devices } from "@playwright/test";
 
 // Set E2E_PORT to a unique value when several checkouts run browser tests at once.
 const port = Number(process.env.E2E_PORT ?? 4173);
+// iPhone screen size and touch; Chromium stands in for Safari so it runs without system packages.
+const iPhone = { ...devices["iPhone 15"], defaultBrowserType: "chromium" as const };
 
 export default defineConfig({
   testDir: "e2e",
   use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
   projects: [
-    // iPhone screen size and touch; Chromium stands in for Safari so it runs without system packages.
-    { name: "iphone", use: { ...devices["iPhone 15"], defaultBrowserType: "chromium" } },
+    { name: "owner-login", testMatch: "owner.setup.ts", use: iPhone },
+    { name: "iphone", use: iPhone, dependencies: ["owner-login"] },
   ],
   webServer: {
     command: "npm run build && node e2e/serve.ts",

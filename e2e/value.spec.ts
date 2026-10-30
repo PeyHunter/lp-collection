@@ -1,33 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { devices, expect, test, type APIRequestContext, type Page } from "@playwright/test";
-
-const { defaultBrowserType: _browser, ...iPhone } = devices["iPhone 15"];
-
-let owner: APIRequestContext;
-
-test.beforeAll(async ({ browser, baseURL }) => {
-  const context = await browser.newContext({ ...iPhone, baseURL });
-  const page = await context.newPage();
-  await page.goto("/");
-  await page.getByRole("link", { name: "Log in with Discogs" }).click();
-  await page.getByLabel("Discogs username").fill("owner");
-  await page.getByRole("button", { name: "Authorize" }).click();
-  await expect(page.getByRole("heading", { name: "Your Collection" })).toBeVisible();
-  owner = context.request;
-});
-
-async function logInAsNewUser(page: Page, name: string) {
-  const invite = await owner.post("/api/invites");
-  expect(invite.ok()).toBe(true);
-  const { url } = (await invite.json()) as { url: string };
-  await page.goto(url);
-  await page.getByRole("link", { name: "Log in with Discogs" }).click();
-  const username = `${name}-${randomUUID().slice(0, 8)}`;
-  await page.getByLabel("Discogs username").fill(username);
-  await page.getByRole("button", { name: "Authorize" }).click();
-  await expect(page.getByRole("heading", { name: "Your Collection" })).toBeVisible();
-  return username;
-}
+import type { Page } from "@playwright/test";
+import { expect, test } from "./login.ts";
 
 async function addByBarcode(page: Page, barcode: string, title: string, pressing?: string) {
   await page.getByRole("link", { name: "Scan" }).click();
@@ -39,7 +11,7 @@ async function addByBarcode(page: Page, barcode: string, title: string, pressing
   await expect(page.getByRole("status")).toHaveText(`Added ${title} to your Collection.`);
 }
 
-test("a User saves a Copy, sees its Value in kroner, changes the Media condition and sees the new Value", async ({ page }) => {
+test("a User saves a Copy, sees its Value in kroner, changes the Media condition and sees the new Value", async ({ page, logInAsNewUser }) => {
   await logInAsNewUser(page, "collector");
   await addByBarcode(page, "886979891211", "Kind Of Blue", "Sony Music");
 
@@ -68,7 +40,7 @@ test("a User saves a Copy, sees its Value in kroner, changes the Media condition
   await expect(row).toContainText("Media NM or M- · Sleeve Generic");
 });
 
-test("a Release with no price suggestion says No Value yet and stays in the list", async ({ page }) => {
+test("a Release with no price suggestion says No Value yet and stays in the list", async ({ page, logInAsNewUser }) => {
   await logInAsNewUser(page, "collector");
   await addByBarcode(page, "5099969209017", "Gas 5");
 
@@ -78,7 +50,7 @@ test("a Release with no price suggestion says No Value yet and stays in the list
   await expect(page.getByRole("region", { name: "Value" })).toContainText("Lowest listing 90 kr, any condition");
 });
 
-test("a User without Discogs seller settings is guided once to fill them in, then sees Values", async ({ page, context }) => {
+test("a User without Discogs seller settings is guided once to fill them in, then sees Values", async ({ page, context, logInAsNewUser }) => {
   const username = await logInAsNewUser(page, "no-seller-settings");
   await addByBarcode(page, "190295328709", "Discovery");
 
@@ -101,7 +73,7 @@ test("a User without Discogs seller settings is guided once to fill them in, the
   await expect(page.getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("252 kr");
 });
 
-test("changing the currency shows every Copy's Value in the new currency", async ({ page }) => {
+test("changing the currency shows every Copy's Value in the new currency", async ({ page, logInAsNewUser }) => {
   await logInAsNewUser(page, "collector");
   await addByBarcode(page, "190295328709", "Discovery");
   await addByBarcode(page, "886979891211", "Kind Of Blue", "Sony Music");
