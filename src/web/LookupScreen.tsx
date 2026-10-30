@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import type { CopyView } from "../server/collection.ts";
 import type { ReleaseCandidate } from "../server/discogs.ts";
 import { Cover } from "./Cover.tsx";
 import { Header } from "./Header.tsx";
 import { navigate } from "./navigation.ts";
+import { Scanner } from "./Scanner.tsx";
 
 type Save = { kind: "ready" } | { kind: "saving" } | { kind: "failed"; message: string };
 
@@ -24,10 +25,9 @@ export function LookupScreen({ collectionId }: { collectionId: string }) {
   const [typed, setTyped] = useState("");
   const [lookup, setLookup] = useState<Lookup>({ kind: "idle" });
 
-  async function lookUp(event: FormEvent) {
-    event.preventDefault();
+  async function lookUp(digits: string) {
     setLookup({ kind: "looking" });
-    const response = await fetch(`/api/collections/${collectionId}/lookup?barcode=${encodeURIComponent(typed)}`).catch(() => undefined);
+    const response = await fetch(`/api/collections/${collectionId}/lookup?barcode=${encodeURIComponent(digits)}`).catch(() => undefined);
     if (!response) return setLookup({ kind: "failed", message: unreachable });
     if (!response.ok) return setLookup({ kind: "failed", message: await errorMessage(response) });
     const { barcode, candidates } = (await response.json()) as { barcode: string; candidates: ReleaseCandidate[] };
@@ -53,7 +53,20 @@ export function LookupScreen({ collectionId }: { collectionId: string }) {
     <>
       <Header kicker="Lookup" title="Add a record" back="/" />
       <main className="content-grid">
-        <form className="section" onSubmit={lookUp} aria-labelledby="type-heading">
+        <Scanner
+          onRead={(barcode) => {
+            setTyped(barcode);
+            void lookUp(barcode);
+          }}
+        />
+        <form
+          className="section"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void lookUp(typed);
+          }}
+          aria-labelledby="type-heading"
+        >
           <div className="section-head">
             <h2 id="type-heading">Type the barcode</h2>
           </div>

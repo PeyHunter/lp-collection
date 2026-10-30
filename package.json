@@ -20,7 +20,8 @@
     "hono": "^4.13.14",
     "pg": "^8.23.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "zxing-wasm": "3.1.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

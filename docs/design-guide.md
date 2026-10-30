@@ -204,6 +204,10 @@ Every screen that fetches has all three, in the place the content would go.
 
 A candidate is a list row whose title is a button. The meta line wraps, so the year, country, label, Catalog number and format all show. Tapping a candidate marks it with an `--accent` check and opens a save panel under it: a `--accent` bordered card that says which conditions the Copy will be saved with, and the primary "Add to Collection" button. A single match opens its panel at once.
 
+### Scanner
+
+The Lookup screen opens with "Scan the barcode". The camera fills a 4:3 `--sunk` box with `--radius-m` corners. A frame of four `--ink` corners and an `--accent` line marks where to hold the barcode, and a dark pill at the bottom says "Hold the barcode inside the frame". "Camera on" sits at the end of the section heading while the camera runs. After a read, the box gives way to one row: "Read" and the digits, and a quiet "Scan another" button. When the camera is blocked or missing, a `--surface` card says why and points to the typed field below, with a quiet "Try the camera again" when trying again can help. The typed field always stays.
+
 ### Shelf (first sketch)
 
 The shelf screen is exploratory and not final. The Owner photographs a shelf, and the app lays a grid over the photo. Columns get letters and rows get numbers, so a 4 by 6 cube shelf has squares A1 to D6. A looked-up Copy's square gets a thick `--accent` outline and a "C4" marker in `--accent-fill`, and the other squares dim. The Copy screen shows the same square in a small "Where it lives" map.
