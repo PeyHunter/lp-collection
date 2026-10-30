@@ -69,5 +69,6 @@ All helpers are in `.claude/skills/verify-lp-collection/bin/` and run with plain
 | `doctor.ts` | `<run-id>` | read-only health and build check; `HEALTHY` / `UNHEALTHY` |
 | `look.ts` | `<run-id> <path> <name>` | iPhone-size screenshot, accessibility snapshot, console errors |
 | `stop.ts` | `<run-id>` | orderly teardown, keeps evidence |
+| `drive-value.ts` | `<run-id>` | drives the Value recipe in `features/value.md` on a fresh run and saves its screenshots |
 
 Playwright's Chromium must be installed once: `npx playwright install chromium`.
