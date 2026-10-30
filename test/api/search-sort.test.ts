@@ -1,11 +1,11 @@
 import { expect, test } from "vitest";
-import type { CopyView } from "../../src/server/collection.ts";
+import type { CopyWithValues } from "../../src/server/collection.ts";
 import { priceLadder, type FakeDiscogsScript, type FakeRelease } from "../../src/server/fake-discogs.ts";
 import { invitedFriend, logInWithCollection, saveCopy, type Member } from "../support/members.ts";
 import { createTestApp } from "../support/test-app.ts";
 
 type ListPage = {
-  copies: CopyView[];
+  copies: CopyWithValues[];
   total: number;
   groups: { key: string; total: number; length: number }[];
   next: string | null;

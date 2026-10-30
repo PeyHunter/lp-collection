@@ -14,6 +14,7 @@ export const users = pgTable("users", {
   discogsAccessSecret: text("discogs_access_secret").notNull(),
   currency: currency("currency").notNull().default(defaultCurrency),
   sellerSettingsMissing: boolean("seller_settings_missing").notNull().default(false),
+  showValues: boolean("show_values").notNull().default(true),
   createdAt: at("created_at").notNull(),
 });
 

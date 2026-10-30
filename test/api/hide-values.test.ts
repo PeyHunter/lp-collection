@@ -68,12 +68,13 @@ test("with Values off, no Copy answer carries a Value, Lowest listing, Gain, Pur
   const { owner, copyId } = await ownerWithPricedCopy(app);
   await showValues(app, owner, false);
 
+  const save = await body(saveCopy(owner, gas5));
   const answers = {
+    save,
     list: await body(owner.as("/copies")),
     listByArtist: await body(owner.as("/copies?sort=artist")),
     copy: await body(owner.as(`/copies/${copyId}`)),
     patch: await body(owner.as(`/copies/${copyId}`, json("PATCH", { note: "Signed" }))),
-    save: await body(saveCopy(owner, gas5)),
   };
 
   for (const [name, answer] of Object.entries(answers)) {

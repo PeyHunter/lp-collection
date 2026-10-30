@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { CopyView } from "../../src/server/collection.ts";
+import type { CopyWithValues } from "../../src/server/collection.ts";
 import { priceLadder, sampleReleases, type FakeDiscogsScript } from "../../src/server/fake-discogs.ts";
 import { invitedFriend, listCopies, logInWithCollection, saveCopy, type Member } from "../support/members.ts";
 import { createTestApp } from "../support/test-app.ts";
@@ -12,7 +12,7 @@ const priced: FakeDiscogsScript = {
   prices: { [discovery]: priceLadder(40) },
 };
 
-type CopyAnswer = { copy: CopyView; sellerSettingsMissing: boolean };
+type CopyAnswer = { copy: CopyWithValues; sellerSettingsMissing: boolean };
 
 async function saved(user: Member, discogsReleaseId = discovery) {
   const response = await saveCopy(user, discogsReleaseId);

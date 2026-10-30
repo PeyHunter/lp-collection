@@ -40,7 +40,7 @@ test("a valid Invite lets a new person log in with Discogs and gives them their 
   const ownerMe = await me(app, owner);
   expect(friend).toEqual({
     status: 200,
-    body: { discogsUsername: "friend", canCreateInvites: false, collection: { id: expect.any(String) }, currency: "DKK", sellerSettingsUrl: "/fake-discogs/settings/seller" },
+    body: { discogsUsername: "friend", canCreateInvites: false, collection: { id: expect.any(String) }, currency: "DKK", showValues: true, sellerSettingsUrl: "/fake-discogs/settings/seller" },
   });
   expect(friend.body.collection.id).not.toBe(ownerMe.body.collection.id);
 });

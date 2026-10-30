@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { CopyView } from "../../src/server/collection.ts";
+import type { CopyWithValues } from "../../src/server/collection.ts";
 import { priceLadder, sampleReleases, type FakeDiscogsScript } from "../../src/server/fake-discogs.ts";
 import { invitedFriend, listCopies, logInWithCollection, saveCopy, type Member } from "../support/members.ts";
 import { createTestApp } from "../support/test-app.ts";
@@ -15,7 +15,7 @@ const priced: FakeDiscogsScript = {
   sellerSettingsMissingFor: (discogsUsername) => discogsUsername === "no-seller-settings",
 };
 
-type CopyAnswer = { copy: CopyView; sellerSettingsMissing: boolean };
+type CopyAnswer = { copy: CopyWithValues; sellerSettingsMissing: boolean };
 
 async function saved(user: Member, discogsReleaseId: number) {
   const response = await saveCopy(user, discogsReleaseId);
@@ -185,7 +185,7 @@ test("when Discogs refuses because the seller settings are missing, the User is 
   const retried = await friend.as("/values", { method: "POST" });
 
   expect(retried.status).toBe(200);
-  const { copies, sellerSettingsMissing } = (await retried.json()) as { copies: CopyView[]; sellerSettingsMissing: boolean };
+  const { copies, sellerSettingsMissing } = (await retried.json()) as { copies: CopyWithValues[]; sellerSettingsMissing: boolean };
   expect(sellerSettingsMissing).toBe(false);
   expect(copies.map((copy) => copy.value?.value)).toEqual([null, 223.8]);
   expect(await (await friend.as("/copies")).json()).toMatchObject({ sellerSettingsMissing: false });
@@ -242,7 +242,7 @@ test("only Members see a Copy, change its conditions or fetch its Values", async
   expect(await listCopies(owner)).toMatchObject([{ mediaCondition: "Very Good Plus (VG+)", value: { value: 223.8 } }]);
 });
 
-type ValuesAnswer = { copies: CopyView[]; sellerSettingsMissing: boolean; more: boolean; retryEmptyBefore?: string };
+type ValuesAnswer = { copies: CopyWithValues[]; sellerSettingsMissing: boolean; more: boolean; retryEmptyBefore?: string };
 
 async function fetchValues(user: Member, body?: object) {
   const response = await user.as("/values", {
@@ -288,7 +288,7 @@ test("Copies with no Value for their Media condition get one a few at a time, an
 
   expect([first.more, second.more, third.more]).toEqual([true, false, false]);
   expect(first.copies.map((copy) => copy.value?.value)).toEqual(Array(5).fill(223.8));
-  const list = (await listCopies(owner)) as CopyView[];
+  const list = (await listCopies(owner)) as CopyWithValues[];
   const valuesOf = (discogsReleaseId: number) =>
     list.filter((copy) => copy.release.discogsReleaseId === discogsReleaseId).map((copy) => copy.value?.value);
   expect([valuesOf(discovery), valuesOf(gas5)]).toEqual([Array(8).fill(223.8), [null]]);
@@ -309,7 +309,7 @@ test("Values are fetched once when the list asks for them twice at the same time
   const answers = await Promise.all([fetchValues(owner), fetchValues(owner)]);
 
   expect(answers.map((answer) => answer.copies.map((copy) => copy.value?.value))).toEqual([Array(2).fill(223.8), Array(2).fill(223.8)]);
-  expect(((await listCopies(owner)) as CopyView[]).map((copy) => copy.value?.value)).toEqual(Array(3).fill(223.8));
+  expect(((await listCopies(owner)) as CopyWithValues[]).map((copy) => copy.value?.value)).toEqual(Array(3).fill(223.8));
   expect(priceSuggestionsAsked(app)).toEqual(Array(2).fill(discovery));
 });
 
@@ -332,7 +332,7 @@ test("the seller settings guide fetches again the Copies that Discogs gave no Va
   const third = await fetchValues(owner, { retryEmptyBefore: first.retryEmptyBefore });
 
   expect([first.more, second.more, third.more]).toEqual([true, false, false]);
-  const list = (await listCopies(owner)) as CopyView[];
+  const list = (await listCopies(owner)) as CopyWithValues[];
   const valuesOf = (discogsReleaseId: number) =>
     list.filter((copy) => copy.release.discogsReleaseId === discogsReleaseId).map((copy) => copy.value?.value);
   expect([valuesOf(gas5), valuesOf(kindOfBlueEurope)]).toEqual([Array(3).fill(111.9), Array(3).fill(null)]);
@@ -377,7 +377,7 @@ test("a Copy whose Value keeps failing doesn't hold up the others, and isn't ask
   const second = await fetchValues(owner);
 
   expect(first.copies.map((copy) => copy.value?.value)).toEqual([223.8, 223.8, 223.8]);
-  expect(((await listCopies(owner)) as CopyView[]).map((copy) => copy.value?.value ?? null)).toEqual([223.8, 223.8, 223.8, null]);
+  expect(((await listCopies(owner)) as CopyWithValues[]).map((copy) => copy.value?.value ?? null)).toEqual([223.8, 223.8, 223.8, null]);
   expect(second.more).toBe(false);
   expect(priceSuggestionsAsked(app)).toEqual([kindOfBlueEurope, discovery, discovery, discovery]);
 
