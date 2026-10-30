@@ -35,9 +35,33 @@ test("a User saves a Copy, sees its Value in kroner, changes the Media condition
   await expect(page.getByLabel("Media condition")).toHaveValue("Near Mint (NM or M-)");
   await expect(page.getByLabel("Sleeve condition")).toHaveValue("Generic");
 
+  const purchase = page.getByRole("region", { name: "Purchase" });
+  await purchase.getByLabel("Purchase price").fill("100");
+  await purchase.getByLabel("Purchase date").fill("2019-03-12");
+  await purchase.getByRole("button", { name: "Save purchase" }).click();
+  await expect(purchase.getByRole("status")).toHaveText("The purchase saved.");
+  await expect(value).toContainText("Gain +79 kr");
+  await expect(value).toContainText("Paid 100 kr on 12 Mar 2019");
+  const note = page.getByRole("region", { name: "Note" });
+  await note.getByRole("textbox", { name: "Note" }).fill("Bought at the flea market.");
+  await note.getByRole("button", { name: "Save note" }).click();
+  await expect(note.getByRole("status")).toHaveText("The note saved.");
+
   await page.getByRole("link", { name: "Back" }).click();
   await expect(row).toContainText("179 kr");
   await expect(row).toContainText("Media NM or M- · Sleeve Generic");
+
+  await row.getByRole("link", { name: "Kind Of Blue" }).click();
+  await expect(value.getByText("Gain +79 kr")).toBeInViewport({ ratio: 1 });
+  await expect(value.locator(".amount")).toBeInViewport({ ratio: 1 });
+  await expect(note.getByRole("textbox", { name: "Note" })).toHaveValue("Bought at the flea market.");
+  await purchase.getByLabel("Purchase price").fill("250");
+  await purchase.getByRole("button", { name: "Save purchase" }).click();
+  await expect(value).toContainText("Gain −71 kr");
+  await purchase.getByRole("button", { name: "Clear" }).click();
+  await expect(purchase.getByRole("status")).toHaveText("The purchase saved.");
+  await expect(value).not.toContainText("Gain");
+  await expect(value).not.toContainText("Paid");
 });
 
 test("a Release with no price suggestion says No Value yet and stays in the list", async ({ page, logInAsNewUser }) => {

@@ -15,7 +15,7 @@ A Member can take or pick photos of a Copy on its Copy page to show its real con
 
 ## How to get to it (user POV)
 
-- Copy page (`/copies/<id>`): the big picture at the top, the region "Photos" after "Condition", and "Delete this Copy" at the end.
+- Copy page (`/copies/<id>`): the big picture at the top, the region "Photos" after "Note", and "Delete this Copy" at the end.
 - Collection (`/`): each row's thumbnail.
 - API: `POST /api/collections/<id>/copies/<copyId>/photos` with the JPEG bytes as the body (answers `201` and `{ copy }`), `GET` and `DELETE /api/collections/<id>/copies/<copyId>/photos/<photoId>` (the delete answers `{ copy }`), `DELETE /api/collections/<id>/copies/<copyId>` (`204`). Every Copy answer carries `photos` (`id`, `url`, `width`, `height`) and `pictureUrl`.
 

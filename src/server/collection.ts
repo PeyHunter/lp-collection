@@ -3,7 +3,8 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
-import { conditions, sleeveConditions, type Condition, type DiscogsAuth, type LookupQuery, type LookupResult, type ReleaseCandidate, type SleeveCondition } from "./discogs.ts";
+import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
+import type { DiscogsAuth, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
 import type { SecretBox } from "./secret-box.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { barcodeLookupCache, copies, memberships, photos, releases, users } from "./schema.ts";
@@ -21,14 +22,6 @@ const maxTypedLength = 100;
 function parseBarcode(typed: string) {
   const digits = typed.replaceAll(/[\s-]/g, "");
   return /^(\d{8}|\d{12,14})$/.test(digits) ? digits : undefined;
-}
-
-function parseConditions(body: unknown): { mediaCondition?: Condition; sleeveCondition?: SleeveCondition } | undefined {
-  const { mediaCondition, sleeveCondition } = (body ?? {}) as Record<string, unknown>;
-  if (mediaCondition === undefined && sleeveCondition === undefined) return undefined;
-  if (mediaCondition !== undefined && !(conditions as readonly unknown[]).includes(mediaCondition)) return undefined;
-  if (sleeveCondition !== undefined && !(sleeveConditions as readonly unknown[]).includes(sleeveCondition)) return undefined;
-  return { mediaCondition: mediaCondition as Condition | undefined, sleeveCondition: sleeveCondition as SleeveCondition | undefined };
 }
 
 function tidy(typed: string | undefined) {
@@ -68,14 +61,20 @@ function photoView(collectionId: string, photo: typeof photos.$inferSelect): Pho
   return { id: photo.id, url: `/api/collections/${collectionId}/copies/${photo.copyId}/photos/${photo.id}`, width: photo.width, height: photo.height };
 }
 
-function copyView(row: { copy: typeof copies.$inferSelect; release: typeof releases.$inferSelect }, value: CopyValue | undefined, photos: PhotoView[]) {
+type CopyRow = { copy: typeof copies.$inferSelect; release: typeof releases.$inferSelect };
+
+function copyView(row: CopyRow, value: CopyValue | undefined, gain: number | null, photos: PhotoView[]) {
   const { fetchedAt: _, ...release } = row.release;
   return {
     id: row.copy.id,
     mediaCondition: row.copy.mediaCondition,
     sleeveCondition: row.copy.sleeveCondition,
     addedAt: row.copy.createdAt.toISOString(),
+    note: row.copy.note,
+    purchasePrice: purchaseOf(row.copy),
+    purchaseDate: row.copy.purchaseDate,
     value: value ?? null,
+    gain,
     photos,
     pictureUrl: photos[0]?.url ?? release.coverImageUrl,
     release,
@@ -181,6 +180,15 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     return byCopy;
   }
 
+  async function views(collectionId: string, rows: CopyRow[], values: Map<string, CopyValue>) {
+    const ids = rows.map((row) => row.copy.id);
+    const [photosByCopy, gains] = await Promise.all([
+      photosOf(collectionId, ids),
+      Promise.all(rows.map((row) => gainOf(values.get(row.copy.id), purchaseOf(row.copy), exchangeRates))),
+    ]);
+    return rows.map((row, index) => copyView(row, values.get(row.copy.id), gains[index]!, photosByCopy.get(row.copy.id)!));
+  }
+
   async function collectionCopies({ collectionId, currency }: Member) {
     const [rows, values] = await Promise.all([
       db
@@ -191,8 +199,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
         .orderBy(desc(copies.createdAt), desc(copies.id)),
       valuation.currentValues({ collectionId }, currency),
     ]);
-    const photosByCopy = await photosOf(collectionId, rows.map((row) => row.copy.id));
-    return rows.map((row) => copyView(row, values.get(row.copy.id), photosByCopy.get(row.copy.id)!));
+    return views(collectionId, rows, values);
   }
 
   async function oneCopy({ collectionId, currency }: Member, copyId: string) {
@@ -203,8 +210,8 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
       .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
       .where(and(eq(copies.id, copyId), eq(copies.collectionId, collectionId)));
     if (!row) return undefined;
-    const [values, photosByCopy] = await Promise.all([valuation.currentValues({ copyId }, currency), photosOf(collectionId, [copyId])]);
-    return copyView(row, values.get(copyId), photosByCopy.get(copyId)!);
+    const [copy] = await views(collectionId, [row], await valuation.currentValues({ copyId }, currency));
+    return copy;
   }
 
   routes.get("/api/collections/:collectionId/lookup", async (c) => {
@@ -267,10 +274,13 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     const copyId = c.req.param("copyId");
     const before = await oneCopy(member, copyId);
     if (!before) return c.json({ error: "No such Copy" }, 404);
-    const changes = parseConditions(await c.req.json().catch(() => undefined));
-    if (!changes) return c.json({ error: "Say the new Media condition or Sleeve condition on the Discogs scale." }, 400);
+    const parsed = parseCopyChanges(await c.req.json().catch(() => undefined), now());
+    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    const { changes } = parsed;
     const [copy] = await db.update(copies).set(changes).where(eq(copies.id, copyId)).returning();
-    const outcome = copy!.mediaCondition !== before.mediaCondition || !before.value ? await valuation.fetchValue(copy!, member) : undefined;
+    const conditionChanged = changes.mediaCondition !== undefined || changes.sleeveCondition !== undefined;
+    const outcome =
+      conditionChanged && (copy!.mediaCondition !== before.mediaCondition || !before.value) ? await valuation.fetchValue(copy!, member) : undefined;
     return c.json({
       copy: await oneCopy(member, copyId),
       sellerSettingsMissing: sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing),
