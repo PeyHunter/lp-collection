@@ -7,7 +7,7 @@ A logged-in User taps Scan, types the barcode from a record's sleeve, and sees t
 - `lookup-single` shows "1 Release matches" with the save panel already open.
 - `lookup-several` shows "N Releases match", the hint to check the label and year, and opens the save panel under the tapped pressing.
 - `lookup-none` says no Release on Discogs has that barcode.
-- `lookup-invalid` refuses anything but 8, 12, 13 or 14 digits with "Type all the digits under the barcode: 8, 12 or 13 of them." Spaces and dashes are fine.
+- `lookup-invalid` refuses anything but 8, 12, 13 or 14 digits with "Type all the digits under the barcode: 8, 12, 13 or 14 of them." Spaces and dashes are fine.
 - `save-copy` creates a Copy at Very Good Plus for both conditions, returns to the Collection with "Added <title> to your Collection." and the new row tinted.
 - `collection-list` lists the Collection's Copies, newest first, with the Original year, label, Catalog number and both conditions. An empty Collection says "No Copies yet." with "Add your first record".
 - `release-cache` asks Discogs once per barcode and once per Release. Not visible in the UI; `test/api/add-copy.test.ts` asserts it through the fake's recorded calls.
@@ -30,7 +30,7 @@ Preconditions:
 - **Several matches, pick, save.** Write a Playwright script in the evidence folder with `devices["iPhone 15"]`. Log in as `owner`. Expect "No Copies yet.". Tap the link "Scan", fill the textbox "Barcode" with `886979891211`, tap "Look up". Expect the heading "3 Releases match". In the list item with the text "2010 · Europe · Columbia", tap the button "Kind Of Blue", then "Add to Collection". Expect the status "Added Kind Of Blue to your Collection." and a list item with "Kind Of Blue", "1959 · Columbia · 88697 98912 1" and "Media VG+ · Sleeve VG+".
 - **Stored.** Reload. The same list item is still there and the status is gone. Save `curl -s -i -b 'lp_session=<cookie>' <appUrl>/api/collections/<id>/copies` as `copies.http.txt` if you have the cookie from the script's context.
 - **No match.** On `/lookup`, look up `4006381333931`. Expect "No Release on Discogs has the barcode 4006381333931."
-- **Not a barcode.** Look up `kind of blue`. Expect the alert "Type all the digits under the barcode: 8, 12 or 13 of them."
+- **Not a barcode.** Look up `kind of blue`. Expect the alert "Type all the digits under the barcode: 8, 12, 13 or 14 of them."
 - **Members only.** Not drivable from the UI, which only ever opens the User's own Collection. `test/api/add-copy.test.ts` covers it. Report `members-only` as covered by tests, not driven.
 
 ## Gotchas

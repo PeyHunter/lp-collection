@@ -99,9 +99,19 @@ test("a barcode Discogs doesn't know finds no Releases, and something that isn't
   expect(unknown.status).toBe(200);
   expect(await unknown.json()).toEqual({ barcode: "4006381333931", candidates: [] });
   expect(notABarcode.status).toBe(400);
-  expect(await notABarcode.json()).toEqual({ error: "Type all the digits under the barcode: 8, 12 or 13 of them." });
+  expect(await notABarcode.json()).toEqual({ error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." });
   expect(tenDigits.status).toBe(400);
   expect(app.discogs.requests).toHaveLength(1);
+});
+
+test("a 14-digit barcode is looked up like any other", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases } });
+  const owner = await logInWithCollection(app);
+
+  const response = await owner.as(`/lookup?barcode=0${discovery}`);
+
+  expect(response.status).toBe(200);
+  expect(app.discogs.requests).toMatchObject([{ endpoint: "search", barcode: `0${discovery}` }]);
 });
 
 test("saving a picked Release creates a Copy with both conditions Very Good Plus, shown in the Collection", async () => {
@@ -248,5 +258,16 @@ test("when Discogs can't be reached the Lookup and the save say so instead of fa
   expect(lookup.status).toBe(502);
   expect(await lookup.json()).toEqual({ error: "Discogs didn't answer. Try again in a moment." });
   expect(save.status).toBe(502);
+  expect(await listCopies(owner)).toEqual([]);
+});
+
+test("saving a Release id Discogs doesn't have is refused as not found, and no Copy is made", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases } });
+  const owner = await logInWithCollection(app);
+
+  const save = await saveCopy(owner, 999999999);
+
+  expect(save.status).toBe(404);
+  expect(await save.json()).toEqual({ error: "Discogs has no Release 999999999. Look up the barcode again and pick a Release from the list." });
   expect(await listCopies(owner)).toEqual([]);
 });

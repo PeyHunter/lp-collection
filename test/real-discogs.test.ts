@@ -61,6 +61,14 @@ const noMasterRelease = {
   year: 0,
 };
 
+const lostMasterRelease = {
+  id: 9100001,
+  title: "Odds & Ends",
+  artists: [{ name: "Someone" }],
+  year: 1987,
+  master_id: 404404,
+};
+
 async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
   const received: Received[] = [];
   let throttled = 0;
@@ -84,6 +92,8 @@ async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
       json({ id: 5460, title: "Kind Of Blue", year: 1959 });
     } else if (path === "/releases/1503928") {
       json(noMasterRelease);
+    } else if (path === "/releases/9100001") {
+      json(lostMasterRelease);
     } else if (path === "/oauth/request_token") {
       response.end("oauth_token=request-token&oauth_token_secret=request-secret&oauth_callback_confirmed=true");
     } else if (path === "/oauth/access_token") {
@@ -174,7 +184,7 @@ test("the PLAINTEXT signature percent-encodes each secret before joining them wi
 
 const auth = { token: "user-token", secret: "user-secret" };
 
-function gateway(url: string, options: { requestGapMs?: number; backoffMs?: number[] } = {}) {
+function gateway(url: string, options: { requestGapMs?: number; backoffMs?: number[]; maxWaitMs?: number } = {}) {
   return createRealDiscogs({ consumerKey: "consumer-key", consumerSecret: "consumer-secret", apiBaseUrl: url, requestGapMs: 0, ...options });
 }
 
@@ -245,25 +255,50 @@ test("a Release with no master release and no year has no Original year, and its
   expect(stub.received).toHaveLength(1);
 });
 
-test("requests with one User's token are spaced out to stay under Discogs' rate limit", async () => {
+test("a Release Discogs doesn't have reads as no Release", async () => {
+  const stub = await startDiscogsStub();
+
+  await expect(gateway(stub.url).release(1, auth)).resolves.toBeUndefined();
+});
+
+test("a Release whose master release Discogs can't find takes its own year as the Original year", async () => {
+  const stub = await startDiscogsStub();
+
+  const release = await gateway(stub.url).release(9100001, auth);
+
+  expect(release).toMatchObject({ pressingYear: 1987, originalYear: 1987 });
+  expect(stub.received.map((request) => request.path)).toEqual(["/releases/9100001", "/masters/404404"]);
+});
+
+test("every request to Discogs waits its turn in one queue, whoever's token it carries, because Discogs limits by source IP", async () => {
   const stub = await startDiscogsStub();
   const discogs = gateway(stub.url, { requestGapMs: 300 });
 
-  await Promise.all([discogs.release(2335811, auth), discogs.lookupByBarcode("886979891211", auth)]);
+  await Promise.all([
+    discogs.release(2335811, auth),
+    discogs.lookupByBarcode("886979891211", { token: "other", secret: "s" }),
+    discogs.startLogin("https://lp.example/api/login/callback"),
+  ]);
 
-  expect(stub.received).toHaveLength(3);
+  expect(stub.received).toHaveLength(4);
   const gaps = stub.received.slice(1).map((request, index) => request.at - stub.received[index]!.at);
   for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(200);
 });
 
-test("another User's token does not wait behind the first User's requests", async () => {
+test("a request that would wait longer than the cap fails at once instead of queueing", async () => {
   const stub = await startDiscogsStub();
-  const discogs = gateway(stub.url, { requestGapMs: 5_000 });
+  const discogs = gateway(stub.url, { requestGapMs: 5_000, maxWaitMs: 1_000 });
 
   const started = performance.now();
-  await Promise.all([discogs.lookupByBarcode("886979891211", auth), discogs.lookupByBarcode("886979891211", { token: "other", secret: "s" })]);
+  const [first, second] = await Promise.allSettled([
+    discogs.lookupByBarcode("886979891211", auth),
+    discogs.lookupByBarcode("886979891211", auth),
+  ]);
 
-  expect(performance.now() - started).toBeLessThan(2_000);
+  expect(first.status).toBe("fulfilled");
+  expect(second.status).toBe("rejected");
+  expect(performance.now() - started).toBeLessThan(1_000);
+  expect(stub.received).toHaveLength(1);
 });
 
 test("after Discogs answers 429 Too Many Requests the gateway backs off and tries again", async () => {
@@ -279,5 +314,15 @@ test("the gateway gives up when Discogs keeps answering 429", async () => {
   const stub = await startDiscogsStub({ tooManyRequestsFirst: 10 });
 
   await expect(gateway(stub.url, { backoffMs: [10] }).lookupByBarcode("886979891211", auth)).rejects.toThrow(/HTTP 429/);
+  expect(stub.received).toHaveLength(2);
+});
+
+test("the gateway stops backing off once the next retry would pass the cap", async () => {
+  const stub = await startDiscogsStub({ tooManyRequestsFirst: 10 });
+
+  const started = performance.now();
+  await expect(gateway(stub.url, { backoffMs: [100, 5_000], maxWaitMs: 1_000 }).lookupByBarcode("886979891211", auth)).rejects.toThrow(/HTTP 429/);
+
+  expect(performance.now() - started).toBeLessThan(1_000);
   expect(stub.received).toHaveLength(2);
 });

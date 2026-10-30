@@ -64,17 +64,19 @@ export function createCollectionRoutes({ database, discogs, secretBox, now }: Ap
 
   async function cacheRelease(discogsReleaseId: number, auth: DiscogsAuth) {
     const [cached] = await db.select({ id: releases.discogsReleaseId }).from(releases).where(eq(releases.discogsReleaseId, discogsReleaseId));
-    if (cached) return;
+    if (cached) return true;
     const release = await discogs.release(discogsReleaseId, auth);
+    if (!release) return false;
     await db
       .insert(releases)
       .values({ ...release, fetchedAt: now() })
       .onConflictDoNothing();
+    return true;
   }
 
   routes.get("/api/collections/:collectionId/lookup", async (c) => {
     const barcode = parseBarcode(c.req.query("barcode"));
-    if (!barcode) return c.json({ error: "Type all the digits under the barcode: 8, 12 or 13 of them." }, 400);
+    if (!barcode) return c.json({ error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." }, 400);
     try {
       return c.json({ barcode, candidates: await lookUpBarcode(barcode, c.var.member.auth) });
     } catch (error) {
@@ -101,7 +103,9 @@ export function createCollectionRoutes({ database, discogs, secretBox, now }: Ap
     }
     const { auth, collectionId } = c.var.member;
     try {
-      await cacheRelease(discogsReleaseId, auth);
+      if (!(await cacheRelease(discogsReleaseId, auth))) {
+        return c.json({ error: `Discogs has no Release ${discogsReleaseId}. Look up the barcode again and pick a Release from the list.` }, 404);
+      }
     } catch (error) {
       console.error(`Discogs Release ${discogsReleaseId} failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: discogsUnreachable }, 502);

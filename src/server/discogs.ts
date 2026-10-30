@@ -65,7 +65,7 @@ export type DiscogsIdentity = {
 /** The only way the app talks to Discogs. Tests use a scripted fake. */
 export type DiscogsGateway = {
   lookupByBarcode(barcode: string, auth: DiscogsAuth): Promise<ReleaseCandidate[]>;
-  release(discogsReleaseId: number, auth: DiscogsAuth): Promise<Release>;
+  release(discogsReleaseId: number, auth: DiscogsAuth): Promise<Release | undefined>;
   startLogin(callbackUrl: string): Promise<LoginStart>;
   finishLogin(callback: LoginCallback): Promise<DiscogsIdentity>;
 };

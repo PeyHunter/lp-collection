@@ -93,7 +93,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     async release(discogsReleaseId, auth) {
       answer({ endpoint: "release", discogsReleaseId, ...auth });
       const found = releases.find((release) => release.discogsReleaseId === discogsReleaseId);
-      if (!found) throw new Error(`Fake Discogs has no Release ${discogsReleaseId}`);
+      if (!found) return undefined;
       const { barcodes: _, format: __, ...release } = found;
       return release;
     },

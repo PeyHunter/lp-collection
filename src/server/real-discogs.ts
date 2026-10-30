@@ -7,11 +7,13 @@ export type RealDiscogsOptions = {
   consumerSecret: string;
   apiBaseUrl?: string;
   webBaseUrl?: string;
-  /** Discogs allows 60 authenticated requests a minute per token, so one a second keeps a token under it. */
+  /** Discogs counts requests per source IP, about 60 a minute, so every request from this process waits for one shared turn. */
   requestGapMs?: number;
   backoffMs?: number[];
+  maxWaitMs?: number;
 };
 
+const requestTimeoutMs = 2_000;
 const userAgent = "LP-Collection/1.0 +https://github.com/PeyHunter/lp-collection";
 
 /**
@@ -24,20 +26,24 @@ export function createRealDiscogs({
   apiBaseUrl = "https://api.discogs.com",
   webBaseUrl = "https://www.discogs.com",
   requestGapMs = 1000,
-  backoffMs = [5_000, 15_000, 30_000],
+  backoffMs = [2_000, 4_000],
+  maxWaitMs = 8_000,
 }: RealDiscogsOptions): DiscogsGateway {
-  const nextFreeAt = new Map<string, number>();
+  let nextFreeAt = 0;
 
-  async function waitForTurn(token: string) {
+  async function waitForTurn(path: string, deadline: number) {
     const now = Date.now();
-    const turn = Math.max(now, nextFreeAt.get(token) ?? 0);
-    nextFreeAt.set(token, turn + requestGapMs);
+    const turn = Math.max(now, nextFreeAt);
+    if (turn > deadline) throw new Error(`Too many requests are waiting for Discogs; ${path} was not sent`);
+    nextFreeAt = turn + requestGapMs;
     if (turn > now) await sleep(turn - now);
   }
 
-  function send(method: "GET" | "POST", path: string, tokenSecret: string, params: Record<string, string>) {
+  async function send(method: "GET" | "POST", path: string, tokenSecret: string, params: Record<string, string>, deadline: number) {
+    await waitForTurn(path, deadline);
     return fetch(`${apiBaseUrl}${path}`, {
       method,
+      signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 0) + requestTimeoutMs),
       headers: {
         Authorization: authorizationHeader({
           oauth_consumer_key: consumerKey,
@@ -54,19 +60,21 @@ export function createRealDiscogs({
   }
 
   async function call(method: "GET" | "POST", path: string, tokenSecret: string, params: Record<string, string>) {
-    const response = await send(method, path, tokenSecret, params);
+    const response = await send(method, path, tokenSecret, params, Date.now() + maxWaitMs);
     if (!response.ok) throw new Error(`Discogs answered ${method} ${path} with HTTP ${response.status}: ${await response.text()}`);
     return response;
   }
 
   async function getAs(auth: DiscogsAuth, path: string): Promise<unknown> {
+    const deadline = Date.now() + maxWaitMs;
     for (let retry = 0; ; retry++) {
-      await waitForTurn(auth.token);
-      const response = await send("GET", path, auth.secret, { oauth_token: auth.token });
-      if (response.status === 429 && retry < backoffMs.length) {
-        await sleep(backoffMs[retry]!);
+      const response = await send("GET", path, auth.secret, { oauth_token: auth.token }, deadline);
+      const backoff = backoffMs[retry];
+      if (response.status === 429 && backoff !== undefined && Date.now() + backoff <= deadline) {
+        await sleep(backoff);
         continue;
       }
+      if (response.status === 404) return undefined;
       if (!response.ok) throw new Error(`Discogs answered GET ${path} with HTTP ${response.status}: ${await response.text()}`);
       return response.json();
     }
@@ -82,14 +90,15 @@ export function createRealDiscogs({
 
   return {
     async lookupByBarcode(barcode, auth) {
-      const search = (await getAs(auth, `/database/search?${new URLSearchParams({ barcode, type: "release", per_page: "50" })}`)) as {
-        results?: SearchResult[];
-      };
-      return (search.results ?? []).map(candidateFrom);
+      const search = (await getAs(auth, `/database/search?${new URLSearchParams({ barcode, type: "release", per_page: "50" })}`)) as
+        | { results?: SearchResult[] }
+        | undefined;
+      return (search?.results ?? []).map(candidateFrom);
     },
     async release(discogsReleaseId, auth) {
-      const release = (await getAs(auth, `/releases/${discogsReleaseId}`)) as DiscogsRelease;
-      const master = release.master_id ? ((await getAs(auth, `/masters/${release.master_id}`)) as { year?: number }) : undefined;
+      const release = (await getAs(auth, `/releases/${discogsReleaseId}`)) as DiscogsRelease | undefined;
+      if (!release) return undefined;
+      const master = release.master_id ? ((await getAs(auth, `/masters/${release.master_id}`)) as { year?: number } | undefined) : undefined;
       return releaseFrom(release, master);
     },
     async startLogin(callbackUrl) {
