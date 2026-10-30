@@ -12,11 +12,13 @@ exitHook.unhookEvent("exit");
 export default async function setup(project: TestProject) {
   const postgres = await startThrowawayPostgres("pg");
   project.provide("postgresUrl", postgres.url);
+  project.provide("scratchDir", postgres.dir);
   return postgres.stop;
 }
 
 declare module "vitest" {
   export interface ProvidedContext {
     postgresUrl: string;
+    scratchDir: string;
   }
 }

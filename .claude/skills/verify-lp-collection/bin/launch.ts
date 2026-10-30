@@ -3,6 +3,7 @@
 // Prints "READY <run-id> <url>" once the app answers a healthy /api/health. stop.ts (SIGUSR2) tears it all down.
 import { execSync, spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { freePort } from "../../../../test/support/free-port.ts";
 import { startThrowawayPostgres } from "../../../../test/support/throwaway-postgres.ts";
 import { evidenceDir, statePath, type RunState } from "./shared.ts";
@@ -17,7 +18,7 @@ const postgres = await startThrowawayPostgres(`verify-${runId}`);
 await postgres.createDatabase("lp_collection");
 
 const app = spawn("node", ["src/server/main.ts"], {
-  env: { APP_OWNER_DISCOGS_USERNAME: "owner", ...process.env, DISCOGS: "fake", PORT: String(appPort), DATABASE_URL: `${postgres.url}/lp_collection` },
+  env: { APP_OWNER_DISCOGS_USERNAME: "owner", PHOTOS_DIR: join(postgres.dir, "photos"), ...process.env, DISCOGS: "fake", PORT: String(appPort), DATABASE_URL: `${postgres.url}/lp_collection` },
   stdio: ["ignore", "inherit", "inherit"],
 });
 

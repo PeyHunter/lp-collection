@@ -7,8 +7,8 @@ import EmbeddedPostgres from "embedded-postgres";
 import { freePort } from "./free-port.ts";
 
 /**
- * Starts a PostgreSQL server in a new lp-collection-<name>-* folder in the temp dir.
- * stop() deletes the folder. If this process ends without calling stop(), even by SIGKILL,
+ * Starts a PostgreSQL server in a new lp-collection-<name>-* folder in the temp dir. Put any other throwaway files
+ * of the run in `dir` too. stop() deletes the folder. If this process ends without calling stop(), even by SIGKILL,
  * a detached reaper stops the server and deletes the folder.
  */
 export async function startThrowawayPostgres(name: string) {
@@ -17,7 +17,7 @@ export async function startThrowawayPostgres(name: string) {
   const port = await freePort();
   const password = randomUUID();
   const pg = new EmbeddedPostgres({
-    databaseDir: dir,
+    databaseDir: join(dir, "pg"),
     user: "postgres",
     password,
     port,
@@ -29,6 +29,7 @@ export async function startThrowawayPostgres(name: string) {
   await pg.initialise();
   await pg.start();
   return {
+    dir,
     url: `postgres://postgres:${password}@localhost:${port}`,
     createDatabase: (database: string) => pg.createDatabase(database),
     stop: async () => {

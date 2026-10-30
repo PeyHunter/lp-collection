@@ -19,7 +19,7 @@ function alive(pid: number) {
 while (alive(owner) && existsSync(dir)) await sleep(500);
 if (!existsSync(dir)) process.exit(0);
 
-const postmaster = Number((await readFile(join(dir, "postmaster.pid"), "utf8").catch(() => "")).split("\n")[0]);
+const postmaster = Number((await readFile(join(dir, "pg", "postmaster.pid"), "utf8").catch(() => "")).split("\n")[0]);
 if (postmaster) {
   if (alive(postmaster)) process.kill(postmaster, "SIGINT");
   for (let i = 0; i < 50 && alive(postmaster); i++) await sleep(200);
