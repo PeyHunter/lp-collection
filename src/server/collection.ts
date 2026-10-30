@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
-import { conditions, sleeveConditions, type Condition, type DiscogsAuth, type LookupQuery, type LookupResult, type SleeveCondition } from "./discogs.ts";
+import { conditions, sleeveConditions, type Condition, type DiscogsAuth, type LookupQuery, type LookupResult, type ReleaseCandidate, type SleeveCondition } from "./discogs.ts";
 import type { SecretBox } from "./secret-box.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { barcodeLookupCache, copies, memberships, photos, releases, users } from "./schema.ts";
@@ -99,6 +99,10 @@ function needsValue(copy: CopyView, retryEmptyBefore: Date | undefined) {
 function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, before: boolean) {
   return outcome === "valued" ? false : outcome === "seller-settings-missing" ? true : before;
 }
+
+export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number };
+
+export type LookupView = LookupQuery & { total: number; candidates: LookupCandidate[] };
 
 export function createCollectionRoutes({ database, discogs, exchangeRates, secretBox, now, photosDir }: AppDependencies) {
   const { db } = database;
@@ -220,7 +224,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
       found.candidates.map((candidate) => candidate.discogsReleaseId),
     );
     const candidates = found.candidates.map((candidate) => ({ ...candidate, copiesInCollection: owned.get(candidate.discogsReleaseId) ?? 0 }));
-    return c.json({ ...query, total: found.total, candidates });
+    return c.json<LookupView>({ ...query, total: found.total, candidates });
   });
 
   routes.get("/api/collections/:collectionId/copies", async (c) => {
