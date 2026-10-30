@@ -1,37 +1,8 @@
-import { randomUUID } from "node:crypto";
-import { devices, expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./login.ts";
 
-const { defaultBrowserType: _browser, ...iPhone } = devices["iPhone 15"];
-
-// A login without an Invite counts against the logins one device may start, so this spec counts as a device of its own.
-const ownDevice = { "cf-connecting-ip": "203.0.113.7" };
-
-let owner: APIRequestContext;
-
-test.beforeAll(async ({ browser, baseURL }) => {
-  const context = await browser.newContext({ ...iPhone, baseURL, extraHTTPHeaders: ownDevice });
-  const page = await context.newPage();
-  await page.goto("/");
-  await page.getByRole("link", { name: "Log in with Discogs" }).click();
-  await page.getByLabel("Discogs username").fill("owner");
-  await page.getByRole("button", { name: "Authorize" }).click();
-  await expect(page.getByRole("heading", { name: "Your Collection" })).toBeVisible();
-  owner = context.request;
-});
-
-async function logInAsNewUser(page: Page) {
-  const invite = await owner.post("/api/invites");
-  expect(invite.ok()).toBe(true);
-  const { url } = (await invite.json()) as { url: string };
-  await page.goto(url);
-  await page.getByRole("link", { name: "Log in with Discogs" }).click();
-  await page.getByLabel("Discogs username").fill(`collector-${randomUUID().slice(0, 8)}`);
-  await page.getByRole("button", { name: "Authorize" }).click();
-  await expect(page.getByRole("heading", { name: "Your Collection" })).toBeVisible();
-}
-
-test("a record with no barcode is found by falling back to the Catalog number, then the artist and title", async ({ page }) => {
-  await logInAsNewUser(page);
+test("a record with no barcode is found by falling back to the Catalog number, then the artist and title", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "collector");
   await page.getByRole("link", { name: "Scan" }).click();
 
   await page.getByRole("textbox", { name: "Barcode" }).fill("4006381333931");
@@ -63,8 +34,8 @@ async function sidewaysOverflow(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
-test("a long typed search wraps instead of pushing the page sideways", async ({ page }) => {
-  await logInAsNewUser(page);
+test("a long typed search wraps instead of pushing the page sideways", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "collector");
   await page.getByRole("link", { name: "Scan" }).click();
 
   const unbroken = "X".repeat(100);
@@ -84,8 +55,8 @@ test("a long typed search wraps instead of pushing the page sideways", async ({ 
   expect(await sidewaysOverflow(page), "the searched artist and title fit the narrowest iPhone").toBe(0);
 });
 
-test("picking a Release the Collection already has warns with the Copy count, and Cancel or Add another decide", async ({ page }) => {
-  await logInAsNewUser(page);
+test("picking a Release the Collection already has warns with the Copy count, and Cancel or Add another decide", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "collector");
   await page.getByRole("link", { name: "Scan" }).click();
   await page.getByRole("radio", { name: "Catalog number" }).check();
   await page.getByRole("textbox", { name: "Catalog number" }).fill("CBS 69209");
