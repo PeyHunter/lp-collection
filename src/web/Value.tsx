@@ -17,10 +17,34 @@ export function Amount({ amount, currency, className = "amount" }: { amount: num
   );
 }
 
-export function RowValue({ value, sellerSettingsMissing }: { value: CopyView["value"]; sellerSettingsMissing: boolean }) {
+export function RowValue({ value, sellerSettingsMissing, fetching }: { value: CopyView["value"]; sellerSettingsMissing: boolean; fetching: boolean }) {
   if (value?.value != null) return <Amount amount={value.value} currency={value.currency} className="row-end row-value" />;
   if (sellerSettingsMissing) return <span className="row-end waiting">Waits for seller settings</span>;
+  if (!value && fetching) return <span className="row-end waiting">Fetching Value…</span>;
   return <span className="row-end no-value">No Value yet</span>;
+}
+
+export type ValuesAnswer = { copies: CopyView[]; sellerSettingsMissing: boolean; more: boolean; retryEmptyBefore?: string };
+
+/** Asks for missing Values a batch at a time until none are left, Discogs stops answering, or the caller aborts. Undefined when a request failed. */
+export async function fetchValues(
+  collectionId: string,
+  { retryEmpty = false, signal, onBatch }: { retryEmpty?: boolean; signal?: AbortSignal; onBatch?: (answer: ValuesAnswer) => void } = {},
+): Promise<ValuesAnswer | undefined> {
+  let body: object = retryEmpty ? { retryEmpty: true } : {};
+  for (;;) {
+    const response = await fetch(`/api/collections/${collectionId}/values`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    }).catch(() => undefined);
+    if (!response?.ok) return undefined;
+    const answer = (await response.json()) as ValuesAnswer;
+    onBatch?.(answer);
+    if (!answer.more || answer.sellerSettingsMissing) return answer;
+    body = answer.retryEmptyBefore ? { retryEmptyBefore: answer.retryEmptyBefore } : {};
+  }
 }
 
 type GuideState = { kind: "idle" } | { kind: "checking" } | { kind: "still-missing" } | { kind: "failed" };
@@ -30,10 +54,9 @@ export function SellerSettingsGuide({ url, collectionId, onValued }: { url: stri
 
   async function check() {
     setState({ kind: "checking" });
-    const response = await fetch(`/api/collections/${collectionId}/values`, { method: "POST" }).catch(() => undefined);
-    if (!response?.ok) return setState({ kind: "failed" });
-    const { sellerSettingsMissing } = (await response.json()) as { sellerSettingsMissing: boolean };
-    if (sellerSettingsMissing) return setState({ kind: "still-missing" });
+    const answer = await fetchValues(collectionId, { retryEmpty: true });
+    if (!answer) return setState({ kind: "failed" });
+    if (answer.sellerSettingsMissing) return setState({ kind: "still-missing" });
     onValued();
   }
 

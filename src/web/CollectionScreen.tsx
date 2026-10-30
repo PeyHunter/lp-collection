@@ -6,9 +6,11 @@ import { Header } from "./Header.tsx";
 import { Cover } from "./Cover.tsx";
 import { Grade } from "./Grade.tsx";
 import { followLink, useHandoff } from "./navigation.ts";
-import { RowValue, SellerSettingsGuide } from "./Value.tsx";
+import { fetchValues, RowValue, SellerSettingsGuide } from "./Value.tsx";
 
-type CopiesState = { kind: "loading" } | { kind: "failed" } | { kind: "loaded"; copies: CopyView[]; sellerSettingsMissing: boolean };
+type Copies = { copies: CopyView[]; sellerSettingsMissing: boolean };
+
+type CopiesState = { kind: "loading" } | { kind: "failed" } | ({ kind: "loaded"; fetchingValues: boolean } & Copies);
 
 export function CollectionScreen({
   me,
@@ -24,13 +26,24 @@ export function CollectionScreen({
   const handoff = useHandoff();
 
   useEffect(() => {
-    fetch(`/api/collections/${me.collection.id}/copies`)
-      .then(async (response) => {
-        if (!response.ok) return setState({ kind: "failed" });
-        setState({ kind: "loaded", ...((await response.json()) as { copies: CopyView[]; sellerSettingsMissing: boolean }) });
-      })
-      .catch(() => setState({ kind: "failed" }));
-  }, [me.collection.id, attempt]);
+    const abort = new AbortController();
+    async function load() {
+      const response = await fetch(`/api/collections/${me.collection.id}/copies`, { signal: abort.signal }).catch(() => undefined);
+      if (abort.signal.aborted) return;
+      if (!response?.ok) return setState({ kind: "failed" });
+      const loaded = (await response.json()) as Copies;
+      const fetchingValues = !loaded.sellerSettingsMissing && loaded.copies.some((copy) => !copy.value);
+      setState({ kind: "loaded", ...loaded, fetchingValues });
+      if (!fetchingValues) return;
+      await fetchValues(me.collection.id, {
+        signal: abort.signal,
+        onBatch: ({ copies, sellerSettingsMissing, more }) => setState({ kind: "loaded", copies, sellerSettingsMissing, fetchingValues: more }),
+      });
+      if (!abort.signal.aborted) setState((state) => (state.kind === "loaded" ? { ...state, fetchingValues: false } : state));
+    }
+    load();
+    return () => abort.abort();
+  }, [me.collection.id, me.currency, attempt]);
 
   async function logOut() {
     await fetch("/api/logout", { method: "POST" });
@@ -86,7 +99,13 @@ export function CollectionScreen({
           {state.kind === "loaded" && state.copies.length > 0 && (
             <ol className="rows">
               {state.copies.map((copy) => (
-                <CopyRow key={copy.id} copy={copy} fresh={copy.id === handoff?.savedCopyId} sellerSettingsMissing={state.sellerSettingsMissing} />
+                <CopyRow
+                  key={copy.id}
+                  copy={copy}
+                  fresh={copy.id === handoff?.savedCopyId}
+                  sellerSettingsMissing={state.sellerSettingsMissing}
+                  fetching={state.fetchingValues}
+                />
               ))}
             </ol>
           )}
@@ -106,7 +125,7 @@ export function CollectionScreen({
   );
 }
 
-function CopyRow({ copy, fresh, sellerSettingsMissing }: { copy: CopyView; fresh: boolean; sellerSettingsMissing: boolean }) {
+function CopyRow({ copy, fresh, sellerSettingsMissing, fetching }: { copy: CopyView; fresh: boolean; sellerSettingsMissing: boolean; fetching: boolean }) {
   const { release } = copy;
   const facts = [release.originalYear, release.label, release.catalogNumber].filter((fact) => fact !== null);
   return (
@@ -122,7 +141,7 @@ function CopyRow({ copy, fresh, sellerSettingsMissing }: { copy: CopyView; fresh
           Media <Grade condition={copy.mediaCondition} /> · Sleeve <Grade condition={copy.sleeveCondition} />
         </span>
       </span>
-      <RowValue value={copy.value} sellerSettingsMissing={sellerSettingsMissing} />
+      <RowValue value={copy.value} sellerSettingsMissing={sellerSettingsMissing} fetching={fetching} />
     </li>
   );
 }
@@ -153,7 +172,7 @@ function CurrencySetting({ currency, onChanged }: { currency: Currency; onChange
         ))}
       </select>
       <p className="hint" role={state.kind === "failed" ? "alert" : undefined}>
-        {state.kind === "failed" ? "The currency couldn't be saved. Try again." : "Values fetched from now on use this currency."}
+        {state.kind === "failed" ? "The currency couldn't be saved. Try again." : "Values show in this currency."}
       </p>
     </div>
   );
