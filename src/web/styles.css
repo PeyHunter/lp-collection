@@ -489,3 +489,39 @@ main.content-grid { row-gap: var(--space-xl); align-content: start; padding-bloc
 .lowest b { font-weight: 600; color: var(--ink); }
 select.input:disabled { opacity: 0.6; }
 .account .field { justify-self: stretch; }
+
+.photos { display: grid; gap: var(--space-m); grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr)); }
+.photo { display: grid; gap: var(--space-xs); align-content: start; }
+.photo img {
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: 1;
+  border-radius: var(--radius-s);
+  object-fit: cover;
+  background: var(--sunk);
+  outline: 1px solid color-mix(in oklch, var(--white) 10%, transparent);
+  outline-offset: -1px;
+}
+.photo .btn { padding-inline: var(--space-s); }
+.add-photo { justify-self: start; cursor: pointer; }
+.add-photo:has(:focus-visible) { outline: max(2px, 0.08em) solid var(--accent); outline-offset: 0.25em; }
+.add-photo.busy { opacity: 0.6; cursor: default; }
+.btn.danger { color: var(--loss); border-color: color-mix(in oklch, var(--loss) 60%, transparent); }
+.btn.danger-fill { background: color-mix(in oklch, var(--loss), var(--black) 45%); color: var(--ink); border: 1.5px solid var(--loss); }
+.btn.danger-fill:active { background: color-mix(in oklch, var(--loss), var(--black) 55%); }
+.confirm {
+  display: grid;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  border-radius: var(--radius-m);
+  border: 1.5px solid color-mix(in oklch, var(--loss) 45%, transparent);
+  background: var(--surface);
+}
+.confirm p { font-weight: 600; }
+.confirm-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.photo .confirm { padding: var(--space-s); }
+.photo .confirm-actions .btn { flex: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .btn.danger:hover { background: color-mix(in oklch, var(--loss) 10%, transparent); }
+  .btn.danger-fill:hover { background: color-mix(in oklch, var(--loss), var(--black) 38%); }
+}

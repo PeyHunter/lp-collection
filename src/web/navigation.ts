@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore, type MouseEvent } from "reac
 
 export type Route = { page: "collection" } | { page: "lookup" } | { page: "copy"; copyId: string } | { page: "invite"; code: string };
 
-export type Handoff = { savedCopyId: string; title: string } | null;
+export type Handoff = { kind: "saved"; copyId: string; title: string } | { kind: "deleted"; title: string } | null;
 
 function routeFrom(pathname: string): Route {
   const invite = /^\/invite\/([^/]+)\/?$/.exec(pathname);

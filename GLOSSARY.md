@@ -34,6 +34,10 @@ _Avoid_: LP (when you mean the pressing), album, edition
 One physical record a user owns. It points to a Release and has its own condition and value. Two identical records are two Copies.
 _Avoid_: LP, item, entry
 
+**Photo**:
+A Member's own picture of a Copy, taken or picked on the phone, that shows its real condition. A Copy with Photos shows its first Photo; a Copy without shows the Discogs cover. Deleting a Copy deletes its Photos.
+_Avoid_: image, picture (when you mean a Photo), cover (that is the Discogs cover image)
+
 **Collection**:
 A set of Copies that one or more Members look after together. Every Collection has exactly one Owner.
 _Avoid_: library, catalogue

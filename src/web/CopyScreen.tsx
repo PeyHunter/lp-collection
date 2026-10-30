@@ -5,6 +5,8 @@ import type { Me } from "./App.tsx";
 import { Cover } from "./Cover.tsx";
 import { Grade } from "./Grade.tsx";
 import { Header } from "./Header.tsx";
+import { navigate } from "./navigation.ts";
+import { ConfirmDelete, PhotosSection } from "./Photos.tsx";
 import { Amount, formatAmount, SellerSettingsGuide } from "./Value.tsx";
 
 type Loaded = { copy: CopyView; sellerSettingsMissing: boolean };
@@ -73,6 +75,8 @@ export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
               <ValueSection copy={state.copy} updating={saving.kind === "saving"} />
             )}
             <ConditionSection copy={state.copy} saving={saving} onChange={(change) => changeCondition(state, change)} />
+            <PhotosSection copy={state.copy} copyUrl={copyUrl} onChanged={(copy) => setState({ ...state, copy })} />
+            <DeleteCopySection copy={state.copy} copyUrl={copyUrl} />
           </>
         )}
       </main>
@@ -80,7 +84,7 @@ export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
   );
 }
 
-function ReleaseSection({ copy: { release } }: { copy: CopyView }) {
+function ReleaseSection({ copy: { release, pictureUrl } }: { copy: CopyView }) {
   const facts = [
     ["Original year", release.originalYear],
     ["Pressing year", release.pressingYear],
@@ -90,7 +94,7 @@ function ReleaseSection({ copy: { release } }: { copy: CopyView }) {
   ] as const;
   return (
     <section className="poster title-block" aria-labelledby="title-heading">
-      <Cover url={release.coverImageUrl} className="big-cover" />
+      <Cover url={pictureUrl} className="big-cover" />
       <div className="rule" />
       <h2 id="title-heading" className="poster-h">
         {release.title}
@@ -183,6 +187,30 @@ function ConditionSection({ copy, saving, onChange }: { copy: CopyView; saving: 
         </p>
       ) : (
         <p className="hint">The Value follows the Media condition and updates as soon as you change it.</p>
+      )}
+    </section>
+  );
+}
+
+function DeleteCopySection({ copy, copyUrl }: { copy: CopyView; copyUrl: string }) {
+  const [failed, setFailed] = useState(false);
+  const photos = copy.photos.length;
+  const question = `Delete ${copy.release.title}${photos === 0 ? "" : photos === 1 ? " and its photo" : ` and its ${photos} photos`}? This can't be undone.`;
+
+  async function remove() {
+    setFailed(false);
+    const response = await fetch(copyUrl, { method: "DELETE" }).catch(() => undefined);
+    if (!response?.ok) return setFailed(true);
+    navigate("/", { kind: "deleted", title: copy.release.title });
+  }
+
+  return (
+    <section className="section" aria-label="Delete this Copy">
+      <ConfirmDelete label="Delete this Copy" question={question} confirmLabel="Delete Copy" onConfirm={remove} />
+      {failed && (
+        <p className="notice error" role="alert">
+          The Copy wasn't deleted. Check your connection and try again.
+        </p>
       )}
     </section>
   );

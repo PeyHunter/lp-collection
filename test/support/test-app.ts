@@ -1,6 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import pg from "pg";
-import { afterAll, inject } from "vitest";
+import { afterAll, inject, onTestFinished } from "vitest";
 import { createApp } from "../../src/server/app.ts";
 import { connectDatabase, migrate } from "../../src/server/db.ts";
 import { createFixedRates } from "../../src/server/exchange-rates.ts";
@@ -34,13 +37,15 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   const database = connectDatabase(`${serverUrl}/${name}`);
   await migrate(database);
   const discogs = createFakeDiscogs(script);
+  const photosDir = await mkdtemp(join(tmpdir(), "lp-collection-photos-"));
   let now = new Date("2026-03-01T12:00:00Z");
   let secretBox = createSecretBox(randomBytes(32));
   let owner = appOwnerDiscogsUsername;
-  const start = () => createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl) });
+  const start = () => createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl), photosDir });
   let app = start();
 
   afterAll(() => database.close());
+  onTestFinished(() => rm(photosDir, { recursive: true, force: true }));
 
   const request = (path: string, init?: RequestInit) => app.request(path, init);
 
@@ -48,6 +53,7 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
     database,
     databaseUrl: `${serverUrl}/${name}`,
     discogs,
+    photosDir,
     get secretBox() {
       return secretBox;
     },

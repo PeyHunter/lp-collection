@@ -90,3 +90,63 @@ test("changing the currency shows every Copy's Value in the new currency", async
   await expect(discovery).toContainText("34 €");
   await expect(page.getByRole("list").filter({ hasText: "Discovery" })).not.toContainText("kr");
 });
+
+async function bigPhoto(page: Page) {
+  const base64 = await page.evaluate(async () => {
+    const canvas = new OffscreenCanvas(3000, 2000);
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#6b4a2f";
+    context.fillRect(0, 0, 3000, 2000);
+    context.fillStyle = "#111";
+    context.beginPath();
+    context.arc(1500, 1000, 900, 0, 2 * Math.PI);
+    context.fill();
+    const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer());
+    return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+  });
+  return { name: "IMG_0001.PNG", mimeType: "image/png", buffer: Buffer.from(base64, "base64") };
+}
+
+test("a User adds a photo of a Copy, sees it instead of the cover, deletes it, then deletes the Copy", async ({ page }) => {
+  await logInAsNewUser(page, "photographer");
+  await addByBarcode(page, "190295328709", "Discovery");
+  const row = page.getByRole("listitem").filter({ hasText: "Discovery" });
+  await expect(row.locator("img")).toHaveAttribute("src", "/fake-discogs/covers/16893476.svg");
+
+  await row.getByRole("link", { name: "Discovery" }).click();
+  const photos = page.getByRole("region", { name: "Photos" });
+  await expect(photos).toContainText("No photos yet.");
+
+  const uploaded = page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/photos"));
+  await photos.getByLabel("Take or pick a photo").setInputFiles(await bigPhoto(page));
+  const { copy } = (await (await uploaded).json()) as { copy: { photos: { url: string; width: number; height: number }[] } };
+  expect(copy.photos).toMatchObject([{ width: 2048, height: 1365 }]);
+
+  const photo = photos.getByRole("img", { name: "Photo 1 of Discovery" });
+  await expect(photo).toBeVisible();
+  expect(await photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(2048);
+  await expect(page.locator(".big-cover")).toHaveAttribute("src", copy.photos[0]!.url);
+
+  await page.reload();
+  await expect(photos.getByRole("img", { name: "Photo 1 of Discovery" })).toBeVisible();
+  await page.getByRole("link", { name: "Back" }).click();
+  await expect(row.locator("img")).toHaveAttribute("src", copy.photos[0]!.url);
+
+  await row.getByRole("link", { name: "Discovery" }).click();
+  await photos.getByRole("button", { name: "Delete photo 1" }).click();
+  await photos.getByRole("group", { name: "Delete this photo?" }).getByRole("button", { name: "Delete" }).click();
+  await expect(photos).toContainText("No photos yet.");
+  await expect(page.locator(".big-cover")).toHaveAttribute("src", "/fake-discogs/covers/16893476.svg");
+
+  await photos.getByLabel("Take or pick a photo").setInputFiles(await bigPhoto(page));
+  await expect(photos.getByRole("img", { name: "Photo 1 of Discovery" })).toBeVisible();
+  await page.getByRole("button", { name: "Delete this Copy" }).click();
+  const confirm = page.getByRole("group", { name: "Delete Discovery and its photo? This can't be undone." });
+  await confirm.getByRole("button", { name: "Keep it" }).click();
+  await expect(confirm).toHaveCount(0);
+  await page.getByRole("button", { name: "Delete this Copy" }).click();
+  await confirm.getByRole("button", { name: "Delete Copy" }).click();
+
+  await expect(page.getByRole("status")).toHaveText("Deleted Discovery from your Collection.");
+  await expect(page.getByText("No Copies yet.")).toBeVisible();
+});
