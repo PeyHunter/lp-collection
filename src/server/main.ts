@@ -4,7 +4,8 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { sealStoredDiscogsTokens, storedTokensOpenWith } from "./access.ts";
 import { createApp } from "./app.ts";
 import { connectDatabase, migrate } from "./db.ts";
-import { createFakeDiscogs, sampleReleases, type FakeDiscogs } from "./fake-discogs.ts";
+import { createEcbRates, createFixedRates, type ExchangeRates } from "./exchange-rates.ts";
+import { createFakeDiscogs, sampleLowestListings, samplePrices, sampleReleases, type FakeDiscogs } from "./fake-discogs.ts";
 import { createRealDiscogs } from "./real-discogs.ts";
 import { createSecretBox } from "./secret-box.ts";
 import type { DiscogsGateway } from "./discogs.ts";
@@ -91,11 +92,21 @@ if ("error" in config) {
 
 let fake: FakeDiscogs | undefined;
 let discogs: DiscogsGateway;
+let exchangeRates: ExchangeRates;
 if (config.discogs.kind === "real") {
   discogs = createRealDiscogs(config.discogs);
+  exchangeRates = createEcbRates();
 } else {
-  console.log("DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases.");
-  discogs = fake = createFakeDiscogs({ releases: sampleReleases });
+  console.log(
+    "DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases and their prices. A username that starts with no-seller-settings has no seller settings until they are saved at /fake-discogs/settings/seller. Exchange rates are fixed.",
+  );
+  discogs = fake = createFakeDiscogs({
+    releases: sampleReleases,
+    prices: samplePrices,
+    lowestListings: sampleLowestListings,
+    sellerSettingsMissingFor: (discogsUsername) => discogsUsername.startsWith("no-seller-settings"),
+  });
+  exchangeRates = createFixedRates();
 }
 
 const database = connectDatabase(config.databaseUrl);
@@ -110,7 +121,7 @@ if (!(await storedTokensOpenWith(database, secretBox))) {
 }
 await sealStoredDiscogsTokens(database, secretBox);
 
-const app = createApp({ database, discogs, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl });
+const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl });
 if (fake) app.route("/", fake.pages);
 // The built phone UI; any path the API doesn't own falls back to the single page.
 app.use("*", serveStatic({ root: "dist/web" }));

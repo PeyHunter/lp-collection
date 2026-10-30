@@ -1,42 +1,10 @@
 import { expect, test } from "vitest";
 import { sampleReleases, type FakeRelease } from "../../src/server/fake-discogs.ts";
+import { invitedFriend, listCopies, logInWithCollection, saveCopy } from "../support/members.ts";
 import { createTestApp } from "../support/test-app.ts";
-
-type TestApp = Awaited<ReturnType<typeof createTestApp>>;
-type Member = Awaited<ReturnType<typeof logInWithCollection>>;
 
 const kindOfBlue = "886979891211";
 const discovery = "190295328709";
-
-async function logInWithCollection(app: TestApp, discogsUsername = app.appOwnerDiscogsUsername, invite?: string) {
-  const { session } = await app.logIn(discogsUsername, { invite });
-  expect(session).toBeDefined();
-  const me = await app.request("/api/me", { headers: { cookie: session! } });
-  const { collection } = (await me.json()) as { collection: { id: string } };
-  const as = (path: string, init: RequestInit = {}) =>
-    app.request(`/api/collections/${collection.id}${path}`, { ...init, headers: { cookie: session!, ...init.headers } });
-  return { session: session!, collectionId: collection.id, as };
-}
-
-async function invitedFriend(app: TestApp, ownerSession: string, discogsUsername: string) {
-  const created = await app.request("/api/invites", { method: "POST", headers: { cookie: ownerSession } });
-  const { url } = (await created.json()) as { url: string };
-  return logInWithCollection(app, discogsUsername, url.split("/invite/")[1]);
-}
-
-function saveCopy(user: Member, discogsReleaseId: number) {
-  return user.as("/copies", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ discogsReleaseId }),
-  });
-}
-
-async function listCopies(user: Member) {
-  const response = await user.as("/copies");
-  expect(response.status).toBe(200);
-  return ((await response.json()) as { copies: unknown[] }).copies;
-}
 
 test("a barcode that matches one Release shows that Release with cover, artist, title, label, country and year", async () => {
   const app = await createTestApp({ discogs: { releases: sampleReleases } });
@@ -128,6 +96,7 @@ test("saving a picked Release creates a Copy with both conditions Very Good Plus
     mediaCondition: "Very Good Plus (VG+)",
     sleeveCondition: "Very Good Plus (VG+)",
     addedAt: "2026-03-01T12:00:00.000Z",
+    value: { mediaCondition: "Very Good Plus (VG+)", value: null, lowestListing: null, currency: "DKK", fetchedAt: "2026-03-01T12:00:00.000Z" },
     release: {
       discogsReleaseId: 2474032,
       artist: "Miles Davis",
@@ -176,7 +145,8 @@ test("Discogs is asked once per barcode and once per Release; later Lookups and 
   await saveCopy(friend, 2335811);
 
   expect(again).toEqual(first);
-  expect(app.discogs.requests.map(({ token: _, secret: __, ...request }) => request)).toEqual([
+  const releaseRequests = app.discogs.requests.filter((request) => request.endpoint === "search" || request.endpoint === "release");
+  expect(releaseRequests.map(({ token: _, secret: __, ...request }) => request)).toEqual([
     { endpoint: "search", barcode: kindOfBlue },
     { endpoint: "release", discogsReleaseId: 2335811 },
   ]);

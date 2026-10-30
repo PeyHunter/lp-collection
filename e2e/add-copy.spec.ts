@@ -42,13 +42,13 @@ test("the Owner types a barcode, picks one of several pressings and finds the ne
   await european2010.getByRole("button", { name: "Add to Collection" }).click();
 
   await expect(page.getByRole("status")).toHaveText("Added Kind Of Blue to your Collection.");
-  const copy = page.getByRole("listitem").filter({ hasText: "Kind Of Blue" });
+  const copy = page.getByRole("listitem").filter({ hasText: "1959 · Columbia · 88697 98912 1" });
   await expect(copy).toContainText("Miles Davis");
   await expect(copy).toContainText("1959 · Columbia · 88697 98912 1");
   await expect(copy).toContainText("Media VG+ · Sleeve VG+");
 
   await page.reload();
-  await expect(page.getByRole("listitem").filter({ hasText: "Kind Of Blue" })).toContainText("Media VG+ · Sleeve VG+");
+  await expect(page.getByRole("listitem").filter({ hasText: "1959 · Columbia · 88697 98912 1" })).toContainText("Media VG+ · Sleeve VG+");
   await expect(page.getByRole("status")).toHaveCount(0);
 });
 
@@ -62,7 +62,7 @@ test("the tint on a just-saved Copy leaves room around the cover and the Value",
 
   const row = page.getByRole("listitem").filter({ hasText: "Discovery" });
   const cover = await box(row.locator("img, svg").first());
-  const value = await box(row.getByText("No Value yet"));
+  const value = await box(row.getByText("252 kr"));
   const middle = cover.y + cover.height / 2;
   const background = await pixelAt(page, 1, middle);
 

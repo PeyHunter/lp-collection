@@ -3,6 +3,7 @@ import pg from "pg";
 import { afterAll, inject } from "vitest";
 import { createApp } from "../../src/server/app.ts";
 import { connectDatabase, migrate } from "../../src/server/db.ts";
+import { createFixedRates } from "../../src/server/exchange-rates.ts";
 import { createFakeDiscogs, type FakeDiscogsScript } from "../../src/server/fake-discogs.ts";
 import { createSecretBox } from "../../src/server/secret-box.ts";
 
@@ -36,7 +37,7 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   let now = new Date("2026-03-01T12:00:00Z");
   let secretBox = createSecretBox(randomBytes(32));
   let owner = appOwnerDiscogsUsername;
-  const start = () => createApp({ database, discogs, secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl) });
+  const start = () => createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl) });
   let app = start();
 
   afterAll(() => database.close());

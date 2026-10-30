@@ -1,20 +1,31 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import type { DiscogsAuth, DiscogsGateway, DiscogsIdentity, Release } from "./discogs.ts";
+import { conditions, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type Money, type Release } from "./discogs.ts";
+import { converter, sampleRatesPerEuro } from "./exchange-rates.ts";
+import { priceSuggestionsFrom } from "./real-discogs.ts";
 
 export type FakeRelease = Release & { barcodes: string[]; format: string | null };
+
+export type FakePrices = Partial<Record<Condition, Money>>;
 
 /** What the fake Discogs answers in a test, e.g. which Releases a barcode matches. */
 export type FakeDiscogsScript = {
   releases?: FakeRelease[];
+  prices?: Record<number, FakePrices>;
+  lowestListings?: Record<number, Money>;
+  sellerSettingsMissingFor?: (discogsUsername: string) => boolean;
   unavailable?: boolean;
+  unavailableReleases?: number[];
   loginStartFails?: boolean;
   finishLoginDelayMs?: number;
+  priceSuggestionsDelayMs?: number;
 };
 
 export type FakeDiscogsRequest = (
   | { endpoint: "search"; barcode: string }
   | { endpoint: "release"; discogsReleaseId: number }
+  | { endpoint: "price-suggestions"; discogsReleaseId: number }
+  | { endpoint: "stats"; discogsReleaseId: number; currency: DiscogsCurrency }
 ) &
   DiscogsAuth;
 
@@ -22,6 +33,7 @@ export type FakeDiscogs = DiscogsGateway & {
   authorizeAs(authorizeUrl: string, discogsUsername: string): string;
   /** The account named `from` takes the name `to`, and a different, new account takes the name `from`. */
   renameAccount(from: string, to: string): void;
+  fillInSellerSettings(discogsUsername: string): void;
   issuedIdentities: DiscogsIdentity[];
   calls: { startLogin: number; finishLogin: number };
   requests: FakeDiscogsRequest[];
@@ -29,6 +41,8 @@ export type FakeDiscogs = DiscogsGateway & {
 };
 
 const authorizePath = "/fake-discogs/authorize";
+const sellerSettingsPath = "/fake-discogs/settings/seller";
+const convert = converter(sampleRatesPerEuro);
 
 export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   const pending = new Map<string, { requestSecret: string; callbackUrl: string; authorized?: { verifier: string; discogsUsername: string } }>();
@@ -39,10 +53,18 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     renamedAccounts.get(discogsUsername.toLowerCase()) ?? fakeDiscogsUserId(discogsUsername);
   const releases = script.releases ?? [];
   const requests: FakeDiscogsRequest[] = [];
+  const savedSellerSettings = new Set<string>();
+  const sellerSettingsMissing = (discogsUsername: string) =>
+    !savedSellerSettings.has(discogsUsername) && (script.sellerSettingsMissingFor?.(discogsUsername) ?? false);
+  const usernameOf = (auth: DiscogsAuth) =>
+    issuedIdentities.findLast((identity) => identity.accessToken === auth.token)?.discogsUsername.toLowerCase();
 
   function answer(request: FakeDiscogsRequest) {
     requests.push(request);
     if (script.unavailable) throw new Error("Fake Discogs is scripted to be unavailable");
+    if ("discogsReleaseId" in request && script.unavailableReleases?.includes(request.discogsReleaseId)) {
+      throw new Error(`Fake Discogs is scripted to fail for Release ${request.discogsReleaseId}`);
+    }
   }
 
   function callbackFor(requestToken: string, discogsUsername: string) {
@@ -77,6 +99,22 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     return c.redirect(callbackFor(requestToken, String(form.username ?? "")), 302);
   });
 
+  pages.get(sellerSettingsPath, (c) =>
+    c.html(
+      page(`<h2>Seller settings</h2>
+    <form method="post" action="${sellerSettingsPath}">
+      <label for="username">Discogs username</label>
+      <input id="username" name="username" required autocomplete="username" autocapitalize="none">
+      <button type="submit">Save seller settings</button>
+    </form>`),
+    ),
+  );
+  pages.post(sellerSettingsPath, async (c) => {
+    const form = await c.req.parseBody();
+    savedSellerSettings.add(String(form.username ?? "").toLowerCase());
+    return c.html(page("<p>Your seller settings are saved. Go back to LP-Collection.</p>"));
+  });
+
   pages.get(`${coverPath}/:file`, (c) => {
     const id = Number.parseInt(c.req.param("file"), 10);
     const release = releases.find((candidate) => candidate.discogsReleaseId === id);
@@ -85,6 +123,21 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   });
 
   return {
+    sellerSettingsUrl: sellerSettingsPath,
+    async priceSuggestions(discogsReleaseId, auth) {
+      answer({ endpoint: "price-suggestions", discogsReleaseId, ...auth });
+      if (script.priceSuggestionsDelayMs) await new Promise((resolve) => setTimeout(resolve, script.priceSuggestionsDelayMs));
+      if (sellerSettingsMissing(usernameOf(auth) ?? "")) {
+        return priceSuggestionsFrom(Response.json({ message: "You must fill out your seller settings first." }, { status: 404 }));
+      }
+      const prices = Object.entries(script.prices?.[discogsReleaseId] ?? {}).map(([condition, { amount, currency }]) => [condition, { currency, value: amount }]);
+      return priceSuggestionsFrom(Response.json(Object.fromEntries(prices)));
+    },
+    async lowestListing(discogsReleaseId, currency, auth) {
+      answer({ endpoint: "stats", discogsReleaseId, currency, ...auth });
+      const lowest = script.lowestListings?.[discogsReleaseId];
+      return lowest ? convert(lowest, currency) : null;
+    },
     async lookupByBarcode(barcode, auth) {
       answer({ endpoint: "search", barcode, ...auth });
       return releases
@@ -126,6 +179,9 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     renameAccount(from, to) {
       renamedAccounts.set(to.toLowerCase(), discogsUserIdOf(from));
       renamedAccounts.set(from.toLowerCase(), fakeDiscogsUserId(`${from} (a new account)`));
+    },
+    fillInSellerSettings(discogsUsername) {
+      savedSellerSettings.add(discogsUsername.toLowerCase());
     },
     authorizeAs(authorizeUrl, discogsUsername) {
       const requestToken = new URL(authorizeUrl, "http://fake-discogs").searchParams.get("oauth_token") ?? "";
@@ -216,6 +272,25 @@ export const sampleReleases: FakeRelease[] = [
     barcodes: ["5099969209017"],
   },
 ];
+
+export function priceLadder(nearMint: number, currency: Money["currency"] = "EUR"): FakePrices {
+  const factors = [1.25, 1, 0.75, 0.5, 0.32, 0.22, 0.12, 0.06];
+  return Object.fromEntries(conditions.map((condition, index) => [condition, { amount: Math.round(nearMint * factors[index]! * 100) / 100, currency }]));
+}
+
+export const samplePrices: Record<number, FakePrices> = {
+  2335811: priceLadder(32),
+  2474032: priceLadder(28),
+  7371225: priceLadder(24),
+  16893476: priceLadder(45),
+};
+
+export const sampleLowestListings: Record<number, Money> = {
+  2335811: { amount: 19.5, currency: "EUR" },
+  7371225: { amount: 17, currency: "EUR" },
+  16893476: { amount: 31, currency: "EUR" },
+  1503928: { amount: 12, currency: "EUR" },
+};
 
 function fakeDiscogsUserId(discogsUsername: string) {
   return createHash("sha256").update(discogsUsername.toLowerCase()).digest().readUInt32BE(0) & 0x7fffffff;

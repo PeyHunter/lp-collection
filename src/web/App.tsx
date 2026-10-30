@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { CollectionScreen } from "./CollectionScreen.tsx";
+import { CopyScreen } from "./CopyScreen.tsx";
 import { Header } from "./Header.tsx";
 import { LookupScreen } from "./LookupScreen.tsx";
 import { followLink, useRoute, type Route } from "./navigation.ts";
+import type { Currency } from "../server/discogs.ts";
 
-export type Me = { discogsUsername: string; canCreateInvites: boolean; collection: { id: string } };
+export type Me = { discogsUsername: string; canCreateInvites: boolean; collection: { id: string }; currency: Currency; sellerSettingsUrl: string };
 
 const loginProblems = {
   "cookie-missing":
@@ -86,8 +88,14 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
         <>
           {route.page === "lookup" ? (
             <LookupScreen collectionId={session.me.collection.id} />
+          ) : route.page === "copy" ? (
+            <CopyScreen me={session.me} copyId={route.copyId} />
           ) : (
-            <CollectionScreen me={session.me} onLoggedOut={() => setSession({ kind: "signed-out" })} />
+            <CollectionScreen
+              me={session.me}
+              onCurrencyChanged={(currency) => setSession({ kind: "signed-in", me: { ...session.me, currency } })}
+              onLoggedOut={() => setSession({ kind: "signed-out" })}
+            />
           )}
           <Dock current={route.page} />
         </>
@@ -105,7 +113,7 @@ function Dock({ current }: { current: Route["page"] }) {
           </svg>
           Scan
         </a>
-        <a className="tab end" href="/" onClick={followLink} aria-current={current === "collection" ? "page" : undefined}>
+        <a className="tab end" href="/" onClick={followLink} aria-current={current === "collection" || current === "copy" ? "page" : undefined}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
             <circle cx="12" cy="12" r="8.5" />
             <circle cx="12" cy="12" r="3" />

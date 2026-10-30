@@ -33,4 +33,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Invite and log in](./invite-login.md) covers the app's Owner creating an Invite, the invited person logging in with Discogs into their own empty Collection, staying logged in, and logging out.
 - [Add a Copy by typed barcode](./add-copy.md) covers the Lookup screen, picking one of several pressings, saving the Copy at Very Good Plus, and the Collection list.
 - [Scan a barcode with the camera](./scan.md) covers the camera on the Lookup screen, reading EAN-13 and UPC-A, turning the camera off, and typing when the camera is blocked.
+- [Value](./value.md) covers the Value and Lowest listing on each row and on the Copy page, changing conditions, "No Value yet", the seller settings guide and the currency setting.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.

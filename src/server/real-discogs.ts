@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { DiscogsAuth, DiscogsGateway, Release, ReleaseCandidate } from "./discogs.ts";
+import { conditions, isCurrency, type Condition, type DiscogsAuth, type DiscogsGateway, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
 
 export type RealDiscogsOptions = {
   consumerKey: string;
@@ -65,7 +65,7 @@ export function createRealDiscogs({
     return response;
   }
 
-  async function getAs(auth: DiscogsAuth, path: string): Promise<unknown> {
+  async function getResponseAs(auth: DiscogsAuth, path: string) {
     const deadline = Date.now() + maxWaitMs;
     for (let retry = 0; ; retry++) {
       const response = await send("GET", path, auth.secret, { oauth_token: auth.token }, deadline);
@@ -74,10 +74,15 @@ export function createRealDiscogs({
         await sleep(backoff);
         continue;
       }
-      if (response.status === 404) return undefined;
-      if (!response.ok) throw new Error(`Discogs answered GET ${path} with HTTP ${response.status}: ${await response.text()}`);
-      return response.json();
+      return response;
     }
+  }
+
+  async function getAs(auth: DiscogsAuth, path: string): Promise<unknown> {
+    const response = await getResponseAs(auth, path);
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new Error(`Discogs answered GET ${path} with HTTP ${response.status}: ${await response.text()}`);
+    return response.json();
   }
 
   async function tokenPair(response: Response) {
@@ -89,6 +94,16 @@ export function createRealDiscogs({
   }
 
   return {
+    sellerSettingsUrl: `${webBaseUrl}/settings/seller`,
+    async priceSuggestions(discogsReleaseId, auth) {
+      return priceSuggestionsFrom(await getResponseAs(auth, `/marketplace/price_suggestions/${discogsReleaseId}`));
+    },
+    async lowestListing(discogsReleaseId, currency, auth) {
+      const stats = (await getAs(auth, `/marketplace/stats/${discogsReleaseId}?${new URLSearchParams({ curr_abbr: currency })}`)) as
+        | { lowest_price?: unknown }
+        | undefined;
+      return moneyFrom(stats?.lowest_price);
+    },
     async lookupByBarcode(barcode, auth) {
       const search = (await getAs(auth, `/database/search?${new URLSearchParams({ barcode, type: "release", per_page: "50" })}`)) as
         | { results?: SearchResult[] }
@@ -151,6 +166,32 @@ type DiscogsRelease = {
   master_id?: number;
   images?: { type?: string; uri?: string }[];
 };
+
+/**
+ * Discogs refuses price suggestions with a 4xx whose message names the seller settings
+ * ("You must fill out your seller settings first.", seen as 404 and as 400). Any other 404 means no suggestion.
+ */
+export async function priceSuggestionsFrom(response: Response): Promise<PriceSuggestions> {
+  if (!response.ok) {
+    const body = await response.text();
+    if (response.status >= 400 && response.status < 500 && /seller settings/i.test(body)) return { kind: "seller-settings-missing" };
+    if (response.status === 404) return { kind: "suggested", prices: {} };
+    throw new Error(`Discogs answered GET ${new URL(response.url || "http://discogs").pathname} with HTTP ${response.status}: ${body}`);
+  }
+  const suggestions = (await response.json()) as Record<string, unknown>;
+  const prices: Partial<Record<Condition, Money>> = {};
+  for (const condition of conditions) {
+    const price = moneyFrom(suggestions[condition]);
+    if (price) prices[condition] = price;
+  }
+  return { kind: "suggested", prices };
+}
+
+function moneyFrom(price: unknown): Money | null {
+  const { currency, value } = (price ?? {}) as { currency?: unknown; value?: unknown };
+  if (!isCurrency(currency) || typeof value !== "number" || !(value > 0)) return null;
+  return { amount: Math.round(value * 100) / 100, currency };
+}
 
 function candidateFrom(result: SearchResult): ReleaseCandidate {
   const [artist, ...title] = (result.title ?? "").split(" - ");

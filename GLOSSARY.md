@@ -68,11 +68,21 @@ A Copy with no Section yet, or whose Section was removed.
 The grade of the vinyl itself, on the Discogs scale: Mint, Near Mint, Very Good Plus, Very Good, Good Plus, Good, Fair, Poor. It defaults to Very Good Plus.
 
 **Sleeve condition**:
-The grade of the cover, on the same scale as Media condition. It defaults to Very Good Plus.
+The grade of the cover, on the Media condition scale plus three grades Discogs has for covers: Generic (a plain or company sleeve), Not Graded, and No Cover. It defaults to Very Good Plus.
 
 **Value**:
 The Discogs suggested price for a Release in a Copy's Media condition. This is the main number shown and sorted on.
 _Avoid_: price, worth
+
+**Currency**:
+The currency a User sees Values in. It defaults to Danish kroner (DKK). Discogs quotes prices only in some currencies (not DKK), so the app converts each price with the European Central Bank's daily rates. A Value in another currency is not shown; it is fetched again in the User's currency.
+
+**Value snapshot**:
+One Value fetch for a Copy: the Media condition, the Value (or none), the Lowest listing (or none), the currency and the time. The Value shown is the latest snapshot in the User's currency for the Copy's current Media condition, so Members with different currencies each keep their own.
+_Avoid_: price record
+
+**Seller settings**:
+The Discogs account settings for selling. Discogs suggests prices only to accounts that have filled them in, so a User without them is shown how to fill them in instead of "No Value yet".
 
 **Lowest listing**:
 The cheapest asking price on the Discogs marketplace for a Release right now. It ignores condition and can be missing.

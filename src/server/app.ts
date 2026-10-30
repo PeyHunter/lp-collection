@@ -3,11 +3,13 @@ import { createAccessRoutes } from "./access.ts";
 import { createCollectionRoutes } from "./collection.ts";
 import type { Database } from "./db.ts";
 import type { DiscogsGateway } from "./discogs.ts";
+import type { ExchangeRates } from "./exchange-rates.ts";
 import type { SecretBox } from "./secret-box.ts";
 
 export type AppDependencies = {
   database: Database;
   discogs: DiscogsGateway;
+  exchangeRates: ExchangeRates;
   secretBox: SecretBox;
   now: () => Date;
   appOwnerDiscogsUsername: string;
