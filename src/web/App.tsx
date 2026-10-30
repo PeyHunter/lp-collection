@@ -8,7 +8,7 @@ import { ShelfScreen } from "./ShelfScreen.tsx";
 import { ShelvesScreen } from "./ShelvesScreen.tsx";
 import type { Currency } from "../server/discogs.ts";
 
-export type Me = { discogsUsername: string; canCreateInvites: boolean; collection: { id: string }; currency: Currency; sellerSettingsUrl: string };
+export type Me = { discogsUsername: string; canCreateInvites: boolean; collection: { id: string }; currency: Currency; showValues: boolean; sellerSettingsUrl: string };
 
 const loginProblems = {
   "cookie-missing":
@@ -85,13 +85,14 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
           </section>
         </Page>
       );
-    case "signed-in":
+    case "signed-in": {
+      const changeMe = (change: Partial<Me>) => setSession({ kind: "signed-in", me: { ...session.me, ...change } });
       return (
         <>
           {route.page === "lookup" ? (
             <LookupScreen collectionId={session.me.collection.id} />
           ) : route.page === "copy" ? (
-            <CopyScreen me={session.me} copyId={route.copyId} />
+            <CopyScreen me={session.me} copyId={route.copyId} onShowValuesChanged={(showValues) => changeMe({ showValues })} />
           ) : route.page === "shelves" ? (
             <ShelvesScreen me={session.me} />
           ) : route.page === "shelf" ? (
@@ -99,13 +100,15 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
           ) : (
             <CollectionScreen
               me={session.me}
-              onCurrencyChanged={(currency) => setSession({ kind: "signed-in", me: { ...session.me, currency } })}
+              onCurrencyChanged={(currency) => changeMe({ currency })}
+              onShowValuesChanged={(showValues) => changeMe({ showValues })}
               onLoggedOut={() => setSession({ kind: "signed-out" })}
             />
           )}
           <Dock current={route.page} />
         </>
       );
+    }
   }
 }
 

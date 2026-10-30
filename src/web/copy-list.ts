@@ -15,6 +15,17 @@ export const sortOptions: { sort: SortName; label: string; dir: Direction; order
 
 const defaultSort = sortOptions[0]!;
 
+export function sortOptionsFor(showValues: boolean) {
+  return showValues ? sortOptions : sortOptions.filter((option) => option.sort !== "value");
+}
+
+/** With Values hidden there is no Value sort, so a list sorted by Value shows in the first sort that is left. */
+export function shownQuery(query: ListQuery, showValues: boolean): ListQuery {
+  if (showValues || query.sort !== "value") return query;
+  const [first] = sortOptionsFor(false);
+  return { ...query, sort: first!.sort, dir: first!.dir };
+}
+
 /** The list's search, sort and filters live in the address, so going back from a Copy returns to the same view. */
 export function queryFromSearch(search: string): ListQuery {
   const params = new URLSearchParams(search);
@@ -40,14 +51,14 @@ export function searchFromQuery(query: ListQuery, { forApi = false } = {}) {
   return params.toString();
 }
 
-type Page = { copies: CopyView[]; groups: ListGroup[]; total: number; next: string | null; facets: Facets | null; sellerSettingsMissing: boolean };
+type Page = { copies: CopyView[]; groups: ListGroup[]; total: number; next: string | null; facets: Facets | null; sellerSettingsMissing?: boolean };
 
 export type CopyList =
   | { kind: "loading" }
   | { kind: "failed" }
-  | { kind: "loaded"; copies: CopyView[]; groups: ListGroup[]; total: number; next: string | null; facets: Facets; more: "idle" | "loading" | "failed"; sellerSettingsMissing: boolean };
+  | { kind: "loaded"; copies: CopyView[]; groups: ListGroup[]; total: number; next: string | null; facets: Facets; more: "idle" | "loading" | "failed"; sellerSettingsMissing: boolean; sort: SortName };
 
-type Action = { type: "load" } | { type: "failed" } | { type: "first-page"; page: Page } | { type: "more" } | { type: "more-failed" } | { type: "next-page"; page: Page };
+type Action = { type: "load" } | { type: "failed" } | { type: "first-page"; page: Page; sort: SortName } | { type: "more" } | { type: "more-failed" } | { type: "next-page"; page: Page };
 
 function appendGroups(groups: ListGroup[], next: ListGroup[]) {
   const [first, ...rest] = next;
@@ -64,7 +75,7 @@ function reduce(state: CopyList, action: Action): CopyList {
     case "failed":
       return { kind: "failed" };
     case "first-page":
-      return { kind: "loaded", ...action.page, facets: action.page.facets ?? { periods: [], genres: [] }, more: "idle" };
+      return { kind: "loaded", ...action.page, facets: action.page.facets ?? { periods: [], genres: [] }, sellerSettingsMissing: action.page.sellerSettingsMissing ?? false, sort: action.sort, more: "idle" };
     case "more":
       return state.kind === "loaded" ? { ...state, more: "loading" } : state;
     case "more-failed":
@@ -104,7 +115,7 @@ export function useCopyList(collectionId: string, query: ListQuery, reloadKey: s
     const abort = new AbortController();
     dispatch({ type: "load" });
     fetchPage(collectionId, queryRef.current, null, abort.signal).then((page) => {
-      if (!abort.signal.aborted) dispatch(page ? { type: "first-page", page } : { type: "failed" });
+      if (!abort.signal.aborted) dispatch(page ? { type: "first-page", page, sort: queryRef.current.sort } : { type: "failed" });
     });
     return () => abort.abort();
   }, [collectionId, apiQuery, reloadKey]);
@@ -118,7 +129,7 @@ export function useCopyList(collectionId: string, query: ListQuery, reloadKey: s
         setValues((before) => ({
           fetching: more && !sellerSettingsMissing,
           sellerSettingsMissing,
-          valued: new Map([...before.valued, ...copies.map((copy) => [copy.id, copy] as const)]),
+          valued: new Map([...before.valued, ...(copies ?? []).map((copy) => [copy.id, copy] as const)]),
         })),
     }).then(() => {
       if (!abort.signal.aborted) setValues((before) => ({ ...before, fetching: false }));
