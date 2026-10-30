@@ -283,6 +283,42 @@ main.content-grid { row-gap: var(--space-xl); align-content: start; padding-bloc
 }
 .save-panel p { font-size: var(--text-sm); color: var(--ink-dim); }
 
+.viewfinder {
+  display: grid;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-m);
+  overflow: clip;
+  background: var(--sunk);
+}
+.viewfinder > * { grid-area: 1 / 1; }
+.viewfinder video { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.viewfinder .frame {
+  --corner: var(--ink);
+  place-self: center;
+  inline-size: 72%;
+  aspect-ratio: 2.2 / 1;
+  background:
+    linear-gradient(var(--corner), var(--corner)) top left / 1.5rem 3px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) top left / 3px 1.5rem no-repeat,
+    linear-gradient(var(--corner), var(--corner)) top right / 1.5rem 3px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) top right / 3px 1.5rem no-repeat,
+    linear-gradient(var(--corner), var(--corner)) bottom left / 1.5rem 3px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) bottom left / 3px 1.5rem no-repeat,
+    linear-gradient(var(--corner), var(--corner)) bottom right / 1.5rem 3px no-repeat,
+    linear-gradient(var(--corner), var(--corner)) bottom right / 3px 1.5rem no-repeat,
+    linear-gradient(var(--accent), var(--accent)) center / 100% 2px no-repeat;
+}
+.viewfinder-hint {
+  place-self: end center;
+  margin-block-end: var(--space-s);
+  padding: var(--space-2xs) var(--space-s);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklch, var(--black) 55%, transparent);
+  font-size: var(--text-s);
+  font-weight: 600;
+}
+.scan-read { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-s); }
+
 .btn {
   display: inline-flex;
   align-items: center;
