@@ -1,16 +1,19 @@
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
 import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
-import type { DiscogsAuth, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
+import type { Condition, DiscogsAuth, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
 import type { SecretBox } from "./secret-box.ts";
+import { createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { barcodeLookupCache, copies, memberships, photos, releases, users } from "./schema.ts";
 import { createValuation, type CopyValue, type ValuationOutcome, type Valuer } from "./valuation.ts";
 
 type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean };
+
+const { searchText: _, artistSortKey: __, ...releaseColumns } = getTableColumns(releases);
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
@@ -61,10 +64,8 @@ function photoView(collectionId: string, photo: typeof photos.$inferSelect): Pho
   return { id: photo.id, url: `/api/collections/${collectionId}/copies/${photo.copyId}/photos/${photo.id}`, width: photo.width, height: photo.height };
 }
 
-type CopyRow = { copy: typeof copies.$inferSelect; release: typeof releases.$inferSelect };
-
-function copyView(row: CopyRow, value: CopyValue | undefined, gain: number | null, photos: PhotoView[]) {
-  const { fetchedAt: _, ...release } = row.release;
+function copyView(row: { copy: typeof copies.$inferSelect; release: CachedRelease }, value: CopyValue | undefined, gain: number | null, photos: PhotoView[]) {
+  const { fetchedAt: _, genres, styles, ...release } = row.release;
   return {
     id: row.copy.id,
     mediaCondition: row.copy.mediaCondition,
@@ -77,11 +78,34 @@ function copyView(row: CopyRow, value: CopyValue | undefined, gain: number | nul
     gain,
     photos,
     pictureUrl: photos[0]?.url ?? release.coverImageUrl,
-    release,
+    release: { ...release, genres: genres ?? [], styles: styles ?? [] },
   };
 }
 
 export type CopyView = ReturnType<typeof copyView>;
+
+const maxSearchLength = 200;
+const maxGenreLength = 100;
+const defaultPageSize = 50;
+const maxPageSize = 100;
+
+function parseListQuery(params: Record<string, string>): ListQuery | undefined {
+  const sort = (params.sort ?? "value") as SortName;
+  if (!sortNames.includes(sort)) return undefined;
+  const direction = params.dir ?? defaultDirection(sort);
+  if (direction !== "asc" && direction !== "desc") return undefined;
+  const search = (params.q ?? "").trim();
+  if (search.length > maxSearchLength) return undefined;
+  const period = params.period === undefined ? null : /^\d{3}0$/.test(params.period) ? Number(params.period) : undefined;
+  if (period === undefined) return undefined;
+  const genre = params.genre ?? null;
+  if (genre !== null && (genre.length === 0 || genre.length > maxGenreLength)) return undefined;
+  const limit = params.limit === undefined ? defaultPageSize : /^\d{1,3}$/.test(params.limit) ? Number(params.limit) : 0;
+  if (limit < 1 || limit > maxPageSize) return undefined;
+  const after = params.cursor === undefined ? null : decodeCursor(params.cursor, sort, direction);
+  if (after === undefined) return undefined;
+  return { search, sort, direction, period, genre, after, limit };
+}
 
 function parseValuesRequest(body: unknown, now: Date): { retryEmptyBefore?: Date } {
   const { retryEmpty, retryEmptyBefore } = (body ?? {}) as Record<string, unknown>;
@@ -89,10 +113,6 @@ function parseValuesRequest(body: unknown, now: Date): { retryEmptyBefore?: Date
     return { retryEmptyBefore: new Date(Math.min(Date.parse(retryEmptyBefore), now.getTime())) };
   }
   return retryEmpty === true ? { retryEmptyBefore: now } : {};
-}
-
-function needsValue(copy: CopyView, retryEmptyBefore: Date | undefined) {
-  return !copy.value || (retryEmptyBefore !== undefined && copy.value.value === null && new Date(copy.value.fetchedAt) < retryEmptyBefore);
 }
 
 function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, before: boolean) {
@@ -107,14 +127,15 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
   const { db } = database;
   const photoStore = createPhotoStore(photosDir);
   const valuation = createValuation({ database, discogs, exchangeRates, now });
+  const listing = createListing(database);
   const routes = new Hono<{ Variables: { member: Member } }>();
-  const valueBatches = new Map<string, Promise<{ sellerSettingsMissing: boolean; more: boolean }>>();
+  const valueBatches = new Map<string, Promise<{ sellerSettingsMissing: boolean; valued: string[]; more: boolean }>>();
   const failedAt = new Map<string, Date>();
 
-  function waitsAfterFailure(copyId: string) {
-    const failed = failedAt.get(copyId);
+  function waitsAfterFailure(key: string) {
+    const failed = failedAt.get(key);
     if (failed && now().getTime() - failed.getTime() < failedValueRetryMs) return true;
-    failedAt.delete(copyId);
+    failedAt.delete(key);
     return false;
   }
 
@@ -180,37 +201,23 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     return byCopy;
   }
 
-  async function views(collectionId: string, rows: CopyRow[], values: Map<string, CopyValue>) {
-    const ids = rows.map((row) => row.copy.id);
+  async function views(collectionId: string, rows: ListedCopy[]) {
     const [photosByCopy, gains] = await Promise.all([
-      photosOf(collectionId, ids),
-      Promise.all(rows.map((row) => gainOf(values.get(row.copy.id), purchaseOf(row.copy), exchangeRates))),
+      photosOf(collectionId, rows.map((row) => row.copy.id)),
+      Promise.all(rows.map((row) => gainOf(row.value, purchaseOf(row.copy), exchangeRates))),
     ]);
-    return rows.map((row, index) => copyView(row, values.get(row.copy.id), gains[index]!, photosByCopy.get(row.copy.id)!));
-  }
-
-  async function collectionCopies({ collectionId, currency }: Member) {
-    const [rows, values] = await Promise.all([
-      db
-        .select({ copy: copies, release: releases })
-        .from(copies)
-        .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
-        .where(eq(copies.collectionId, collectionId))
-        .orderBy(desc(copies.createdAt), desc(copies.id)),
-      valuation.currentValues({ collectionId }, currency),
-    ]);
-    return views(collectionId, rows, values);
+    return rows.map((row, index) => copyView(row, row.value, gains[index]!, photosByCopy.get(row.copy.id)!));
   }
 
   async function oneCopy({ collectionId, currency }: Member, copyId: string) {
     if (!uuidPattern.test(copyId)) return undefined;
     const [row] = await db
-      .select({ copy: copies, release: releases })
+      .select({ copy: copies, release: releaseColumns })
       .from(copies)
       .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
       .where(and(eq(copies.id, copyId), eq(copies.collectionId, collectionId)));
     if (!row) return undefined;
-    const [copy] = await views(collectionId, [row], await valuation.currentValues({ copyId }, currency));
+    const [copy] = await views(collectionId, [{ ...row, value: await valuation.currentValue(copyId, currency) }]);
     return copy;
   }
 
@@ -236,7 +243,16 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
 
   routes.get("/api/collections/:collectionId/copies", async (c) => {
     const member = c.var.member;
-    return c.json({ copies: await collectionCopies(member), sellerSettingsMissing: member.sellerSettingsMissing });
+    const query = parseListQuery(c.req.query());
+    if (!query) {
+      return c.json({ error: "Search with up to 200 characters, sort by value, artist, year, period or added, and filter by a decade such as 1970 or one genre." }, 400);
+    }
+    const { listed, ...page } = await listing.page(member.collectionId, member.currency, query);
+    return c.json({
+      copies: await views(member.collectionId, listed),
+      ...page,
+      sellerSettingsMissing: member.sellerSettingsMissing,
+    });
   });
 
   routes.post("/api/collections/:collectionId/copies", async (c) => {
@@ -356,18 +372,60 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     return c.json({ copy: await oneCopy(member, copyId) });
   });
 
+  async function copiesWithoutValue({ collectionId, currency }: Member, retryEmptyBefore: Date | undefined) {
+    const { rows } = await db.execute<{ id: string; discogs_release_id: number; media_condition: Condition }>(sql`
+      select c.id, c.discogs_release_id, c.media_condition
+      from copies c
+      left join lateral (${latestSnapshot(sql`c`, currency)}) v on true
+      where c.collection_id = ${collectionId}
+        and (v.fetched_at is null or (v.value is null and v.fetched_at < ${retryEmptyBefore?.toISOString() ?? null}::timestamptz))
+      order by c.created_at desc, c.id desc`);
+    return rows
+      .filter((row) => !waitsAfterFailure(row.id))
+      .map((row) => ({ id: row.id, discogsReleaseId: row.discogs_release_id, mediaCondition: row.media_condition }));
+  }
+
   async function fetchMissingValues(member: Member, retryEmptyBefore: Date | undefined) {
-    const due = (await collectionCopies(member)).filter((copy) => needsValue(copy, retryEmptyBefore) && !waitsAfterFailure(copy.id));
+    const due = await copiesWithoutValue(member, retryEmptyBefore);
     let sellerSettingsMissing = member.sellerSettingsMissing;
-    let valued = false;
+    const valued: string[] = [];
     for (const copy of due.slice(0, valueBatchSize)) {
-      const outcome = await valuation.fetchValue({ ...copy, discogsReleaseId: copy.release.discogsReleaseId }, member);
+      const outcome = await valuation.fetchValue(copy, member);
       sellerSettingsMissing = sellerSettingsMissingAfter(outcome, sellerSettingsMissing);
-      if (outcome === "seller-settings-missing") return { sellerSettingsMissing, more: false };
+      if (outcome === "seller-settings-missing") return { sellerSettingsMissing, valued, more: false };
       if (outcome === "unavailable") failedAt.set(copy.id, now());
-      valued ||= outcome === "valued";
+      if (outcome === "valued") valued.push(copy.id);
     }
-    return { sellerSettingsMissing, more: valued && due.length > valueBatchSize };
+    return { sellerSettingsMissing, valued, more: valued.length > 0 && due.length > valueBatchSize };
+  }
+
+  async function fillInGenres({ collectionId, auth }: Member) {
+    const { rows } = await db.execute<{ discogs_release_id: number }>(sql`
+      select distinct r.discogs_release_id
+      from releases r join copies c on c.discogs_release_id = r.discogs_release_id
+      where c.collection_id = ${collectionId} and r.genres is null`);
+    const due = rows.map((row) => row.discogs_release_id).filter((id) => !waitsAfterFailure(`release ${id}`));
+    let filled = false;
+    for (const discogsReleaseId of due.slice(0, valueBatchSize)) {
+      try {
+        const release = await discogs.release(discogsReleaseId, auth);
+        await db
+          .update(releases)
+          .set({ genres: release?.genres ?? [], styles: release?.styles ?? [] })
+          .where(eq(releases.discogsReleaseId, discogsReleaseId));
+        filled = true;
+      } catch (error) {
+        console.error(`Genres of Release ${discogsReleaseId} failed: ${error instanceof Error ? error.message : String(error)}`);
+        failedAt.set(`release ${discogsReleaseId}`, now());
+      }
+    }
+    return { more: filled && due.length > valueBatchSize };
+  }
+
+  async function fetchMissingDetails(member: Member, retryEmptyBefore: Date | undefined) {
+    const values = await fetchMissingValues(member, retryEmptyBefore);
+    const genres = await fillInGenres(member);
+    return { ...values, more: values.more || genres.more };
   }
 
   routes.post("/api/collections/:collectionId/values", async (c) => {
@@ -376,11 +434,12 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     const key = [member.userId, member.collectionId, member.currency, retryEmptyBefore?.toISOString()].join(" ");
     let batch = valueBatches.get(key);
     if (!batch) {
-      batch = fetchMissingValues(member, retryEmptyBefore).finally(() => valueBatches.delete(key));
+      batch = fetchMissingDetails(member, retryEmptyBefore).finally(() => valueBatches.delete(key));
       valueBatches.set(key, batch);
     }
-    const { sellerSettingsMissing, more } = await batch;
-    return c.json({ copies: await collectionCopies(member), sellerSettingsMissing, more, retryEmptyBefore: retryEmptyBefore?.toISOString() });
+    const { sellerSettingsMissing, valued, more } = await batch;
+    const copies = (await Promise.all(valued.map((copyId) => oneCopy(member, copyId)))).filter((copy) => copy !== undefined);
+    return c.json({ copies, sellerSettingsMissing, more, retryEmptyBefore: retryEmptyBefore?.toISOString() });
   });
 
   return routes;

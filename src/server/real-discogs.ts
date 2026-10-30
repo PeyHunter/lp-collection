@@ -164,6 +164,8 @@ type DiscogsRelease = {
   country?: string;
   year?: number;
   master_id?: number;
+  genres?: string[];
+  styles?: string[];
   images?: { type?: string; uri?: string }[];
 };
 
@@ -233,6 +235,8 @@ function releaseFrom(release: DiscogsRelease, master: { year?: number } | undefi
     pressingYear,
     originalYear: year(master?.year) ?? pressingYear,
     coverImageUrl: image?.uri || null,
+    genres: release.genres ?? [],
+    styles: release.styles ?? [],
   };
 }
 

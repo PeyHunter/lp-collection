@@ -70,6 +70,8 @@ export type Release = {
   pressingYear: number | null;
   originalYear: number | null;
   coverImageUrl: string | null;
+  genres: string[];
+  styles: string[];
 };
 
 export type DiscogsAuth = {

@@ -178,6 +178,8 @@ test("a broad search shows only the first page of Releases and says how many mat
     originalYear: 1990,
     format: "Vinyl, LP",
     coverImageUrl: null,
+    genres: ["Rock"],
+    styles: ["Post-Punk"],
     barcodes: [],
   }));
   const app = await createTestApp({ discogs: { releases: many } });

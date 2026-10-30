@@ -142,7 +142,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       answer({ endpoint: "search", ...query, ...auth });
       const matches = releases.filter((release) => matchesQuery(release, query));
       return {
-        candidates: matches.slice(0, lookupPageSize).map(({ originalYear: _, barcodes: __, ...candidate }) => candidate),
+        candidates: matches.slice(0, lookupPageSize).map(({ originalYear: _, barcodes: __, genres: ___, styles: ____, ...candidate }) => candidate),
         total: matches.length,
       };
     },
@@ -229,6 +229,8 @@ export const sampleReleases: FakeRelease[] = [
     originalYear: 1959,
     format: "Vinyl, LP, Album, Reissue, Stereo, 180g",
     coverImageUrl: fakeCoverUrl(2335811),
+    genres: ["Jazz"],
+    styles: ["Modal", "Hard Bop"],
     barcodes: ["886979891211"],
   },
   {
@@ -242,6 +244,8 @@ export const sampleReleases: FakeRelease[] = [
     originalYear: 1959,
     format: "Vinyl, LP, Album, Reissue, Stereo",
     coverImageUrl: fakeCoverUrl(2474032),
+    genres: ["Jazz"],
+    styles: ["Modal", "Hard Bop"],
     barcodes: ["886979891211"],
   },
   {
@@ -255,6 +259,8 @@ export const sampleReleases: FakeRelease[] = [
     originalYear: 1959,
     format: "Vinyl, LP, Album, Reissue, Remastered",
     coverImageUrl: null,
+    genres: ["Jazz"],
+    styles: ["Modal"],
     barcodes: ["886979891211"],
   },
   {
@@ -268,6 +274,8 @@ export const sampleReleases: FakeRelease[] = [
     originalYear: 2001,
     format: "Vinyl, 2×LP, Album, Reissue",
     coverImageUrl: fakeCoverUrl(16893476),
+    genres: ["Electronic"],
+    styles: ["House", "Disco"],
     barcodes: ["190295328709"],
   },
   {
@@ -281,6 +289,8 @@ export const sampleReleases: FakeRelease[] = [
     originalYear: 1975,
     format: "Vinyl, LP, Album",
     coverImageUrl: fakeCoverUrl(1503928),
+    genres: ["Rock"],
+    styles: ["Pop Rock"],
     barcodes: ["5099969209017"],
   },
   {
@@ -294,6 +304,8 @@ export const sampleReleases: FakeRelease[] = [
     originalYear: 1967,
     format: "Vinyl, LP, Album, Stereo",
     coverImageUrl: fakeCoverUrl(1095979),
+    genres: ["Rock"],
+    styles: ["Psychedelic Rock", "Pop Rock"],
     barcodes: [],
   },
   {
@@ -307,7 +319,54 @@ export const sampleReleases: FakeRelease[] = [
     originalYear: 1967,
     format: "Vinyl, LP, Album, Stereo",
     coverImageUrl: null,
+    genres: ["Rock"],
+    styles: ["Psychedelic Rock", "Pop Rock"],
     barcodes: [],
+  },
+  {
+    discogsReleaseId: 13716287,
+    artist: "The Beatles",
+    title: "Abbey Road",
+    label: "Apple Records",
+    catalogNumber: "PCS 7088",
+    country: "UK",
+    pressingYear: 2019,
+    originalYear: 1969,
+    format: "Vinyl, LP, Album, Reissue, Remastered",
+    coverImageUrl: fakeCoverUrl(13716287),
+    genres: ["Rock"],
+    styles: ["Pop Rock"],
+    barcodes: ["602577915062"],
+  },
+  {
+    discogsReleaseId: 3133906,
+    artist: "Kate Bush",
+    title: "Hounds Of Love",
+    label: "EMI",
+    catalogNumber: "KAB 1",
+    country: "UK",
+    pressingYear: 1985,
+    originalYear: 1985,
+    format: "Vinyl, LP, Album",
+    coverImageUrl: fakeCoverUrl(3133906),
+    genres: ["Electronic", "Rock", "Pop"],
+    styles: ["Art Rock", "Synth-pop"],
+    barcodes: ["5099924015813"],
+  },
+  {
+    discogsReleaseId: 1046716,
+    artist: "Kraftwerk",
+    title: "Trans-Europe Express",
+    label: "Kling Klang",
+    catalogNumber: "1C 064-82 306",
+    country: "Germany",
+    pressingYear: 1977,
+    originalYear: 1977,
+    format: "Vinyl, LP, Album",
+    coverImageUrl: fakeCoverUrl(1046716),
+    genres: ["Electronic"],
+    styles: ["Synth-pop", "Electro"],
+    barcodes: ["5099906406616"],
   },
 ];
 
@@ -321,6 +380,9 @@ export const samplePrices: Record<number, FakePrices> = {
   2474032: priceLadder(28),
   7371225: priceLadder(24),
   16893476: priceLadder(45),
+  13716287: priceLadder(38),
+  3133906: priceLadder(60),
+  1046716: priceLadder(110),
 };
 
 export const sampleLowestListings: Record<number, Money> = {
