@@ -5,7 +5,7 @@ const port = Number(process.env.E2E_PORT ?? 4173);
 
 export default defineConfig({
   testDir: "e2e",
-  use: { baseURL: `http://localhost:${port}` },
+  use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
   projects: [
     // iPhone screen size and touch; Chromium stands in for Safari so it runs without system packages.
     { name: "iphone", use: { ...devices["iPhone 15"], defaultBrowserType: "chromium" } },
