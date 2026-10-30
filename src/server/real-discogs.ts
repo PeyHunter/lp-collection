@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { conditions, isCurrency, type DiscogsAuth, type DiscogsGateway, type Money, type Release, type ReleaseCandidate } from "./discogs.ts";
+import { conditions, isCurrency, type Condition, type DiscogsAuth, type DiscogsGateway, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
 
 export type RealDiscogsOptions = {
   consumerKey: string;
@@ -96,21 +96,7 @@ export function createRealDiscogs({
   return {
     sellerSettingsUrl: `${webBaseUrl}/settings/seller`,
     async priceSuggestions(discogsReleaseId, auth) {
-      const path = `/marketplace/price_suggestions/${discogsReleaseId}`;
-      const response = await getResponseAs(auth, path);
-      if (response.status === 404) return { kind: "suggested", prices: {} };
-      if (!response.ok) {
-        const body = await response.text();
-        if (response.status >= 400 && response.status < 500 && /seller settings/i.test(body)) return { kind: "seller-settings-missing" };
-        throw new Error(`Discogs answered GET ${path} with HTTP ${response.status}: ${body}`);
-      }
-      const suggestions = (await response.json()) as Record<string, unknown>;
-      const prices: Partial<Record<(typeof conditions)[number], Money>> = {};
-      for (const condition of conditions) {
-        const price = moneyFrom(suggestions[condition]);
-        if (price) prices[condition] = price;
-      }
-      return { kind: "suggested", prices };
+      return priceSuggestionsFrom(await getResponseAs(auth, `/marketplace/price_suggestions/${discogsReleaseId}`));
     },
     async lowestListing(discogsReleaseId, currency, auth) {
       const stats = (await getAs(auth, `/marketplace/stats/${discogsReleaseId}?${new URLSearchParams({ curr_abbr: currency })}`)) as
@@ -180,6 +166,26 @@ type DiscogsRelease = {
   master_id?: number;
   images?: { type?: string; uri?: string }[];
 };
+
+/**
+ * Discogs refuses price suggestions with a 4xx whose message names the seller settings
+ * ("You must fill out your seller settings first.", seen as 404 and as 400). Any other 404 means no suggestion.
+ */
+export async function priceSuggestionsFrom(response: Response): Promise<PriceSuggestions> {
+  if (!response.ok) {
+    const body = await response.text();
+    if (response.status >= 400 && response.status < 500 && /seller settings/i.test(body)) return { kind: "seller-settings-missing" };
+    if (response.status === 404) return { kind: "suggested", prices: {} };
+    throw new Error(`Discogs answered GET ${new URL(response.url || "http://discogs").pathname} with HTTP ${response.status}: ${body}`);
+  }
+  const suggestions = (await response.json()) as Record<string, unknown>;
+  const prices: Partial<Record<Condition, Money>> = {};
+  for (const condition of conditions) {
+    const price = moneyFrom(suggestions[condition]);
+    if (price) prices[condition] = price;
+  }
+  return { kind: "suggested", prices };
+}
 
 function moneyFrom(price: unknown): Money | null {
   const { currency, value } = (price ?? {}) as { currency?: unknown; value?: unknown };

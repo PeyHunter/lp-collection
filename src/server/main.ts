@@ -98,13 +98,13 @@ if (config.discogs.kind === "real") {
   exchangeRates = createEcbRates();
 } else {
   console.log(
-    "DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases and their prices. The username no-seller-settings has no seller settings until they are saved at /fake-discogs/settings/seller. Exchange rates are fixed.",
+    "DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases and their prices. A username that starts with no-seller-settings has no seller settings until they are saved at /fake-discogs/settings/seller. Exchange rates are fixed.",
   );
   discogs = fake = createFakeDiscogs({
     releases: sampleReleases,
     prices: samplePrices,
     lowestListings: sampleLowestListings,
-    sellerSettingsMissingFor: ["no-seller-settings"],
+    sellerSettingsMissingFor: (discogsUsername) => discogsUsername.startsWith("no-seller-settings"),
   });
   exchangeRates = createFixedRates();
 }

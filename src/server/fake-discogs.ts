@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { conditions, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type Money, type Release } from "./discogs.ts";
 import { converter, sampleRatesPerEuro } from "./exchange-rates.ts";
+import { priceSuggestionsFrom } from "./real-discogs.ts";
 
 export type FakeRelease = Release & { barcodes: string[]; format: string | null };
 
@@ -12,8 +13,8 @@ export type FakeDiscogsScript = {
   releases?: FakeRelease[];
   prices?: Record<number, FakePrices>;
   lowestListings?: Record<number, Money>;
-  /** Discogs usernames whose seller settings are not filled in, so Discogs refuses to suggest prices. */
-  sellerSettingsMissingFor?: string[];
+  /** Whether a Discogs account starts without seller settings, so Discogs refuses to suggest prices until they are saved. */
+  sellerSettingsMissingFor?: (discogsUsername: string) => boolean;
   unavailable?: boolean;
   loginStartFails?: boolean;
   finishLoginDelayMs?: number;
@@ -51,7 +52,9 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     renamedAccounts.get(discogsUsername.toLowerCase()) ?? fakeDiscogsUserId(discogsUsername);
   const releases = script.releases ?? [];
   const requests: FakeDiscogsRequest[] = [];
-  const sellerSettingsMissing = new Set((script.sellerSettingsMissingFor ?? []).map((name) => name.toLowerCase()));
+  const savedSellerSettings = new Set<string>();
+  const sellerSettingsMissing = (discogsUsername: string) =>
+    !savedSellerSettings.has(discogsUsername) && (script.sellerSettingsMissingFor?.(discogsUsername) ?? false);
   const usernameOf = (auth: DiscogsAuth) =>
     issuedIdentities.findLast((identity) => identity.accessToken === auth.token)?.discogsUsername.toLowerCase();
 
@@ -104,7 +107,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   );
   pages.post(sellerSettingsPath, async (c) => {
     const form = await c.req.parseBody();
-    sellerSettingsMissing.delete(String(form.username ?? "").toLowerCase());
+    savedSellerSettings.add(String(form.username ?? "").toLowerCase());
     return c.html(page("<p>Your seller settings are saved. Go back to LP-Collection.</p>"));
   });
 
@@ -119,8 +122,11 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
     sellerSettingsUrl: sellerSettingsPath,
     async priceSuggestions(discogsReleaseId, auth) {
       answer({ endpoint: "price-suggestions", discogsReleaseId, ...auth });
-      if (sellerSettingsMissing.has(usernameOf(auth) ?? "")) return { kind: "seller-settings-missing" };
-      return { kind: "suggested", prices: script.prices?.[discogsReleaseId] ?? {} };
+      if (sellerSettingsMissing(usernameOf(auth) ?? "")) {
+        return priceSuggestionsFrom(Response.json({ message: "You must fill out your seller settings first." }, { status: 404 }));
+      }
+      const prices = Object.entries(script.prices?.[discogsReleaseId] ?? {}).map(([condition, { amount, currency }]) => [condition, { currency, value: amount }]);
+      return priceSuggestionsFrom(Response.json(Object.fromEntries(prices)));
     },
     async lowestListing(discogsReleaseId, currency, auth) {
       answer({ endpoint: "stats", discogsReleaseId, currency, ...auth });
@@ -170,7 +176,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       renamedAccounts.set(from.toLowerCase(), fakeDiscogsUserId(`${from} (a new account)`));
     },
     fillInSellerSettings(discogsUsername) {
-      sellerSettingsMissing.delete(discogsUsername.toLowerCase());
+      savedSellerSettings.add(discogsUsername.toLowerCase());
     },
     authorizeAs(authorizeUrl, discogsUsername) {
       const requestToken = new URL(authorizeUrl, "http://fake-discogs").searchParams.get("oauth_token") ?? "";

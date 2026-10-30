@@ -11,7 +11,7 @@ const priced: FakeDiscogsScript = {
   releases: sampleReleases,
   prices: { [discovery]: priceLadder(40) },
   lowestListings: { [discovery]: { amount: 31, currency: "EUR" } },
-  sellerSettingsMissingFor: ["no-seller-settings"],
+  sellerSettingsMissingFor: (discogsUsername) => discogsUsername === "no-seller-settings",
 };
 
 type CopyAnswer = { copy: CopyView; sellerSettingsMissing: boolean };

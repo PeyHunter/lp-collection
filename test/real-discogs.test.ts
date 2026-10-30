@@ -105,6 +105,9 @@ async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
     } else if (path === "/marketplace/price_suggestions/1503928") {
       response.statusCode = 400;
       json({ message: "You must fill out your seller settings first." });
+    } else if (path === "/marketplace/price_suggestions/2474032") {
+      response.statusCode = 404;
+      json({ message: "You must fill out your seller settings first." });
     } else if (path === "/marketplace/price_suggestions/9100001") {
       response.statusCode = 500;
       json({ message: "Something went wrong." });
@@ -356,6 +359,7 @@ test("the real gateway reads price suggestions per Media condition and spots mis
   });
   expect(await discogs.priceSuggestions(7371225, auth)).toEqual({ kind: "suggested", prices: {} });
   expect(await discogs.priceSuggestions(404404, auth)).toEqual({ kind: "suggested", prices: {} });
+  expect(await discogs.priceSuggestions(2474032, auth)).toEqual({ kind: "seller-settings-missing" });
   expect(await discogs.priceSuggestions(1503928, auth)).toEqual({ kind: "seller-settings-missing" });
   await expect(discogs.priceSuggestions(9100001, auth)).rejects.toThrow("HTTP 500");
   expect(discogs.sellerSettingsUrl).toBe("https://discogs.example/settings/seller");
