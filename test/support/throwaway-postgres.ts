@@ -16,7 +16,16 @@ export async function startThrowawayPostgres(name: string) {
   spawn(process.execPath, [join(import.meta.dirname, "reap-postgres.ts"), String(process.pid), dir], { detached: true, stdio: "ignore" }).unref();
   const port = await freePort();
   const password = randomUUID();
-  const pg = new EmbeddedPostgres({ databaseDir: dir, user: "postgres", password, port, persistent: false, onLog: () => {} });
+  const pg = new EmbeddedPostgres({
+    databaseDir: dir,
+    user: "postgres",
+    password,
+    port,
+    persistent: false,
+    // Clients connect over TCP. Without this PostgreSQL writes its socket lock file to /tmp whatever TMPDIR says.
+    postgresFlags: ["-c", "unix_socket_directories="],
+    onLog: () => {},
+  });
   await pg.initialise();
   await pg.start();
   return {
