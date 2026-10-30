@@ -31,3 +31,18 @@ test.describe("when the camera is blocked", () => {
     await expect(page.getByRole("heading", { name: "1 Release matches" })).toBeVisible();
   });
 });
+
+test("when the phone can't read the camera's picture, the Owner is told scanning failed and types the barcode instead", async ({ page }) => {
+  await page.addInitScript(() => {
+    CanvasRenderingContext2D.prototype.getImageData = () => {
+      throw new DOMException("out of memory", "InvalidStateError");
+    };
+  });
+  await logInAsOwner(page);
+  await page.getByRole("link", { name: "Scan" }).click();
+
+  await expect(page.getByRole("status")).toContainText("Scanning failed on this phone. Type the barcode below instead, or try again.");
+  await page.getByRole("textbox", { name: "Barcode" }).fill("5099969209017");
+  await page.getByRole("button", { name: "Look up" }).click();
+  await expect(page.getByRole("heading", { name: "1 Release matches" })).toBeVisible();
+});

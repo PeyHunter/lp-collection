@@ -2,17 +2,21 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { beforeAll, describe, expect, test } from "vitest";
 import { prepareZXingModule } from "zxing-wasm/reader";
-import { decodeBarcode, thresholds, type Pixels } from "../src/web/decode-barcode.ts";
+import { createReader, thresholds, type Pixels } from "../src/web/decode-barcode.ts";
 import { barcodePhoto, straight, type Shot } from "./support/barcode-photo.ts";
+import { scanFrame } from "./support/scan-frame.ts";
 
 beforeAll(async () => {
   const wasm = await readFile(createRequire(import.meta.url).resolve("zxing-wasm/reader/zxing_reader.wasm"));
   await prepareZXingModule({ overrides: { wasmBinary: wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength) as ArrayBuffer }, fireImmediately: true });
 });
 
+const read = createReader();
+
 async function readAsTheCameraWould(photo: Pixels) {
+  const frame = scanFrame(photo);
   for (const threshold of thresholds) {
-    const digits = await decodeBarcode(photo, threshold);
+    const digits = await read(frame, threshold);
     if (digits) return digits;
   }
   return null;
@@ -27,6 +31,8 @@ const photos: Record<string, Omit<Shot, "barcode">> = {
   "held sideways": { ...straight, tiltDegrees: 90, modulePx: 3 },
   "tilted, curved and shiny": { ...straight, tiltDegrees: 6, curve: 0.6, glare: { at: [0.55, 0.45], radiusPx: 70, strength: 0.5 } },
   "tilted, curved, dim and shiny at once": { ...straight, tiltDegrees: -9, curve: 0.9, light: 0.6, glare: { at: [0.6, 0.45], radiusPx: 50, strength: 0.7 }, noise: 10 },
+  "by a 1080p camera": { ...straight, width: 1920, height: 1080, modulePx: 9 },
+  "by a 1080p camera, tilted, curved, dim and shiny at once": { ...straight, width: 1920, height: 1080, modulePx: 6, tiltDegrees: -9, curve: 0.9, light: 0.6, glare: { at: [0.6, 0.45], radiusPx: 112, strength: 0.7 }, noise: 10 },
 };
 
 describe.each([

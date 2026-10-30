@@ -9,7 +9,8 @@ A logged-in User taps Scan and the Lookup screen opens the rear camera inside a 
 - `camera-off` ends the camera's track after a read and when the User leaves `/lookup`.
 - `camera-blocked` shows "LP-Collection isn't allowed to use the camera. Type the barcode below instead. …" with "Try the camera again".
 - `camera-missing`, `camera-unsupported` and `camera-failed` show their own sentence, each ending in the typed fallback. Only `camera-blocked` is drivable here.
-- `decode` reads EAN-13 and UPC-A, tilted, curved, under glare and in dim light. `test/decode-barcode.test.ts` covers it on drawn photos.
+- `scan-failed` shows "Scanning failed on this phone. Type the barcode below instead, or try again." when the camera runs but its picture can't be read. `e2e/scan.spec.ts` covers it by making `getImageData` throw.
+- `decode` reads EAN-13 and UPC-A, tilted, curved, under glare and in dim light, from frames cropped to the viewfinder and shrunk to 800 px wide. `test/decode-barcode.test.ts` covers it on drawn photos, 640x480 and 1080p.
 
 ## How to get to it (user POV)
 

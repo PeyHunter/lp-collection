@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import wasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
 
-type Blocked = "denied" | "missing" | "unsupported" | "failed";
+type Blocked = "denied" | "missing" | "unsupported" | "failed" | "unreadable";
 
 type Camera = { kind: "starting" } | { kind: "on" } | { kind: "read"; barcode: string } | { kind: "blocked"; reason: Blocked };
 
@@ -13,6 +13,7 @@ const blocked: Record<Blocked, { message: string; retry: boolean }> = {
   missing: { message: "This phone has no camera LP-Collection can use. Type the barcode below instead.", retry: false },
   unsupported: { message: "This browser can't open the camera here. Type the barcode below instead.", retry: false },
   failed: { message: "The camera didn't start. Another app may be using it. Type the barcode below instead, or try again.", retry: true },
+  unreadable: { message: "Scanning failed on this phone. Type the barcode below instead, or try again.", retry: true },
 };
 
 function blockedReason(error: unknown): Blocked {
@@ -25,6 +26,12 @@ async function loadReader() {
   const [{ prepareZXingModule }, reader] = await Promise.all([import("zxing-wasm/reader"), import("./decode-barcode.ts")]);
   await prepareZXingModule({ overrides: { locateFile: (path: string, prefix: string) => (path.endsWith(".wasm") ? wasmUrl : prefix + path) }, fireImmediately: true });
   return reader;
+}
+
+const restBetweenDecodesMs = 150;
+
+function pause(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function nextFrame(video: HTMLVideoElement) {
@@ -49,6 +56,7 @@ export function Scanner({ onRead }: { onRead: (barcode: string) => void }) {
     const element = video.current!;
     let stopped = false;
     let stream: MediaStream | undefined;
+    let cameraOn = false;
 
     async function scan() {
       if (!navigator.mediaDevices?.getUserMedia) return setCamera({ kind: "blocked", reason: "unsupported" });
@@ -65,29 +73,37 @@ export function Scanner({ onRead }: { onRead: (barcode: string) => void }) {
       if (stopped) return stream.getTracks().forEach((track) => track.stop());
       element.srcObject = stream;
       await element.play();
+      cameraOn = true;
       setCamera({ kind: "on" });
 
-      const { decodeBarcode, thresholds } = await reader;
+      const { createReader, scanArea, thresholds } = await reader;
+      const read = createReader();
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d", { willReadFrequently: true })!;
       for (let attempt = 0; ; attempt++) {
         await nextFrame(element);
         if (stopped) return;
-        canvas.width = element.videoWidth;
-        canvas.height = element.videoHeight;
-        context.drawImage(element, 0, 0);
-        const barcode = await decodeBarcode(context.getImageData(0, 0, canvas.width, canvas.height), thresholds[attempt % thresholds.length]!);
+        const area = scanArea(element.videoWidth, element.videoHeight);
+        if (canvas.width !== area.toWidth || canvas.height !== area.toHeight) {
+          canvas.width = area.toWidth;
+          canvas.height = area.toHeight;
+        }
+        context.drawImage(element, area.x, area.y, area.width, area.height, 0, 0, area.toWidth, area.toHeight);
+        const frame = context.getImageData(0, 0, area.toWidth, area.toHeight);
+        await pause(0); // decode in a task of its own, so the grab and the decode each hold the screen up half as long
+        const barcode = await read(frame, thresholds[attempt % thresholds.length]!);
         if (stopped) return;
         if (barcode) {
           setCamera({ kind: "read", barcode });
           return reported.current(barcode);
         }
+        await pause(restBetweenDecodesMs);
       }
     }
 
     scan().catch((error: unknown) => {
       console.error(error);
-      if (!stopped) setCamera({ kind: "blocked", reason: "failed" });
+      if (!stopped) setCamera({ kind: "blocked", reason: cameraOn ? "unreadable" : "failed" });
     });
     return () => {
       stopped = true;
