@@ -73,5 +73,6 @@ All helpers are in `.claude/skills/verify-lp-collection/bin/` and run with plain
 | `drive-photos.ts` | `<run-id>` | drives the Photos recipe in `features/photos.md` on a fresh run and saves its screenshots and HTTP answers |
 | `drive-lookup-fallbacks.ts` | `<run-id>` | walks the Lookup fallbacks and the duplicate warning, see [features/add-copy.md](features/add-copy.md) |
 | `drive-copy-details.ts` | `<run-id>` | drives the Copy details recipe in `features/copy-details.md` on a fresh run and saves its screenshots and HTTP answers |
+| `drive-search-sort.ts` | `<run-id>` | drives the recipe in `features/search-sort.md` on a fresh run and saves its screenshots |
 
 Playwright's Chromium must be installed once: `npx playwright install chromium`.
