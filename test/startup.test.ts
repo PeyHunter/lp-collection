@@ -90,3 +90,17 @@ test("the app refuses a token encryption key that is not 32 random bytes in base
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("TOKEN_ENCRYPTION_KEY must be 32 bytes in base64");
 });
+
+test("in production the app refuses to start without a place to keep photos", () => {
+  const result = startServer({ NODE_ENV: "production", APP_OWNER_DISCOGS_USERNAME: "owner", ...discogsKeys, ...publicUrl, TOKEN_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64") });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("PHOTOS_DIR is not set");
+});
+
+test("the app refuses to start when it can't write to the photos directory", () => {
+  const result = startServer({ APP_OWNER_DISCOGS_USERNAME: "owner", DISCOGS: "fake", PHOTOS_DIR: "/proc/lp-collection-photos" });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("PHOTOS_DIR (/proc/lp-collection-photos) is not a directory the app can write to");
+});

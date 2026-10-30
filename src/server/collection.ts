@@ -1,10 +1,12 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
 import { conditions, sleeveConditions, type Condition, type DiscogsAuth, type ReleaseCandidate, type SleeveCondition } from "./discogs.ts";
 import type { SecretBox } from "./secret-box.ts";
-import { barcodeLookupCache, copies, memberships, releases, users } from "./schema.ts";
+import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
+import { barcodeLookupCache, copies, memberships, photos, releases, users } from "./schema.ts";
 import { createValuation, type CopyValue, type ValuationOutcome, type Valuer } from "./valuation.ts";
 
 type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean };
@@ -31,7 +33,13 @@ function discogsAuth(user: typeof users.$inferSelect, box: SecretBox): DiscogsAu
   return { token: box.open(user.discogsAccessToken), secret: box.open(user.discogsAccessSecret) };
 }
 
-function copyView(row: { copy: typeof copies.$inferSelect; release: typeof releases.$inferSelect }, value: CopyValue | undefined) {
+type PhotoView = { id: string; url: string; width: number; height: number };
+
+function photoView(collectionId: string, photo: typeof photos.$inferSelect): PhotoView {
+  return { id: photo.id, url: `/api/collections/${collectionId}/copies/${photo.copyId}/photos/${photo.id}`, width: photo.width, height: photo.height };
+}
+
+function copyView(row: { copy: typeof copies.$inferSelect; release: typeof releases.$inferSelect }, value: CopyValue | undefined, photos: PhotoView[]) {
   const { fetchedAt: _, ...release } = row.release;
   return {
     id: row.copy.id,
@@ -39,6 +47,8 @@ function copyView(row: { copy: typeof copies.$inferSelect; release: typeof relea
     sleeveCondition: row.copy.sleeveCondition,
     addedAt: row.copy.createdAt.toISOString(),
     value: value ?? null,
+    photos,
+    pictureUrl: photos[0]?.url ?? release.coverImageUrl,
     release,
   };
 }
@@ -61,8 +71,9 @@ function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, befor
   return outcome === "valued" ? false : outcome === "seller-settings-missing" ? true : before;
 }
 
-export function createCollectionRoutes({ database, discogs, exchangeRates, secretBox, now }: AppDependencies) {
+export function createCollectionRoutes({ database, discogs, exchangeRates, secretBox, now, photosDir }: AppDependencies) {
   const { db } = database;
+  const photoStore = createPhotoStore(photosDir);
   const valuation = createValuation({ database, discogs, exchangeRates, now });
   const routes = new Hono<{ Variables: { member: Member } }>();
   const valueBatches = new Map<string, Promise<{ sellerSettingsMissing: boolean; more: boolean }>>();
@@ -118,6 +129,13 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
     return true;
   }
 
+  async function photosOf(collectionId: string, copyIds: string[]) {
+    const rows = copyIds.length === 0 ? [] : await db.select().from(photos).where(inArray(photos.copyId, copyIds)).orderBy(asc(photos.createdAt), asc(photos.id));
+    const byCopy = new Map<string, PhotoView[]>(copyIds.map((copyId) => [copyId, []]));
+    for (const photo of rows) byCopy.get(photo.copyId)!.push(photoView(collectionId, photo));
+    return byCopy;
+  }
+
   async function collectionCopies({ collectionId, currency }: Member) {
     const [rows, values] = await Promise.all([
       db
@@ -128,7 +146,8 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
         .orderBy(desc(copies.createdAt), desc(copies.id)),
       valuation.currentValues({ collectionId }, currency),
     ]);
-    return rows.map((row) => copyView(row, values.get(row.copy.id)));
+    const photosByCopy = await photosOf(collectionId, rows.map((row) => row.copy.id));
+    return rows.map((row) => copyView(row, values.get(row.copy.id), photosByCopy.get(row.copy.id)!));
   }
 
   async function oneCopy({ collectionId, currency }: Member, copyId: string) {
@@ -139,7 +158,8 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
       .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
       .where(and(eq(copies.id, copyId), eq(copies.collectionId, collectionId)));
     if (!row) return undefined;
-    return copyView(row, (await valuation.currentValues({ copyId }, currency)).get(copyId));
+    const [values, photosByCopy] = await Promise.all([valuation.currentValues({ copyId }, currency), photosOf(collectionId, [copyId])]);
+    return copyView(row, values.get(copyId), photosByCopy.get(copyId)!);
   }
 
   routes.get("/api/collections/:collectionId/lookup", async (c) => {
@@ -201,6 +221,75 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
       copy: await oneCopy(member, copyId),
       sellerSettingsMissing: sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing),
     });
+  });
+
+  routes.delete("/api/collections/:collectionId/copies/:copyId", async (c) => {
+    const { collectionId } = c.var.member;
+    const copyId = c.req.param("copyId");
+    if (!uuidPattern.test(copyId)) return c.json({ error: "No such Copy" }, 404);
+    const fileKeys = await db.transaction(async (tx) => {
+      const [copy] = await tx.select({ id: copies.id }).from(copies).where(and(eq(copies.id, copyId), eq(copies.collectionId, collectionId))).for("update");
+      if (!copy) return undefined;
+      const removed = await tx.delete(photos).where(eq(photos.copyId, copyId)).returning({ fileKey: photos.fileKey });
+      await tx.delete(copies).where(eq(copies.id, copyId));
+      return removed.map((photo) => photo.fileKey);
+    });
+    if (!fileKeys) return c.json({ error: "No such Copy" }, 404);
+    await photoStore.remove(fileKeys);
+    return c.body(null, 204);
+  });
+
+  async function memberPhoto({ collectionId }: Member, copyId: string, photoId: string) {
+    if (!uuidPattern.test(copyId) || !uuidPattern.test(photoId)) return undefined;
+    const [row] = await db
+      .select({ fileKey: photos.fileKey })
+      .from(photos)
+      .innerJoin(copies, eq(copies.id, photos.copyId))
+      .where(and(eq(photos.id, photoId), eq(photos.copyId, copyId), eq(copies.collectionId, collectionId)));
+    return row;
+  }
+
+  routes.post(
+    "/api/collections/:collectionId/copies/:copyId/photos",
+    bodyLimit({ maxSize: maxPhotoBytes, onError: (c) => c.json({ error: "That photo is too big. Photos up to 10 MB can be added." }, 413) }),
+    async (c) => {
+      const member = c.var.member;
+      const copyId = c.req.param("copyId");
+      if (!(await oneCopy(member, copyId))) return c.json({ error: "No such Copy" }, 404);
+      const bytes = new Uint8Array(await c.req.arrayBuffer());
+      const size = readJpegSize(bytes);
+      if (size === "not-jpeg") return c.json({ error: "Only JPEG photos can be added. Take or pick a photo in the app." }, 415);
+      if (size === "unreadable") return c.json({ error: "That photo couldn't be read. Take or pick it again." }, 400);
+      const fileKey = await photoStore.write(bytes);
+      try {
+        await db.insert(photos).values({ copyId, fileKey, ...size, bytes: bytes.length, createdAt: now() });
+      } catch (error) {
+        await photoStore.remove([fileKey]);
+        throw error;
+      }
+      return c.json({ copy: await oneCopy(member, copyId) }, 201);
+    },
+  );
+
+  routes.get("/api/collections/:collectionId/copies/:copyId/photos/:photoId", async (c) => {
+    const photo = await memberPhoto(c.var.member, c.req.param("copyId"), c.req.param("photoId"));
+    const bytes = photo && (await photoStore.read(photo.fileKey).catch((error: Error) => console.error(`Photo file ${photo.fileKey} is missing: ${error.message}`)));
+    if (!bytes) return c.json({ error: "No such photo" }, 404);
+    return c.body(new Uint8Array(bytes), 200, {
+      "content-type": "image/jpeg",
+      "cache-control": "private, max-age=31536000, immutable",
+      "x-content-type-options": "nosniff",
+    });
+  });
+
+  routes.delete("/api/collections/:collectionId/copies/:copyId/photos/:photoId", async (c) => {
+    const member = c.var.member;
+    const copyId = c.req.param("copyId");
+    const photo = await memberPhoto(member, copyId, c.req.param("photoId"));
+    if (!photo) return c.json({ error: "No such photo" }, 404);
+    const removed = await db.delete(photos).where(eq(photos.fileKey, photo.fileKey)).returning({ fileKey: photos.fileKey });
+    await photoStore.remove(removed.map((each) => each.fileKey));
+    return c.json({ copy: await oneCopy(member, copyId) });
   });
 
   async function fetchMissingValues(member: Member, retryEmptyBefore: Date | undefined) {

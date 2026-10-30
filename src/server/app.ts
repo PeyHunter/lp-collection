@@ -14,6 +14,7 @@ export type AppDependencies = {
   now: () => Date;
   appOwnerDiscogsUsername: string;
   publicUrl: URL;
+  photosDir: string;
 };
 
 export function createApp(dependencies: AppDependencies) {
