@@ -202,7 +202,7 @@ Every screen that fetches has all three, in the place the content would go.
 
 ### Lookup candidates
 
-A candidate is a list row whose title is a button. The meta line wraps, so the year, country, label, Catalog number and format all show. Tapping a candidate marks it with an `--accent` check and opens a save panel under it: a `--accent` bordered card that says which conditions the Copy will be saved with, and the primary "Add to Collection" button. A single match opens its panel at once.
+A candidate is a list row whose title is a button. The meta line wraps, so the year, country, label, Catalog number and format all show. Tapping a candidate marks it with an `--accent` check and opens a save panel under it: a `--accent` bordered card that says which conditions the Copy will be saved with, and the primary "Add to Collection" button. A single match opens its panel at once. A candidate the Collection already has carries an "In your Collection" pill, and its panel asks "You already have 1 Copy of this. Add another?" in Unbounded at `--text-l`, with "Add another" and "Cancel" side by side. The way to look up is a row of radio chips above the field: "Barcode", "Catalog number" and "Artist and title". A Lookup that finds nothing offers the next way as a primary button, and a list offers it as a link under "Not the one you hold?".
 
 ### Scanner
 

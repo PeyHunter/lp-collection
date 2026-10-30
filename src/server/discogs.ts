@@ -54,10 +54,8 @@ export type ReleaseCandidate = {
   coverImageUrl: string | null;
 };
 
-/** What a User has to find a Release by. Each Lookup uses exactly one of the three ways. */
 export type LookupQuery = { barcode: string } | { catalogNumber: string } | { artist: string; title: string };
 
-/** Discogs' first page of matches, and how many matched in all. */
 export type LookupResult = { candidates: ReleaseCandidate[]; total: number };
 
 export const lookupPageSize = 25;
