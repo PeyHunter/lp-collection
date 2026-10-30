@@ -1,6 +1,12 @@
 import { useEffect, useState, useSyncExternalStore, type MouseEvent } from "react";
 
-export type Route = { page: "collection" } | { page: "lookup" } | { page: "copy"; copyId: string } | { page: "invite"; code: string };
+export type Route =
+  | { page: "collection" }
+  | { page: "lookup" }
+  | { page: "copy"; copyId: string }
+  | { page: "shelves" }
+  | { page: "shelf"; shelfId: string | null }
+  | { page: "invite"; code: string };
 
 export type Handoff = { kind: "saved"; copyId: string; title: string } | { kind: "deleted"; title: string } | null;
 
@@ -10,6 +16,10 @@ function routeFrom(pathname: string): Route {
   if (/^\/lookup\/?$/.test(pathname)) return { page: "lookup" };
   const copy = /^\/copies\/([^/]+)\/?$/.exec(pathname);
   if (copy) return { page: "copy", copyId: decodeURIComponent(copy[1]!) };
+  if (/^\/shelves\/?$/.test(pathname)) return { page: "shelves" };
+  if (/^\/shelves\/new\/?$/.test(pathname)) return { page: "shelf", shelfId: null };
+  const shelf = /^\/shelves\/([^/]+)\/?$/.exec(pathname);
+  if (shelf) return { page: "shelf", shelfId: decodeURIComponent(shelf[1]!) };
   return { page: "collection" };
 }
 

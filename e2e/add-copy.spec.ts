@@ -69,7 +69,7 @@ test("at 150% text size the bottom bar labels fit inside the screen", async ({ p
   await page.addStyleTag({ content: "html { font-size: 150%; }" });
 
   const viewport = page.viewportSize()!;
-  for (const name of ["Scan", "Collection"]) {
+  for (const name of ["Shelves", "Scan", "Collection"]) {
     const tab = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name });
     const { x, width } = await box(tab);
     expect(x, `${name} starts on screen`).toBeGreaterThanOrEqual(0);

@@ -174,7 +174,7 @@ A list row is the cover, then the title, artist, and meta line, then the Value. 
 
 ### Bottom bar with Scan
 
-The bottom bar is sticky at the bottom with a 2px `--ink` rule on top, `--sunk` at 92% behind it, and the bottom safe-area inset as padding. It holds Home, Scan, and Collection. Until the home screen exists, the Home cell stays empty. Scan sits in the middle as a pill of `--accent-fill`, 3.5rem tall, with an uppercase Unbounded label. The current tab is `--ink`, and the other tabs are `--ink-dim`. On Lookup, Scan is the current page and gets a ring. At large text sizes Scan may move off center: a side cell never gets narrower than its label, so the empty Home cell gives up its room first.
+The bottom bar is sticky at the bottom with a 2px `--ink` rule on top, `--sunk` at 92% behind it, and the bottom safe-area inset as padding. It holds Shelves, Scan, and Collection. Shelves sits in the first cell until a home screen takes it. Scan sits in the middle as a pill of `--accent-fill`, 3.5rem tall, with an uppercase Unbounded label. The current tab is `--ink`, and the other tabs are `--ink-dim`. On Lookup, Scan is the current page and gets a ring. At large text sizes Scan may move off center: a side cell never gets narrower than its label, and the Scan pill's side padding shrinks with the bar (`min(1.75rem, 7cqi)`), so all three labels fit at 150% text size.
 
 ### Buttons
 
@@ -211,3 +211,5 @@ The Lookup screen opens with "Scan the barcode". The camera fills a 4:3 `--sunk`
 ### Shelf (first sketch)
 
 The shelf screen is exploratory and not final. The Owner photographs a shelf, and the app lays a grid over the photo. Columns get letters and rows get numbers, so a 4 by 6 cube shelf has squares A1 to D6. A looked-up Copy's square gets a thick `--accent` outline and a "C4" marker in `--accent-fill`, and the other squares dim. The Copy screen shows the same square in a small "Where it lives" map.
+
+Setting up a Shelf shows the photo with every Section outlined in thin white and labelled in Unbounded at its middle, the shelf's outer edge in `--accent`, and four corner dots: a `--accent-fill` dot with a cream ring inside a 44px round target. Columns and rows are steppers with 44px buttons. Shrinking a grid that holds Copies shows a `--surface` card with a thin `--accent` border before saving, saying how many Copies move to Not on a shelf.

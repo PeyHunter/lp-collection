@@ -4,6 +4,8 @@ import { CopyScreen } from "./CopyScreen.tsx";
 import { Header } from "./Header.tsx";
 import { LookupScreen } from "./LookupScreen.tsx";
 import { followLink, useRoute, type Route } from "./navigation.ts";
+import { ShelfScreen } from "./ShelfScreen.tsx";
+import { ShelvesScreen } from "./ShelvesScreen.tsx";
 import type { Currency } from "../server/discogs.ts";
 
 export type Me = { discogsUsername: string; canCreateInvites: boolean; collection: { id: string }; currency: Currency; sellerSettingsUrl: string };
@@ -90,6 +92,10 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
             <LookupScreen collectionId={session.me.collection.id} />
           ) : route.page === "copy" ? (
             <CopyScreen me={session.me} copyId={route.copyId} />
+          ) : route.page === "shelves" ? (
+            <ShelvesScreen me={session.me} />
+          ) : route.page === "shelf" ? (
+            <ShelfScreen key={route.shelfId} me={session.me} shelfId={route.shelfId} />
           ) : (
             <CollectionScreen
               me={session.me}
@@ -107,6 +113,13 @@ function Dock({ current }: { current: Route["page"] }) {
   return (
     <nav className="dock content-grid" aria-label="Main">
       <div className="dock-inner">
+        <a className="tab start" href="/shelves" onClick={followLink} aria-current={current === "shelves" || current === "shelf" ? "page" : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3.5" y="3.5" width="17" height="17" rx="1" />
+            <path d="M12 3.5v17M3.5 9.17h17M3.5 14.83h17" />
+          </svg>
+          Shelves
+        </a>
         <a className="scan" href="/lookup" onClick={followLink} aria-current={current === "lookup" ? "page" : undefined}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M11 9v6M14 9v6M17 9v6" />
