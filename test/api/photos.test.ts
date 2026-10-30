@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
-import type { CopyView } from "../../src/server/collection.ts";
+import type { CopyWithValues } from "../../src/server/collection.ts";
 import { sampleReleases } from "../../src/server/fake-discogs.ts";
 import { invitedFriend, listCopies, logInWithCollection, saveCopy, type Member, type TestApp } from "../support/members.ts";
 import { createTestApp } from "../support/test-app.ts";
@@ -11,7 +11,7 @@ const discovery = 16893476;
 async function savedCopy(user: Member) {
   const response = await saveCopy(user, discovery);
   expect(response.status).toBe(201);
-  return ((await response.json()) as { copy: CopyView }).copy;
+  return ((await response.json()) as { copy: CopyWithValues }).copy;
 }
 
 function upload(user: Member, copyId: string, body: BodyInit, contentType = "image/jpeg") {
@@ -21,13 +21,13 @@ function upload(user: Member, copyId: string, body: BodyInit, contentType = "ima
 async function uploaded(user: Member, copyId: string) {
   const response = await upload(user, copyId, photo);
   expect(response.status).toBe(201);
-  return ((await response.json()) as { copy: CopyView }).copy;
+  return ((await response.json()) as { copy: CopyWithValues }).copy;
 }
 
 async function copyPage(user: Member, copyId: string) {
   const response = await user.as(`/copies/${copyId}`);
   expect(response.status).toBe(200);
-  return ((await response.json()) as { copy: CopyView }).copy;
+  return ((await response.json()) as { copy: CopyWithValues }).copy;
 }
 
 const storedFiles = (app: TestApp) => readdir(app.photosDir);
@@ -104,7 +104,7 @@ test("deleting a photo removes it and its file, and the cover comes back", async
   const deleted = await owner.as(`/copies/${id}/photos/${photos[0]!.id}`, { method: "DELETE" });
 
   expect(deleted.status).toBe(200);
-  const { copy } = (await deleted.json()) as { copy: CopyView };
+  const { copy } = (await deleted.json()) as { copy: CopyWithValues };
   expect(copy.photos).toEqual([]);
   expect(copy.pictureUrl).toBe("/fake-discogs/covers/16893476.svg");
   expect((await app.request(photos[0]!.url, { headers: { cookie: owner.session } })).status).toBe(404);

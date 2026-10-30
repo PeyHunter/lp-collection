@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { CopyView } from "../server/collection.ts";
+import type { CopyView, CopyWithValues } from "../server/collection.ts";
 import { conditions, sleeveConditions, type Condition, type SleeveCondition } from "../server/discogs.ts";
 import type { Me } from "./App.tsx";
 import { GainFigure, NoteSection, PurchaseLine, PurchaseSection, type DetailChanges } from "./CopyDetails.tsx";
@@ -8,9 +8,9 @@ import { Grade } from "./Grade.tsx";
 import { Header } from "./Header.tsx";
 import { navigate } from "./navigation.ts";
 import { ConfirmDelete, PhotosSection } from "./Photos.tsx";
-import { Amount, formatAmount, SellerSettingsGuide } from "./Value.tsx";
+import { Amount, formatAmount, hasValues, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
 
-type Loaded = { copy: CopyView; sellerSettingsMissing: boolean };
+type Loaded = { copy: CopyView; sellerSettingsMissing?: boolean };
 
 type CopyState = { kind: "loading" } | { kind: "failed" } | { kind: "not-found" } | ({ kind: "loaded" } & Loaded);
 
@@ -19,7 +19,7 @@ type ConditionChange = { mediaCondition: Condition } | { sleeveCondition: Sleeve
 type Saving = { kind: "idle" } | { kind: "saving" } | { kind: "failed" };
 
 /** One Copy. Each part of it is its own section; the Value comes right after the title so it shows without scrolling. */
-export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
+export function CopyScreen({ me, copyId, onShowValuesChanged }: { me: Me; copyId: string; onShowValuesChanged: (showValues: boolean) => void }) {
   const [state, setState] = useState<CopyState>({ kind: "loading" });
   const [saving, setSaving] = useState<Saving>({ kind: "idle" });
   const [attempt, setAttempt] = useState(0);
@@ -33,7 +33,7 @@ export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
         setState({ kind: "loaded", ...((await response.json()) as Loaded) });
       })
       .catch(() => setState({ kind: "failed" }));
-  }, [copyUrl, attempt]);
+  }, [copyUrl, attempt, me.showValues]);
 
   async function changeCondition(loaded: Loaded, change: ConditionChange) {
     setState({ kind: "loaded", ...loaded, copy: { ...loaded.copy, ...change } });
@@ -70,7 +70,7 @@ export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
 
   return (
     <>
-      <Header kicker="Copy" title={added} back="/" />
+      <Header kicker="Copy" title={added} back="/" end={<ValuesSwitch showValues={me.showValues} onChanged={onShowValuesChanged} />} />
       <main className="content-grid">
         {state.kind === "loading" && <p className="loading">Loading this Copy…</p>}
         {state.kind === "not-found" && <p className="notice error">This Copy isn't in your Collection.</p>}
@@ -85,14 +85,18 @@ export function CopyScreen({ me, copyId }: { me: Me; copyId: string }) {
         {state.kind === "loaded" && (
           <>
             <TitleSection copy={state.copy} />
-            {state.sellerSettingsMissing ? (
-              <SellerSettingsGuide url={me.sellerSettingsUrl} collectionId={me.collection.id} onValued={() => setAttempt((count) => count + 1)} />
-            ) : (
-              <ValueSection copy={state.copy} updating={saving.kind === "saving"} />
-            )}
+            {me.showValues &&
+              hasValues(state.copy) &&
+              (state.sellerSettingsMissing ? (
+                <SellerSettingsGuide url={me.sellerSettingsUrl} collectionId={me.collection.id} onValued={() => setAttempt((count) => count + 1)} />
+              ) : (
+                <ValueSection copy={state.copy} updating={saving.kind === "saving"} />
+              ))}
             <ReleaseSection copy={state.copy} />
-            <ConditionSection copy={state.copy} saving={saving} onChange={(change) => changeCondition(state, change)} />
-            <PurchaseSection key={`purchase-${state.copy.id}`} copy={state.copy} userCurrency={me.currency} onSave={saveDetails} />
+            <ConditionSection copy={state.copy} showValues={me.showValues} saving={saving} onChange={(change) => changeCondition(state, change)} />
+            {me.showValues && hasValues(state.copy) && (
+              <PurchaseSection key={`purchase-${state.copy.id}`} copy={state.copy} userCurrency={me.currency} onSave={saveDetails} />
+            )}
             <NoteSection key={`note-${state.copy.id}`} copy={state.copy} onSave={saveDetails} />
             <PhotosSection copy={state.copy} copyUrl={copyUrl} onChanged={(copy) => setState({ ...state, copy })} />
             <DeleteCopySection copy={state.copy} copyUrl={copyUrl} />
@@ -140,7 +144,7 @@ function ReleaseSection({ copy: { release } }: { copy: CopyView }) {
   );
 }
 
-function ValueSection({ copy, updating }: { copy: CopyView; updating: boolean }) {
+function ValueSection({ copy, updating }: { copy: CopyWithValues; updating: boolean }) {
   const { value } = copy;
   return (
     <section className="section" aria-labelledby="value-heading" aria-busy={updating}>
@@ -177,7 +181,17 @@ function ValueSection({ copy, updating }: { copy: CopyView; updating: boolean })
   );
 }
 
-function ConditionSection({ copy, saving, onChange }: { copy: CopyView; saving: Saving; onChange: (change: ConditionChange) => void }) {
+function ConditionSection({
+  copy,
+  showValues,
+  saving,
+  onChange,
+}: {
+  copy: CopyView;
+  showValues: boolean;
+  saving: Saving;
+  onChange: (change: ConditionChange) => void;
+}) {
   return (
     <section className="section" aria-labelledby="condition-heading">
       <div className="section-head">
@@ -216,7 +230,7 @@ function ConditionSection({ copy, saving, onChange }: { copy: CopyView; saving: 
           The condition couldn't be saved. Try again.
         </p>
       ) : (
-        <p className="hint">The Value follows the Media condition and updates as soon as you change it.</p>
+        showValues && <p className="hint">The Value follows the Media condition and updates as soon as you change it.</p>
       )}
     </section>
   );

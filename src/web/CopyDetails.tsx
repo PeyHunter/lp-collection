@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { CopyView } from "../server/collection.ts";
+import type { CopyView, CopyWithValues } from "../server/collection.ts";
 import { maxNoteLength } from "../server/copy-details.ts";
 import { currencies, type Currency } from "../server/discogs.ts";
 import { parseTypedAmount, typedAmount } from "./typed-amount.ts";
@@ -30,7 +30,7 @@ export function GainFigure({ gain, currency }: { gain: number; currency: Currenc
   );
 }
 
-export function PurchaseLine({ copy }: { copy: CopyView }) {
+export function PurchaseLine({ copy }: { copy: CopyWithValues }) {
   const { purchasePrice, purchaseDate, value, gain } = copy;
   if (!purchasePrice && !purchaseDate) return null;
   const converted = gain !== null && purchasePrice && value && purchasePrice.currency !== value.currency;
@@ -77,7 +77,7 @@ function SavingNote({ saving, what }: { saving: Saving; what: string }) {
 
 const today = () => new Date().toLocaleDateString("sv-SE");
 
-export function PurchaseSection({ copy, userCurrency, onSave }: { copy: CopyView; userCurrency: Currency; onSave: SaveDetails }) {
+export function PurchaseSection({ copy, userCurrency, onSave }: { copy: CopyWithValues; userCurrency: Currency; onSave: SaveDetails }) {
   const [amount, setAmount] = useState(copy.purchasePrice ? typedAmount(copy.purchasePrice.amount) : "");
   const [currency, setCurrency] = useState<Currency>(copy.purchasePrice?.currency ?? userCurrency);
   const [date, setDate] = useState(copy.purchaseDate ?? "");

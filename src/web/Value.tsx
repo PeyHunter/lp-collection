@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CopyView } from "../server/collection.ts";
+import type { CopyView, CopyWithValues } from "../server/collection.ts";
 import type { Currency } from "../server/discogs.ts";
 
 const units: Partial<Record<Currency, string>> = { DKK: "kr", SEK: "kr", NOK: "kr", EUR: "€", GBP: "£", USD: "$" };
@@ -21,14 +21,19 @@ export function Amount({ amount, currency, className = "amount" }: { amount: num
   );
 }
 
-export function RowValue({ value, sellerSettingsMissing, fetching }: { value: CopyView["value"]; sellerSettingsMissing: boolean; fetching: boolean }) {
+/** The API leaves every Value field out of a Copy while the User hides Values. */
+export function hasValues(copy: CopyView): copy is CopyWithValues {
+  return "value" in copy;
+}
+
+export function RowValue({ value, sellerSettingsMissing, fetching }: { value: CopyWithValues["value"]; sellerSettingsMissing: boolean; fetching: boolean }) {
   if (value?.value != null) return <Amount amount={value.value} currency={value.currency} className="row-end row-value" />;
   if (sellerSettingsMissing) return <span className="row-end waiting">Waits for seller settings</span>;
   if (!value && fetching) return <span className="row-end waiting">Fetching Value…</span>;
   return <span className="row-end no-value">No Value yet</span>;
 }
 
-export type ValuesAnswer = { copies: CopyView[]; sellerSettingsMissing: boolean; more: boolean; retryEmptyBefore?: string };
+export type ValuesAnswer = { copies?: CopyView[]; sellerSettingsMissing?: boolean; more: boolean; retryEmptyBefore?: string };
 
 export async function fetchValues(
   collectionId: string,
@@ -48,6 +53,44 @@ export async function fetchValues(
     if (!answer.more || answer.sellerSettingsMissing) return answer;
     body = answer.retryEmptyBefore ? { retryEmptyBefore: answer.retryEmptyBefore } : {};
   }
+}
+
+type SwitchState = { kind: "idle" } | { kind: "saving" } | { kind: "failed" };
+
+export function ValuesSwitch({ showValues, onChanged }: { showValues: boolean; onChanged: (showValues: boolean) => void }) {
+  const [state, setState] = useState<SwitchState>({ kind: "idle" });
+
+  async function toggle() {
+    setState({ kind: "saving" });
+    const response = await fetch("/api/me/show-values", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ showValues: !showValues }),
+    }).catch(() => undefined);
+    if (!response?.ok) return setState({ kind: "failed" });
+    setState({ kind: "idle" });
+    onChanged(!showValues);
+  }
+
+  return (
+    <button
+      className="values-switch"
+      type="button"
+      role="switch"
+      aria-checked={showValues}
+      aria-describedby={state.kind === "failed" ? "values-switch-failed" : undefined}
+      disabled={state.kind === "saving"}
+      onClick={toggle}
+    >
+      Values
+      <span className="track" aria-hidden="true" />
+      {state.kind === "failed" && (
+        <span className="visually-hidden" id="values-switch-failed" role="alert">
+          The switch couldn't be saved. Try again.
+        </span>
+      )}
+    </button>
+  );
 }
 
 type GuideState = { kind: "idle" } | { kind: "checking" } | { kind: "still-missing" } | { kind: "failed" };

@@ -104,6 +104,10 @@ _Avoid_: profit, return
 The sum of the Values of all Copies in a Collection. Copies with no Value count as zero.
 _Avoid_: total, net worth
 
+**Show Values**:
+A User's switch for everything about Value: Values, Lowest listings, Gains, Purchase prices, the Collection value and Value sorting. Turned off, the app and its API show none of them, so the User can show their Collection without what it is worth. Each User has their own.
+_Avoid_: privacy mode, hide prices
+
 **Value history**:
 The Value of each Copy and the Collection value, recorded at each monthly refresh.
 

@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Facets } from "../server/listing.ts";
-import { sortOptions, type ListQuery } from "./copy-list.ts";
+import { sortOptionsFor, type ListQuery } from "./copy-list.ts";
 
 export function periodName(period: number) {
   return `${String(period).slice(2)}s`;
 }
 
-export function ListControls({ query, facets, onChange }: { query: ListQuery; facets: Facets; onChange: (query: ListQuery) => void }) {
+export function ListControls({ query, facets, showValues, onChange }: { query: ListQuery; facets: Facets; showValues: boolean; onChange: (query: ListQuery) => void }) {
+  const sortOptions = sortOptionsFor(showValues);
   const [typed, setTyped] = useState(query.q);
   const sort = sortOptions.find((option) => option.sort === query.sort)!;
 

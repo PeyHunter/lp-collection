@@ -1,6 +1,7 @@
+import type { ReactNode } from "react";
 import { followLink } from "./navigation.ts";
 
-export function Header({ kicker, title, back }: { kicker?: string; title: string; back?: string }) {
+export function Header({ kicker, title, back, end }: { kicker?: string; title: string; back?: string; end?: ReactNode }) {
   return (
     <header className="top content-grid">
       <div className="top-inner">
@@ -14,6 +15,7 @@ export function Header({ kicker, title, back }: { kicker?: string; title: string
         <h1>
           {kicker && <small>{kicker}</small>} {title}
         </h1>
+        {end}
       </div>
     </header>
   );

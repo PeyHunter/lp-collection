@@ -6,10 +6,10 @@ import type { Me } from "./App.tsx";
 import { Header } from "./Header.tsx";
 import { Cover } from "./Cover.tsx";
 import { Grade } from "./Grade.tsx";
-import { queryFromSearch, searchFromQuery, useCopyList, type ListQuery } from "./copy-list.ts";
+import { queryFromSearch, searchFromQuery, shownQuery, useCopyList, type ListQuery } from "./copy-list.ts";
 import { ListControls, periodName } from "./ListControls.tsx";
 import { followLink, useHandoff } from "./navigation.ts";
-import { currencyUnit, RowValue, SellerSettingsGuide } from "./Value.tsx";
+import { currencyUnit, hasValues, RowValue, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
 
 const monthFormat = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 const bandFormat = new Intl.NumberFormat("da-DK");
@@ -52,17 +52,20 @@ function inGroups(copies: CopyView[], groups: ListGroup[]) {
 export function CollectionScreen({
   me,
   onCurrencyChanged,
+  onShowValuesChanged,
   onLoggedOut,
 }: {
   me: Me;
   onCurrencyChanged: (currency: Currency) => void;
+  onShowValuesChanged: (showValues: boolean) => void;
   onLoggedOut: () => void;
 }) {
-  const [query, setQuery] = useState(() => queryFromSearch(location.search));
+  const [chosenQuery, setQuery] = useState(() => queryFromSearch(location.search));
+  const query = shownQuery(chosenQuery, me.showValues);
   const [attempt, setAttempt] = useState(0);
   const [controlsKey, setControlsKey] = useState(0);
   const handoff = useHandoff();
-  const { list, values, loadMore } = useCopyList(me.collection.id, query, `${me.currency} ${attempt}`);
+  const { list, values, loadMore } = useCopyList(me.collection.id, query, `${me.currency} ${me.showValues} ${attempt}`);
   const moreButton = useRef<HTMLButtonElement>(null);
 
   const changeQuery = useCallback((next: ListQuery) => {
@@ -85,11 +88,14 @@ export function CollectionScreen({
   }
 
   const filtered = query.q.trim() !== "" || query.period !== null || query.genre !== null;
-  const loaded = list.kind === "loaded" ? list : undefined;
+  const listed = list.kind === "loaded" ? list : undefined;
+  // A list still sorted by Value from before the switch went off would show its Value bands until the reload lands.
+  const loaded = listed && (me.showValues || listed.sort !== "value") ? listed : undefined;
+  const loading = list.kind === "loading" || (listed !== undefined && !loaded);
 
   return (
     <>
-      <Header kicker="LP-Collection" title="Your Collection" />
+      <Header kicker="LP-Collection" title="Your Collection" end={<ValuesSwitch showValues={me.showValues} onChanged={onShowValuesChanged} />} />
       <main className="content-grid">
         <section className="poster" aria-labelledby="records-heading">
           <div className="rule" />
@@ -104,7 +110,7 @@ export function CollectionScreen({
           )}
         </section>
 
-        {loaded?.sellerSettingsMissing && (
+        {me.showValues && loaded?.sellerSettingsMissing && (
           <SellerSettingsGuide url={me.sellerSettingsUrl} collectionId={me.collection.id} onValued={() => setAttempt((count) => count + 1)} />
         )}
 
@@ -114,10 +120,10 @@ export function CollectionScreen({
           </p>
         )}
 
-        {loaded && (loaded.total > 0 || filtered) && <ListControls key={controlsKey} query={query} facets={loaded.facets} onChange={changeQuery} />}
+        {loaded && (loaded.total > 0 || filtered) && <ListControls key={controlsKey} query={query} facets={loaded.facets} showValues={me.showValues} onChange={changeQuery} />}
 
-        <section className="section" aria-label="Copies" aria-busy={list.kind === "loading"}>
-          {list.kind === "loading" && <p className="loading">Loading your Collection…</p>}
+        <section className="section" aria-label="Copies" aria-busy={loading}>
+          {loading && <p className="loading">Loading your Collection…</p>}
           {list.kind === "failed" && (
             <div className="notice error" role="alert">
               <p>Your Collection couldn't load. Check your connection and try again.</p>
@@ -159,7 +165,7 @@ export function CollectionScreen({
                 <section className={group.key === "none" || group.key === "unknown" ? "group muted" : "group"} key={group.key}>
                   <h3 className="group-h">
                     <span className="poster-h">
-                      <GroupHeading sort={query.sort} groupKey={group.key} currency={me.currency} sellerSettingsMissing={loaded.sellerSettingsMissing} />
+                      <GroupHeading sort={loaded.sort} groupKey={group.key} currency={me.currency} sellerSettingsMissing={loaded.sellerSettingsMissing} />
                     </span>
                     <span className="n tnum">
                       {group.total} {group.total === 1 ? "LP" : "LPs"}
@@ -171,6 +177,7 @@ export function CollectionScreen({
                         key={copy.id}
                         copy={copy}
                         fresh={handoff?.kind === "saved" && copy.id === handoff.copyId}
+                        showValues={me.showValues}
                         sellerSettingsMissing={loaded.sellerSettingsMissing}
                         fetching={values.fetching}
                       />
@@ -194,7 +201,7 @@ export function CollectionScreen({
         {me.canCreateInvites && <InviteCreator />}
 
         <section className="account" aria-label="Account">
-          <CurrencySetting currency={me.currency} onChanged={onCurrencyChanged} />
+          {me.showValues && <CurrencySetting currency={me.currency} onChanged={onCurrencyChanged} />}
           <p>Logged in as {me.discogsUsername}.</p>
           <button className="btn quiet" type="button" onClick={logOut}>
             Log out
@@ -205,7 +212,19 @@ export function CollectionScreen({
   );
 }
 
-function CopyRow({ copy, fresh, sellerSettingsMissing, fetching }: { copy: CopyView; fresh: boolean; sellerSettingsMissing: boolean; fetching: boolean }) {
+function CopyRow({
+  copy,
+  fresh,
+  showValues,
+  sellerSettingsMissing,
+  fetching,
+}: {
+  copy: CopyView;
+  fresh: boolean;
+  showValues: boolean;
+  sellerSettingsMissing: boolean;
+  fetching: boolean;
+}) {
   const { release } = copy;
   const row = useRef<HTMLLIElement>(null);
   useEffect(() => {
@@ -226,7 +245,7 @@ function CopyRow({ copy, fresh, sellerSettingsMissing, fetching }: { copy: CopyV
           Media <Grade condition={copy.mediaCondition} /> · Sleeve <Grade condition={copy.sleeveCondition} />
         </span>
       </span>
-      <RowValue value={copy.value} sellerSettingsMissing={sellerSettingsMissing} fetching={fetching} />
+      {showValues && hasValues(copy) && <RowValue value={copy.value} sellerSettingsMissing={sellerSettingsMissing} fetching={fetching} />}
     </li>
   );
 }

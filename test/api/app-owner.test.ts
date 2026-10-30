@@ -40,6 +40,7 @@ test("the app's Owner keeps Owner rights after renaming their Discogs account", 
     canCreateInvites: true,
     collection: (await me(app, before.session))!.collection,
     currency: "DKK",
+    showValues: true,
     sellerSettingsUrl: "/fake-discogs/settings/seller",
   });
   expect(await me(app, before.session)).toMatchObject({ canCreateInvites: true });

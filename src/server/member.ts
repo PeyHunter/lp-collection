@@ -5,7 +5,7 @@ import type { AppDependencies } from "./app.ts";
 import { memberships } from "./schema.ts";
 import type { Valuer } from "./valuation.ts";
 
-export type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean };
+export type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean; showValues: boolean };
 export type MemberEnv = { Variables: { member: Member } };
 
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,6 +26,7 @@ export function membersOnly({ database, secretBox, now }: AppDependencies) {
       userId: user.id,
       currency: user.currency,
       sellerSettingsMissing: user.sellerSettingsMissing,
+      showValues: user.showValues,
       auth: { token: secretBox.open(user.discogsAccessToken), secret: secretBox.open(user.discogsAccessSecret) },
       collectionId,
     });

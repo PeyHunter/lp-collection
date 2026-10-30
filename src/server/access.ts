@@ -172,6 +172,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
       canCreateInvites: await isAppOwner(user),
       collection: { id: collection!.id },
       currency: user.currency,
+      showValues: user.showValues,
       sellerSettingsUrl: discogs.sellerSettingsUrl,
     });
   });
@@ -183,6 +184,15 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     if (!isCurrency(currency)) return c.json({ error: `Choose one of ${currencies.join(", ")}.` }, 400);
     await db.update(users).set({ currency }).where(eq(users.id, user.id));
     return c.json({ currency });
+  });
+
+  routes.put("/api/me/show-values", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "Not logged in" }, 401);
+    const { showValues } = ((await c.req.json().catch(() => undefined)) ?? {}) as { showValues?: unknown };
+    if (typeof showValues !== "boolean") return c.json({ error: "Say true to show Values or false to hide them." }, 400);
+    await db.update(users).set({ showValues }).where(eq(users.id, user.id));
+    return c.json({ showValues });
   });
 
   routes.post("/api/invites", async (c) => {
