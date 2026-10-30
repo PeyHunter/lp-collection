@@ -7,7 +7,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppDependencies } from "./app.ts";
 import type { Database } from "./db.ts";
 import { sealedPrefix, type SecretBox } from "./secret-box.ts";
-import type { DiscogsIdentity, LoginStart } from "./discogs.ts";
+import { currencies, isCurrency, type DiscogsIdentity, type LoginStart } from "./discogs.ts";
 import { createLoginBudget, type LoginSpender } from "./login-budget.ts";
 import { appOwner, collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
 
@@ -171,7 +171,18 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
       discogsUsername: user.discogsUsername,
       canCreateInvites: await isAppOwner(user),
       collection: { id: collection!.id },
+      currency: user.currency,
+      sellerSettingsUrl: discogs.sellerSettingsUrl,
     });
+  });
+
+  routes.put("/api/me/currency", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "Not logged in" }, 401);
+    const { currency } = ((await c.req.json().catch(() => undefined)) ?? {}) as { currency?: unknown };
+    if (!isCurrency(currency)) return c.json({ error: `Choose one of ${currencies.join(", ")}.` }, 400);
+    await db.update(users).set({ currency }).where(eq(users.id, user.id));
+    return c.json({ currency });
   });
 
   routes.post("/api/invites", async (c) => {

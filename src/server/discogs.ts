@@ -14,6 +14,34 @@ export type Condition = (typeof conditions)[number];
 
 export const defaultCondition: Condition = "Very Good Plus (VG+)";
 
+/** Discogs grades a sleeve on the same scale, plus three grades for a sleeve that can't be graded that way. */
+export const sleeveConditions = [...conditions, "Generic", "Not Graded", "No Cover"] as const;
+
+export type SleeveCondition = (typeof sleeveConditions)[number];
+
+/** The currencies a User can choose. Discogs quotes only some of them, so Values are converted. */
+export const currencies = ["DKK", "EUR", "SEK", "NOK", "GBP", "USD", "CHF", "CAD", "AUD", "NZD", "JPY", "MXN", "BRL", "ZAR"] as const;
+
+export type Currency = (typeof currencies)[number];
+
+export const defaultCurrency: Currency = "DKK";
+
+/** The currencies Discogs' marketplace stats can be asked for (`curr_abbr`). */
+export const discogsCurrencies = ["USD", "GBP", "EUR", "CAD", "AUD", "JPY", "CHF", "MXN", "BRL", "NZD", "SEK", "ZAR"] as const satisfies readonly Currency[];
+
+export type DiscogsCurrency = (typeof discogsCurrencies)[number];
+
+export function isCurrency(value: unknown): value is Currency {
+  return (currencies as readonly unknown[]).includes(value);
+}
+
+export type Money = { amount: number; currency: Currency };
+
+/** Discogs prices every Media condition at once, or refuses until the User fills in their seller settings. */
+export type PriceSuggestions =
+  | { kind: "suggested"; prices: Partial<Record<Condition, Money>> }
+  | { kind: "seller-settings-missing" };
+
 export type ReleaseCandidate = {
   discogsReleaseId: number;
   artist: string;
@@ -66,6 +94,10 @@ export type DiscogsIdentity = {
 export type DiscogsGateway = {
   lookupByBarcode(barcode: string, auth: DiscogsAuth): Promise<ReleaseCandidate[]>;
   release(discogsReleaseId: number, auth: DiscogsAuth): Promise<Release | undefined>;
+  priceSuggestions(discogsReleaseId: number, auth: DiscogsAuth): Promise<PriceSuggestions>;
+  /** The cheapest asking price right now in any condition, or null when nothing is for sale. */
+  lowestListing(discogsReleaseId: number, currency: DiscogsCurrency, auth: DiscogsAuth): Promise<Money | null>;
+  sellerSettingsUrl: string;
   startLogin(callbackUrl: string): Promise<LoginStart>;
   finishLogin(callback: LoginCallback): Promise<DiscogsIdentity>;
 };

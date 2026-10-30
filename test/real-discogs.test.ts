@@ -94,6 +94,24 @@ async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
       json(noMasterRelease);
     } else if (path === "/releases/9100001") {
       json(lostMasterRelease);
+    } else if (path === "/marketplace/price_suggestions/2335811") {
+      json({
+        "Mint (M)": { currency: "EUR", value: 40.123 },
+        "Very Good Plus (VG+)": { currency: "EUR", value: 24 },
+        "Poor (P)": { currency: "EUR", value: 0 },
+      });
+    } else if (path === "/marketplace/price_suggestions/7371225") {
+      json({});
+    } else if (path === "/marketplace/price_suggestions/1503928") {
+      response.statusCode = 400;
+      json({ message: "You must fill out your seller settings first." });
+    } else if (path === "/marketplace/price_suggestions/9100001") {
+      response.statusCode = 500;
+      json({ message: "Something went wrong." });
+    } else if (path === "/marketplace/stats/2335811?curr_abbr=EUR") {
+      json({ lowest_price: { currency: "EUR", value: 19.5 }, num_for_sale: 4, blocked_from_sale: false });
+    } else if (path === "/marketplace/stats/1503928?curr_abbr=SEK") {
+      json({ lowest_price: null, num_for_sale: null, blocked_from_sale: false });
     } else if (path === "/oauth/request_token") {
       response.end("oauth_token=request-token&oauth_token_secret=request-secret&oauth_callback_confirmed=true");
     } else if (path === "/oauth/access_token") {
@@ -325,4 +343,31 @@ test("the gateway stops backing off once the next retry would pass the cap", asy
 
   expect(performance.now() - started).toBeLessThan(1_000);
   expect(stub.received).toHaveLength(2);
+});
+
+test("the real gateway reads price suggestions per Media condition and spots missing seller settings", async () => {
+  const stub = await startDiscogsStub();
+  const discogs = createRealDiscogs({ consumerKey: "k", consumerSecret: "s", apiBaseUrl: stub.url, webBaseUrl: "https://discogs.example", requestGapMs: 0 });
+  const auth = { token: "access-token", secret: "access-secret" };
+
+  expect(await discogs.priceSuggestions(2335811, auth)).toEqual({
+    kind: "suggested",
+    prices: { "Mint (M)": { amount: 40.12, currency: "EUR" }, "Very Good Plus (VG+)": { amount: 24, currency: "EUR" } },
+  });
+  expect(await discogs.priceSuggestions(7371225, auth)).toEqual({ kind: "suggested", prices: {} });
+  expect(await discogs.priceSuggestions(404404, auth)).toEqual({ kind: "suggested", prices: {} });
+  expect(await discogs.priceSuggestions(1503928, auth)).toEqual({ kind: "seller-settings-missing" });
+  await expect(discogs.priceSuggestions(9100001, auth)).rejects.toThrow("HTTP 500");
+  expect(discogs.sellerSettingsUrl).toBe("https://discogs.example/settings/seller");
+  expect(oauthParams(stub.received[0]!.headers)).toMatchObject({ oauth_token: "access-token" });
+});
+
+test("the real gateway asks for the Lowest listing in the given currency, which can be missing", async () => {
+  const stub = await startDiscogsStub();
+  const discogs = createRealDiscogs({ consumerKey: "k", consumerSecret: "s", apiBaseUrl: stub.url, requestGapMs: 0 });
+  const auth = { token: "access-token", secret: "access-secret" };
+
+  expect(await discogs.lowestListing(2335811, "EUR", auth)).toEqual({ amount: 19.5, currency: "EUR" });
+  expect(await discogs.lowestListing(1503928, "SEK", auth)).toBeNull();
+  expect(await discogs.lowestListing(404404, "EUR", auth)).toBeNull();
 });

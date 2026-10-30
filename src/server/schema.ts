@@ -1,7 +1,9 @@
-import { index, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { conditions, defaultCondition, type ReleaseCandidate } from "./discogs.ts";
+import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { conditions, currencies, defaultCondition, defaultCurrency, sleeveConditions, type ReleaseCandidate } from "./discogs.ts";
 
 const at = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
+
+export const currency = pgEnum("currency", currencies);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -9,6 +11,8 @@ export const users = pgTable("users", {
   discogsUsername: text("discogs_username").notNull(),
   discogsAccessToken: text("discogs_access_token").notNull(),
   discogsAccessSecret: text("discogs_access_secret").notNull(),
+  currency: currency("currency").notNull().default(defaultCurrency),
+  sellerSettingsMissing: boolean("seller_settings_missing").notNull().default(false),
   createdAt: at("created_at").notNull(),
 });
 
@@ -69,6 +73,7 @@ export const loginAttempts = pgTable("login_attempts", {
 });
 
 export const condition = pgEnum("condition", conditions);
+export const sleeveCondition = pgEnum("sleeve_condition", sleeveConditions);
 
 export const barcodeLookupCache = pgTable("barcode_lookup_cache", {
   barcode: text("barcode").primaryKey(),
@@ -100,8 +105,27 @@ export const copies = pgTable(
       .notNull()
       .references(() => releases.discogsReleaseId),
     mediaCondition: condition("media_condition").notNull().default(defaultCondition),
-    sleeveCondition: condition("sleeve_condition").notNull().default(defaultCondition),
+    sleeveCondition: sleeveCondition("sleeve_condition").notNull().default(defaultCondition),
     createdAt: at("created_at").notNull(),
   },
   (table) => [index("copies_collection_created_idx").on(table.collectionId, table.createdAt)],
+);
+
+const money = (name: string) => numeric(name, { precision: 12, scale: 2, mode: "number" });
+
+/** One Value fetch for a Copy, kept so the Value history can be drawn. A null Value means Discogs had no suggestion. */
+export const valueSnapshots = pgTable(
+  "value_snapshots",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    copyId: uuid("copy_id")
+      .notNull()
+      .references(() => copies.id, { onDelete: "cascade" }),
+    mediaCondition: condition("media_condition").notNull(),
+    value: money("value"),
+    lowestListing: money("lowest_listing"),
+    currency: currency("currency").notNull(),
+    fetchedAt: at("fetched_at").notNull(),
+  },
+  (table) => [index("value_snapshots_copy_fetched_idx").on(table.copyId, table.fetchedAt)],
 );

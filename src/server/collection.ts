@@ -2,11 +2,12 @@ import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
-import type { DiscogsAuth, ReleaseCandidate } from "./discogs.ts";
+import { conditions, sleeveConditions, type Condition, type DiscogsAuth, type ReleaseCandidate, type SleeveCondition } from "./discogs.ts";
 import type { SecretBox } from "./secret-box.ts";
 import { barcodeLookupCache, copies, memberships, releases, users } from "./schema.ts";
+import { createValuation, type CopyValue, type ValuationOutcome, type Valuer } from "./valuation.ts";
 
-type Member = { auth: DiscogsAuth; collectionId: string };
+type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
@@ -16,25 +17,39 @@ function parseBarcode(typed: string | undefined) {
   return /^(\d{8}|\d{12,14})$/.test(digits) ? digits : undefined;
 }
 
+function parseConditions(body: unknown): { mediaCondition?: Condition; sleeveCondition?: SleeveCondition } | undefined {
+  const { mediaCondition, sleeveCondition } = (body ?? {}) as Record<string, unknown>;
+  if (mediaCondition === undefined && sleeveCondition === undefined) return undefined;
+  if (mediaCondition !== undefined && !(conditions as readonly unknown[]).includes(mediaCondition)) return undefined;
+  if (sleeveCondition !== undefined && !(sleeveConditions as readonly unknown[]).includes(sleeveCondition)) return undefined;
+  return { mediaCondition: mediaCondition as Condition | undefined, sleeveCondition: sleeveCondition as SleeveCondition | undefined };
+}
+
 function discogsAuth(user: typeof users.$inferSelect, box: SecretBox): DiscogsAuth {
   return { token: box.open(user.discogsAccessToken), secret: box.open(user.discogsAccessSecret) };
 }
 
-function copyView(row: { copy: typeof copies.$inferSelect; release: typeof releases.$inferSelect }) {
+function copyView(row: { copy: typeof copies.$inferSelect; release: typeof releases.$inferSelect }, value: CopyValue | undefined) {
   const { fetchedAt: _, ...release } = row.release;
   return {
     id: row.copy.id,
     mediaCondition: row.copy.mediaCondition,
     sleeveCondition: row.copy.sleeveCondition,
     addedAt: row.copy.createdAt.toISOString(),
+    value: value ?? null,
     release,
   };
 }
 
 export type CopyView = ReturnType<typeof copyView>;
 
-export function createCollectionRoutes({ database, discogs, secretBox, now }: AppDependencies) {
+function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, before: boolean) {
+  return outcome === "valued" ? false : outcome === "seller-settings-missing" ? true : before;
+}
+
+export function createCollectionRoutes({ database, discogs, exchangeRates, secretBox, now }: AppDependencies) {
   const { db } = database;
+  const valuation = createValuation({ database, discogs, exchangeRates, now });
   const routes = new Hono<{ Variables: { member: Member } }>();
 
   routes.use("/api/collections/:collectionId/*", async (c, next) => {
@@ -48,7 +63,13 @@ export function createCollectionRoutes({ database, discogs, secretBox, now }: Ap
           .where(and(eq(memberships.collectionId, collectionId), eq(memberships.userId, user.id)))
       : [];
     if (!membership) return c.json({ error: "No such Collection" }, 404);
-    c.set("member", { auth: discogsAuth(user, secretBox), collectionId });
+    c.set("member", {
+      userId: user.id,
+      currency: user.currency,
+      sellerSettingsMissing: user.sellerSettingsMissing,
+      auth: discogsAuth(user, secretBox),
+      collectionId,
+    });
     await next();
   });
 
@@ -74,6 +95,30 @@ export function createCollectionRoutes({ database, discogs, secretBox, now }: Ap
     return true;
   }
 
+  async function collectionCopies(collectionId: string) {
+    const [rows, values] = await Promise.all([
+      db
+        .select({ copy: copies, release: releases })
+        .from(copies)
+        .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
+        .where(eq(copies.collectionId, collectionId))
+        .orderBy(desc(copies.createdAt), desc(copies.id)),
+      valuation.currentValues({ collectionId }),
+    ]);
+    return rows.map((row) => copyView(row, values.get(row.copy.id)));
+  }
+
+  async function oneCopy(collectionId: string, copyId: string) {
+    if (!uuidPattern.test(copyId)) return undefined;
+    const [row] = await db
+      .select({ copy: copies, release: releases })
+      .from(copies)
+      .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
+      .where(and(eq(copies.id, copyId), eq(copies.collectionId, collectionId)));
+    if (!row) return undefined;
+    return copyView(row, (await valuation.currentValues({ copyId })).get(copyId));
+  }
+
   routes.get("/api/collections/:collectionId/lookup", async (c) => {
     const barcode = parseBarcode(c.req.query("barcode"));
     if (!barcode) return c.json({ error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." }, 400);
@@ -86,13 +131,8 @@ export function createCollectionRoutes({ database, discogs, secretBox, now }: Ap
   });
 
   routes.get("/api/collections/:collectionId/copies", async (c) => {
-    const rows = await db
-      .select({ copy: copies, release: releases })
-      .from(copies)
-      .innerJoin(releases, eq(releases.discogsReleaseId, copies.discogsReleaseId))
-      .where(eq(copies.collectionId, c.var.member.collectionId))
-      .orderBy(desc(copies.createdAt), desc(copies.id));
-    return c.json({ copies: rows.map(copyView) });
+    const { collectionId, sellerSettingsMissing } = c.var.member;
+    return c.json({ copies: await collectionCopies(collectionId), sellerSettingsMissing });
   });
 
   routes.post("/api/collections/:collectionId/copies", async (c) => {
@@ -101,18 +141,55 @@ export function createCollectionRoutes({ database, discogs, secretBox, now }: Ap
     if (typeof discogsReleaseId !== "number" || !Number.isSafeInteger(discogsReleaseId) || discogsReleaseId <= 0) {
       return c.json({ error: "Say which Release to save with its Discogs release id." }, 400);
     }
-    const { auth, collectionId } = c.var.member;
+    const member = c.var.member;
     try {
-      if (!(await cacheRelease(discogsReleaseId, auth))) {
+      if (!(await cacheRelease(discogsReleaseId, member.auth))) {
         return c.json({ error: `Discogs has no Release ${discogsReleaseId}. Look up the barcode again and pick a Release from the list.` }, 404);
       }
     } catch (error) {
       console.error(`Discogs Release ${discogsReleaseId} failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: discogsUnreachable }, 502);
     }
-    const [copy] = await db.insert(copies).values({ collectionId, discogsReleaseId, createdAt: now() }).returning();
-    const [release] = await db.select().from(releases).where(eq(releases.discogsReleaseId, discogsReleaseId));
-    return c.json({ copy: copyView({ copy: copy!, release: release! }) }, 201);
+    const [copy] = await db.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, createdAt: now() }).returning();
+    const outcome = await valuation.fetchValue(copy!, member);
+    return c.json(
+      { copy: await oneCopy(member.collectionId, copy!.id), sellerSettingsMissing: sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing) },
+      201,
+    );
+  });
+
+  routes.get("/api/collections/:collectionId/copies/:copyId", async (c) => {
+    const { collectionId, sellerSettingsMissing } = c.var.member;
+    const copy = await oneCopy(collectionId, c.req.param("copyId"));
+    if (!copy) return c.json({ error: "No such Copy" }, 404);
+    return c.json({ copy, sellerSettingsMissing });
+  });
+
+  routes.patch("/api/collections/:collectionId/copies/:copyId", async (c) => {
+    const member = c.var.member;
+    const copyId = c.req.param("copyId");
+    const before = await oneCopy(member.collectionId, copyId);
+    if (!before) return c.json({ error: "No such Copy" }, 404);
+    const changes = parseConditions(await c.req.json().catch(() => undefined));
+    if (!changes) return c.json({ error: "Say the new Media condition or Sleeve condition on the Discogs scale." }, 400);
+    const [copy] = await db.update(copies).set(changes).where(eq(copies.id, copyId)).returning();
+    const outcome = copy!.mediaCondition !== before.mediaCondition || !before.value ? await valuation.fetchValue(copy!, member) : undefined;
+    return c.json({
+      copy: await oneCopy(member.collectionId, copyId),
+      sellerSettingsMissing: sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing),
+    });
+  });
+
+  routes.post("/api/collections/:collectionId/values", async (c) => {
+    const member = c.var.member;
+    let sellerSettingsMissing = member.sellerSettingsMissing;
+    for (const copy of await collectionCopies(member.collectionId)) {
+      if (copy.value) continue;
+      const outcome = await valuation.fetchValue({ ...copy, discogsReleaseId: copy.release.discogsReleaseId }, member);
+      sellerSettingsMissing = sellerSettingsMissingAfter(outcome, sellerSettingsMissing);
+      if (outcome !== "valued") break;
+    }
+    return c.json({ copies: await collectionCopies(member.collectionId), sellerSettingsMissing });
   });
 
   return routes;

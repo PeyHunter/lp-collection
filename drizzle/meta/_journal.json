@@ -29,6 +29,13 @@
       "when": 1793320646544,
       "tag": "0003_first_copy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793322530494,
+      "tag": "0004_value",
+      "breakpoints": true
     }
   ]
 }

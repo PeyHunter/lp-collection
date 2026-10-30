@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type MouseEvent } from "react";
 
-export type Route = { page: "collection" } | { page: "lookup" } | { page: "invite"; code: string };
+export type Route = { page: "collection" } | { page: "lookup" } | { page: "copy"; copyId: string } | { page: "invite"; code: string };
 
 export type Handoff = { savedCopyId: string; title: string } | null;
 
@@ -8,6 +8,8 @@ function routeFrom(pathname: string): Route {
   const invite = /^\/invite\/([^/]+)\/?$/.exec(pathname);
   if (invite) return { page: "invite", code: decodeURIComponent(invite[1]!) };
   if (/^\/lookup\/?$/.test(pathname)) return { page: "lookup" };
+  const copy = /^\/copies\/([^/]+)\/?$/.exec(pathname);
+  if (copy) return { page: "copy", copyId: decodeURIComponent(copy[1]!) };
   return { page: "collection" };
 }
 
