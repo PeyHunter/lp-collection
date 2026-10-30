@@ -1,8 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, inject, test } from "vitest";
 import { freePort } from "./support/free-port.ts";
 
 const scratch: string[] = [];
@@ -16,11 +15,11 @@ async function eventually(check: () => Promise<boolean>, timeoutMs: number) {
   return check();
 }
 
-test("the e2e server leaves no PostgreSQL folder behind when Playwright kills it", { timeout: 90_000 }, async () => {
-  const temp = await mkdtemp(join(tmpdir(), "throwaway-postgres-test-"));
+test("the e2e server leaves no PostgreSQL folder or server behind when it is killed", { timeout: 90_000 }, async () => {
+  const temp = await mkdtemp(join(inject("scratchDir"), "serve-tmp-"));
   scratch.push(temp);
   const port = await freePort();
-  const server = spawn(process.execPath, ["e2e/serve.ts"], { env: { ...process.env, TMPDIR: temp, PORT: String(port) }, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  const server = spawn(process.execPath, ["e2e/serve.ts"], { env: { ...process.env, TMPDIR: temp, PORT: String(port) }, stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
   server.stdout!.on("data", (chunk) => (output += chunk));
   server.stderr!.on("data", (chunk) => (output += chunk));
@@ -29,7 +28,7 @@ test("the e2e server leaves no PostgreSQL folder behind when Playwright kills it
   expect(healthy, `the e2e server started. Its output: ${output}`).toBe(true);
   expect(await readdir(temp)).toContainEqual(expect.stringMatching(/^lp-collection-/));
 
-  process.kill(-server.pid!, "SIGKILL");
+  server.kill("SIGKILL");
 
   const leftovers = async () => (await readdir(temp)).filter((name) => name.startsWith("lp-collection-"));
   expect(await eventually(async () => (await leftovers()).length === 0, 10_000), `left behind: ${await leftovers()}`).toBe(true);
