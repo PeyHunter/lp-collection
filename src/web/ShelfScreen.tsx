@@ -97,7 +97,7 @@ export function ShelfScreen({ me, shelfId }: { me: Me; shelfId: string | null })
               const photo = await readPhoto(file).catch(() => undefined);
               if (!photo) return setReading("failed");
               setReading("idle");
-              setState({ ...state, draft: { ...state.draft, photo } });
+              setState((current) => (current.kind === "editing" ? { ...current, draft: { ...current.draft, photo } } : current));
             }}
             onSave={async () => {
               const { draft } = state;
