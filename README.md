@@ -58,6 +58,10 @@ To ship a newer version, change the `sha-` tag in `apps/lp-collection.yaml` in t
 
 The database lives on a local-path volume, which is deleted together with its claim. Deleting the app in Argo CD keeps the namespace, the claim and the secrets. Never delete the `lp-collection` namespace or the `data-postgres-0` claim by hand, because that deletes the data.
 
+Only the tunnel connector can reach the app, and only the app can reach the database. `deploy/network-policy.yaml` sets this, and k3s enforces it.
+
+The app encrypts the Discogs tokens it stores. A backup of the database taken by an older version, from before token encryption, holds the tokens in plain text, and nightly backups are kept for 30 days (see `docs/adr/0003`). To remove such a backup sooner, delete its dated dump files from the backup storage on k3s-1. Nightly backups do not exist yet, so the first deploy creates none of these.
+
 ## Build the container image
 
 ```sh
