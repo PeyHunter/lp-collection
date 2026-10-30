@@ -59,6 +59,31 @@ test("a record with no barcode is found by falling back to the Catalog number, t
   await expect(page.getByRole("status")).toHaveText("Added Sgt. Pepper's Lonely Hearts Club Band to your Collection.");
 });
 
+async function sidewaysOverflow(page: Page) {
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+}
+
+test("a long typed search wraps instead of pushing the page sideways", async ({ page }) => {
+  await logInAsNewUser(page);
+  await page.getByRole("link", { name: "Scan" }).click();
+
+  const unbroken = "X".repeat(100);
+  await page.getByRole("radio", { name: "Catalog number" }).check();
+  await page.getByRole("textbox", { name: "Catalog number" }).fill(unbroken);
+  await page.getByRole("button", { name: "Look up" }).click();
+  await expect(page.getByText(`No Release on Discogs has the Catalog number ${unbroken}.`)).toBeVisible();
+  expect(await sidewaysOverflow(page), "a Catalog number miss fits the screen").toBe(0);
+
+  await page.getByRole("radio", { name: "Artist and title" }).check();
+  await page.getByRole("textbox", { name: "Artist" }).fill("The Beatles");
+  await page.getByRole("textbox", { name: "Title" }).fill("Sgt. Pepper's Lonely Hearts Club Band");
+  await page.getByRole("button", { name: "Look up" }).click();
+  await expect(page.getByRole("heading", { name: "2 Releases match" })).toBeVisible();
+  expect(await sidewaysOverflow(page), "the searched artist and title above the matches fit the screen").toBe(0);
+  await page.setViewportSize({ width: 320, height: 568 });
+  expect(await sidewaysOverflow(page), "the searched artist and title fit the narrowest iPhone").toBe(0);
+});
+
 test("picking a Release the Collection already has warns with the Copy count, and Cancel or Add another decide", async ({ page }) => {
   await logInAsNewUser(page);
   await page.getByRole("link", { name: "Scan" }).click();

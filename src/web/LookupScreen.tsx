@@ -276,7 +276,7 @@ function Matches({
     <>
       <div className="section-head">
         <h2>{total === 1 ? "1 Release matches" : `${total.toLocaleString("da-DK")} Releases match`}</h2>
-        <span className="count tnum">{searched}</span>
+        <span className="count tnum searched">{searched}</span>
       </div>
       {total > candidates.length ? (
         <p className="lead">
