@@ -1,11 +1,11 @@
-import { expect, test } from "@playwright/test";
-import { fakeCamera, logInAsOwner, watchCameras } from "./camera.ts";
+import { fakeCamera, watchCameras } from "./camera.ts";
+import { expect, test } from "./login.ts";
 
 test.use({ ...fakeCamera({ tiltDegrees: 6, offset: [0, 0], curve: 0.6, glare: { at: [0.55, 0.45], radiusPx: 70, strength: 0.5 }, barcode: "5099969209017" }), permissions: ["camera"] });
 
-test("the Owner scans a sleeve's barcode and adds the matching Release without typing", async ({ page }) => {
+test("a User scans a sleeve's barcode and adds the matching Release without typing", async ({ page, logInAsNewUser }) => {
   const cameras = await watchCameras(page);
-  await logInAsOwner(page);
+  await logInAsNewUser(page, "scanner");
 
   await page.getByRole("link", { name: "Scan" }).click();
   await expect(page.getByRole("status")).toHaveText("Read 5099969209017");
@@ -21,8 +21,8 @@ test("the Owner scans a sleeve's barcode and adds the matching Release without t
 test.describe("when the camera is blocked", () => {
   test.use({ permissions: [] });
 
-  test("the Owner is told so and types the barcode instead", async ({ page }) => {
-    await logInAsOwner(page);
+  test("the User is told so and types the barcode instead", async ({ page, logInAsNewUser }) => {
+    await logInAsNewUser(page, "scanner");
     await page.getByRole("link", { name: "Scan" }).click();
 
     await expect(page.getByRole("status")).toContainText("LP-Collection isn't allowed to use the camera. Type the barcode below instead.");
@@ -32,13 +32,13 @@ test.describe("when the camera is blocked", () => {
   });
 });
 
-test("when the phone can't read the camera's picture, the Owner is told scanning failed and types the barcode instead", async ({ page }) => {
+test("when the phone can't read the camera's picture, the User is told scanning failed and types the barcode instead", async ({ page, logInAsNewUser }) => {
   await page.addInitScript(() => {
     CanvasRenderingContext2D.prototype.getImageData = () => {
       throw new DOMException("out of memory", "InvalidStateError");
     };
   });
-  await logInAsOwner(page);
+  await logInAsNewUser(page, "scanner");
   await page.getByRole("link", { name: "Scan" }).click();
 
   await expect(page.getByRole("status")).toContainText("Scanning failed on this phone. Type the barcode below instead, or try again.");

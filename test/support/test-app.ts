@@ -1,6 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pg from "pg";
 import { afterAll, inject, onTestFinished } from "vitest";
@@ -37,7 +36,7 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   const database = connectDatabase(`${serverUrl}/${name}`);
   await migrate(database);
   const discogs = createFakeDiscogs(script);
-  const photosDir = await mkdtemp(join(tmpdir(), "lp-collection-photos-"));
+  const photosDir = await mkdtemp(join(inject("scratchDir"), "photos-"));
   let now = new Date("2026-03-01T12:00:00Z");
   let secretBox = createSecretBox(randomBytes(32));
   let owner = appOwnerDiscogsUsername;

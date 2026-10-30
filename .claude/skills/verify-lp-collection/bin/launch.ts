@@ -2,12 +2,10 @@
 // Usage (from the repo root, in the background): node .claude/skills/verify-lp-collection/bin/launch.ts [run-id]
 // Prints "READY <run-id> <url>" once the app answers a healthy /api/health. stop.ts (SIGUSR2) tears it all down.
 import { execSync, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import EmbeddedPostgres from "embedded-postgres";
 import { freePort } from "../../../../test/support/free-port.ts";
+import { startThrowawayPostgres } from "../../../../test/support/throwaway-postgres.ts";
 import { evidenceDir, statePath, type RunState } from "./shared.ts";
 
 const runId = process.argv[2] ?? `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -15,18 +13,12 @@ const runId = process.argv[2] ?? `run-${new Date().toISOString().replace(/[:.]/g
 await mkdir(evidenceDir(runId), { recursive: true });
 execSync("npm run build", { stdio: ["ignore", "ignore", "inherit"] });
 
-const postgresPort = await freePort();
 const appPort = await freePort();
-const dataDir = await mkdtemp(join(tmpdir(), `lp-collection-verify-${runId}-`));
-// A fresh random password per run: the database is throwaway and nothing secret is committed.
-const password = randomUUID();
-const pg = new EmbeddedPostgres({ databaseDir: dataDir, user: "postgres", password, port: postgresPort, persistent: false, onLog: () => {} });
-await pg.initialise();
-await pg.start();
-await pg.createDatabase("lp_collection");
+const postgres = await startThrowawayPostgres(`verify-${runId}`);
+await postgres.createDatabase("lp_collection");
 
 const app = spawn("node", ["src/server/main.ts"], {
-  env: { APP_OWNER_DISCOGS_USERNAME: "owner", ...process.env, DISCOGS: "fake", PORT: String(appPort), DATABASE_URL: `postgres://postgres:${password}@localhost:${postgresPort}/lp_collection` },
+  env: { APP_OWNER_DISCOGS_USERNAME: "owner", PHOTOS_DIR: join(postgres.dir, "photos"), ...process.env, DISCOGS: "fake", PORT: String(appPort), DATABASE_URL: `${postgres.url}/lp_collection` },
   stdio: ["ignore", "inherit", "inherit"],
 });
 
@@ -39,8 +31,7 @@ async function teardown(code: number) {
     app.kill("SIGTERM");
     await exited;
   }
-  await pg.stop();
-  await rm(dataDir, { recursive: true, force: true });
+  await postgres.stop();
   process.exit(code);
 }
 process.on("SIGUSR2", () => teardown(0));
@@ -67,7 +58,6 @@ const state: RunState = {
   runId,
   launcherPid: process.pid,
   appUrl,
-  postgresPort,
   commit: execSync("git rev-parse HEAD").toString().trim(),
   dirty: execSync("git status --porcelain").toString().trim() !== "",
   startedAt: new Date().toISOString(),

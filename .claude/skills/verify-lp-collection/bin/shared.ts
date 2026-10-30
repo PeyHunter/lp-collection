@@ -10,7 +10,6 @@ export type RunState = {
   runId: string;
   launcherPid: number;
   appUrl: string;
-  postgresPort: number;
   commit: string;
   dirty: boolean;
   startedAt: string;

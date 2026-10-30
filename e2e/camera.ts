@@ -1,7 +1,7 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { barcodePhoto, straight, y4m, type Shot } from "../test/support/barcode-photo.ts";
 
 /**
@@ -9,17 +9,16 @@ import { barcodePhoto, straight, y4m, type Shot } from "../test/support/barcode-
  * The full Chromium build, because the headless shell answers every camera request with NotSupportedError.
  */
 export function fakeCamera(shot: Omit<Shot, "width" | "height" | "modulePx" | "light" | "noise" | "blur">) {
-  const file = join(mkdtempSync(join(tmpdir(), "lp-collection-camera-")), "camera.y4m");
-  writeFileSync(file, y4m(barcodePhoto({ ...straight, ...shot })));
+  const video = y4m(barcodePhoto({ ...straight, ...shot }));
+  const dir = join(import.meta.dirname, "../node_modules/.cache/lp-collection-camera");
+  const file = join(dir, `${createHash("sha256").update(video).digest("hex")}.y4m`);
+  if (!existsSync(file)) {
+    mkdirSync(dir, { recursive: true });
+    const partial = `${file}.${process.pid}`;
+    writeFileSync(partial, video);
+    renameSync(partial, file);
+  }
   return { channel: "chromium", launchOptions: { args: ["--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${file}`] } };
-}
-
-export async function logInAsOwner(page: Page) {
-  await page.goto("/");
-  await page.getByRole("link", { name: "Log in with Discogs" }).click();
-  await page.getByLabel("Discogs username").fill("owner");
-  await page.getByRole("button", { name: "Authorize" }).click();
-  await expect(page.getByRole("heading", { name: "Your Collection" })).toBeVisible();
 }
 
 export async function watchCameras(page: Page) {

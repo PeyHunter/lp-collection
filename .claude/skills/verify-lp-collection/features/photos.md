@@ -24,7 +24,7 @@ A Member can take or pick photos of a Copy on its Copy page to show its real con
 Preconditions:
 
 - Baseline state, `doctor.ts` reports `HEALTHY`.
-- The launcher sets no `PHOTOS_DIR`, so the app keeps photos in a temp folder that it deletes when it stops. Set `PHOTOS_DIR` before `launch.ts` to keep them.
+- Unless `PHOTOS_DIR` is set before `launch.ts`, the app keeps photos in the run's throwaway folder, which is deleted with the run's database when it stops. Set `PHOTOS_DIR` to keep them.
 - Playwright cannot open the iOS camera. `setInputFiles` on the label "Take or pick a photo" stands in for the picked photo, and it still goes through the phone's resize and JPEG step.
 
 - **No photos.** Log in as `owner`, add Discovery (`190295328709`), open it. Expect "No photos yet." and the big picture `/fake-discogs/covers/16893476.svg`.
