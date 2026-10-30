@@ -149,7 +149,7 @@ function Matches({
               </div>
               {isChosen && (
                 <div className="save-panel" id={panelId}>
-                  <p>Saved with Media condition and Sleeve condition Very Good Plus.</p>
+                  <p>Will be saved with Media condition and Sleeve condition Very Good Plus.</p>
                   {save.kind === "failed" && (
                     <p className="notice error" role="alert">
                       {save.message}

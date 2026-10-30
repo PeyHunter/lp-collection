@@ -174,7 +174,7 @@ A list row is the cover, then the title, artist, and meta line, then the Value. 
 
 ### Bottom bar with Scan
 
-The bottom bar is sticky at the bottom with a 2px `--ink` rule on top, `--sunk` at 92% behind it, and the bottom safe-area inset as padding. It holds Home, Scan, and Collection. Until the home screen exists, the Home cell stays empty. Scan sits in the middle as a pill of `--accent-fill`, 3.5rem tall, with an uppercase Unbounded label. The current tab is `--ink`, and the other tabs are `--ink-dim`. On Lookup, Scan is the current page and gets a ring.
+The bottom bar is sticky at the bottom with a 2px `--ink` rule on top, `--sunk` at 92% behind it, and the bottom safe-area inset as padding. It holds Home, Scan, and Collection. Until the home screen exists, the Home cell stays empty. Scan sits in the middle as a pill of `--accent-fill`, 3.5rem tall, with an uppercase Unbounded label. The current tab is `--ink`, and the other tabs are `--ink-dim`. On Lookup, Scan is the current page and gets a ring. At large text sizes Scan may move off center: a side cell never gets narrower than its label, so the empty Home cell gives up its room first.
 
 ### Buttons
 
@@ -198,11 +198,11 @@ Every screen that fetches has all three, in the place the content would go.
 - **Loading.** One line of `--ink-dim` text that names what is coming ("Loading your Collection…", "Asking Discogs…"). It pulses gently, only under `prefers-reduced-motion: no-preference`. The region around it sets `aria-busy`. The button that started it is disabled and says what it is doing ("Looking…", "Adding…").
 - **Empty.** A sentence in `--ink-dim` that says what is missing, then the next step as a primary button or a hint. The empty Collection says "No Copies yet." with "Add your first record". A Lookup with no match names the barcode and says to check the digits.
 - **Error.** A `--surface` card with a thin `--loss` border and `role="alert"`, saying what failed and what to do. A failed load gets a quiet "Try again" button. A failed save keeps the picked Release, so one tap retries.
-- **Done.** After a save, the next screen shows a `--surface` card with a thin `--gain` border and `role="status"` ("Added Kind of Blue to your Collection."), and tints the new row with 10% `--accent`. A reload clears it.
+- **Done.** After a save, the next screen shows a `--surface` card with a thin `--gain` border and `role="status"` ("Added Kind of Blue to your Collection."), and tints the new row with 10% `--accent`. The tint and the pressed background reach `--space-s` past the row on each side, so the cover and the Value never touch their edges while the row text stays in line with the rows around it. A reload clears it.
 
 ### Lookup candidates
 
-A candidate is a list row whose title is a button. The meta line wraps, so the year, country, label, Catalog number and format all show. Tapping a candidate marks it with an `--accent` check and opens a save panel under it: a `--accent` bordered card with the conditions it saves with and the primary "Add to Collection" button. A single match opens its panel at once.
+A candidate is a list row whose title is a button. The meta line wraps, so the year, country, label, Catalog number and format all show. Tapping a candidate marks it with an `--accent` check and opens a save panel under it: a `--accent` bordered card that says which conditions the Copy will be saved with, and the primary "Add to Collection" button. A single match opens its panel at once.
 
 ### Shelf (first sketch)
 
