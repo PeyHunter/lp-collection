@@ -3,51 +3,100 @@ const loginLimits = {
   perUser: { count: 30, windowMs: 15 * minute },
   perInvite: { count: 5, windowMs: 15 * minute },
   loggedOutPerDevice: { count: 10, windowMs: 15 * minute },
-  // Discogs allows the home IP about 25 unauthenticated requests a minute; this leaves room for everyone else's calls.
+  // Discogs allows the home IP about 25 unauthenticated calls a minute. Counted over any 60 seconds, not per clock minute,
+  // logged-out logins use at most 10 of them, which leaves the rest for Invites, logged-in Users and Lookups.
   loggedOutTotal: { count: 10, windowMs: minute },
 };
+
+type Limit = { count: number; windowMs: number };
 
 export type LoginSpender = { kind: "user"; userId: string } | { kind: "invite"; inviteId: string } | { kind: "logged-out"; device: string };
 
 export type LoginBudgetProblem = "too-many" | "busy";
 
+type Charge = { hasRoom(): boolean; spend(): void; problem: LoginBudgetProblem };
+
+/** A login is charged only when every limit it counts against has room, so a refused login spends nothing and only granted logins are remembered. */
 export function createLoginBudget(now: () => Date) {
-  const perUser = fixedWindowLimit(loginLimits.perUser, now);
-  const perInvite = fixedWindowLimit(loginLimits.perInvite, now);
-  const loggedOutPerDevice = fixedWindowLimit(loginLimits.loggedOutPerDevice, now);
-  const loggedOutTotal = fixedWindowLimit(loginLimits.loggedOutTotal, now);
+  const clock = () => now().getTime();
+  const perUser = fixedWindows(loginLimits.perUser, clock);
+  const perInvite = fixedWindows(loginLimits.perInvite, clock);
+  const loggedOutPerDevice = fixedWindows(loginLimits.loggedOutPerDevice, clock);
+  const loggedOutTotal = slidingWindow(loginLimits.loggedOutTotal, clock);
+
+  function chargesFor(spender: LoginSpender): Charge[] {
+    switch (spender.kind) {
+      case "user":
+        return [{ ...perUser.of(spender.userId), problem: "too-many" }];
+      case "invite":
+        return [{ ...perInvite.of(spender.inviteId), problem: "too-many" }];
+      case "logged-out":
+        return [
+          { ...loggedOutPerDevice.of(spender.device), problem: "too-many" },
+          { ...loggedOutTotal, problem: "busy" },
+        ];
+    }
+  }
+
+  function check(spender: LoginSpender) {
+    return chargesFor(spender).find((charge) => !charge.hasRoom())?.problem;
+  }
+
+  function spend(spender: LoginSpender) {
+    for (const charge of chargesFor(spender)) charge.spend();
+  }
 
   return {
-    take(spender: LoginSpender): LoginBudgetProblem | undefined {
-      switch (spender.kind) {
-        case "user":
-          return perUser.allow(spender.userId) ? undefined : "too-many";
-        case "invite":
-          return perInvite.allow(spender.inviteId) ? undefined : "too-many";
-        case "logged-out":
-          if (!loggedOutPerDevice.allow(spender.device)) return "too-many";
-          return loggedOutTotal.allow("all") ? undefined : "busy";
-      }
+    check,
+    spend,
+    take(spender: LoginSpender) {
+      const problem = check(spender);
+      if (!problem) spend(spender);
+      return problem;
     },
-    trackedKeys() {
-      return perUser.size() + perInvite.size() + loggedOutPerDevice.size() + loggedOutTotal.size();
-    },
+    size: () => perUser.size() + perInvite.size() + loggedOutPerDevice.size() + loggedOutTotal.size(),
   };
 }
 
-function fixedWindowLimit({ count: limit, windowMs }: { count: number; windowMs: number }, now: () => Date) {
-  const windows = new Map<string, { windowStart: number; count: number }>();
+function fixedWindows({ count, windowMs }: Limit, clock: () => number) {
+  // A window is added when it starts and dropped when it ends, so the Map stays in start order and the sweep stops at the first live one.
+  const windows = new Map<string, { start: number; spent: number }>();
+  function current(key: string) {
+    const at = clock();
+    for (const [stale, window] of windows) {
+      if (at - window.start < windowMs) break;
+      windows.delete(stale);
+    }
+    return windows.get(key);
+  }
   return {
-    allow(key: string) {
-      const at = now().getTime();
-      for (const [stale, window] of windows) {
-        if (at - window.windowStart >= windowMs) windows.delete(stale);
-      }
-      const window = windows.get(key) ?? { windowStart: at, count: 0 };
-      window.count += 1;
-      windows.set(key, window);
-      return window.count <= limit;
-    },
+    of: (key: string) => ({
+      hasRoom: () => (current(key)?.spent ?? 0) < count,
+      spend() {
+        const window = current(key);
+        if (window) window.spent += 1;
+        else windows.set(key, { start: clock(), spent: 1 });
+      },
+    }),
     size: () => windows.size,
+  };
+}
+
+function slidingWindow({ count, windowMs }: Limit, clock: () => number) {
+  const spentAt: number[] = [];
+  function dropExpired() {
+    const at = clock();
+    while (spentAt.length > 0 && at - spentAt[0]! >= windowMs) spentAt.shift();
+  }
+  return {
+    hasRoom() {
+      dropExpired();
+      return spentAt.length < count;
+    },
+    spend() {
+      dropExpired();
+      spentAt.push(clock());
+    },
+    size: () => spentAt.length,
   };
 }
