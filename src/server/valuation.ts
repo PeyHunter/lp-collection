@@ -74,11 +74,14 @@ export function createValuation({ database, discogs, exchangeRates, now }: { dat
         })
         .from(valueSnapshots)
         .innerJoin(copies, and(eq(copies.id, valueSnapshots.copyId), eq(copies.mediaCondition, valueSnapshots.mediaCondition)))
-        .where("collectionId" in filter ? eq(copies.collectionId, filter.collectionId) : eq(copies.id, filter.copyId))
+        .where(
+          and(
+            eq(valueSnapshots.currency, currency),
+            "collectionId" in filter ? eq(copies.collectionId, filter.collectionId) : eq(copies.id, filter.copyId),
+          ),
+        )
         .orderBy(valueSnapshots.copyId, desc(valueSnapshots.fetchedAt), desc(valueSnapshots.id));
-      return new Map<string, CopyValue>(
-        rows.filter((row) => row.currency === currency).map(({ copyId, fetchedAt, ...value }) => [copyId, { ...value, fetchedAt: fetchedAt.toISOString() }]),
-      );
+      return new Map<string, CopyValue>(rows.map(({ copyId, fetchedAt, ...value }) => [copyId, { ...value, fetchedAt: fetchedAt.toISOString() }]));
     },
   };
 }

@@ -357,3 +357,74 @@ test("after a currency change no Value shows in the old currency, and fetching g
     { value: 33, lowestListing: 34.1, currency: "USD" },
   ]);
 });
+
+test("a Copy whose Value keeps failing doesn't hold up the others, and isn't asked again until a while has passed", async () => {
+  const script: FakeDiscogsScript = { ...priced };
+  const app = await createTestApp({ discogs: script });
+  const owner = await logInWithCollection(app);
+  for (const discogsReleaseId of [discovery, discovery, discovery, kindOfBlueEurope]) {
+    app.clock.advance(1_000);
+    await saved(owner, discogsReleaseId);
+  }
+  await app.query("DELETE FROM value_snapshots");
+  script.unavailableReleases = [kindOfBlueEurope];
+  app.discogs.requests.length = 0;
+
+  const first = await fetchValues(owner);
+  const second = await fetchValues(owner);
+
+  expect(first.copies.map((copy) => copy.value?.value ?? null)).toEqual([null, 223.8, 223.8, 223.8]);
+  expect(second.more).toBe(false);
+  expect(priceSuggestionsAsked(app)).toEqual([kindOfBlueEurope, discovery, discovery, discovery]);
+
+  app.clock.advance(60 * 60_000);
+  await fetchValues(owner);
+
+  expect(priceSuggestionsAsked(app)).toEqual([kindOfBlueEurope, discovery, discovery, discovery, kindOfBlueEurope]);
+});
+
+test("Members of one Collection with different currencies each get every Value fetched once, even with the list open at the same time", async () => {
+  const app = await createTestApp({ discogs: priced });
+  const owner = await logInWithCollection(app);
+  const invited = await invitedFriend(app, owner.session, "friend");
+  const [friendId] = await app.query<{ user_id: string }>("SELECT user_id FROM memberships WHERE collection_id = $1", [invited.collectionId]);
+  await app.query("INSERT INTO memberships (collection_id, user_id) VALUES ($1, $2)", [owner.collectionId, friendId!.user_id]);
+  const friend: Member = {
+    ...invited,
+    collectionId: owner.collectionId,
+    as: (path, init = {}) => app.request(`/api/collections/${owner.collectionId}${path}`, { ...init, headers: { cookie: invited.session, ...init.headers } }),
+  };
+  await app.request("/api/me/currency", {
+    method: "PUT",
+    headers: { cookie: invited.session, "content-type": "application/json" },
+    body: JSON.stringify({ currency: "USD" }),
+  });
+  for (let saves = 0; saves < 3; saves++) await saved(owner, discovery);
+  app.discogs.requests.length = 0;
+
+  const opens = async (member: Member) => {
+    for (let open = 0; open < 3; open++) await fetchValues(member);
+    return listCopies(member);
+  };
+  const [ownersList, friendsList] = await Promise.all([opens(owner), opens(friend)]);
+  await opens(owner);
+
+  expect(ownersList).toMatchObject(Array(3).fill({ value: { value: 223.8, currency: "DKK" } }));
+  expect(friendsList).toMatchObject(Array(3).fill({ value: { value: 33, currency: "USD" } }));
+  expect(priceSuggestionsAsked(app)).toEqual(Array(3).fill(discovery));
+});
+
+test("a retry time later than now from the client counts as now, so the same Copies aren't fetched again on every ask", async () => {
+  const app = await createTestApp({ discogs: priced });
+  const owner = await logInWithCollection(app);
+  for (let saves = 0; saves < 7; saves++) await saved(owner, gas5);
+  app.clock.advance(60_000);
+  app.discogs.requests.length = 0;
+
+  const answers = [];
+  for (let asks = 0; asks < 3; asks++) answers.push(await fetchValues(owner, { retryEmptyBefore: "2099-01-01T00:00:00Z" }));
+
+  expect(answers.map((answer) => answer.more)).toEqual([true, false, false]);
+  expect(answers[0]!.retryEmptyBefore).toBe("2026-03-01T12:01:00.000Z");
+  expect(priceSuggestionsAsked(app)).toEqual(Array(7).fill(gas5));
+});

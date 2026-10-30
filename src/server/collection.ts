@@ -12,6 +12,7 @@ type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
 const valueBatchSize = 5;
+const failedValueRetryMs = 15 * 60_000;
 
 function parseBarcode(typed: string | undefined) {
   const digits = (typed ?? "").replaceAll(/[\s-]/g, "");
@@ -46,7 +47,9 @@ export type CopyView = ReturnType<typeof copyView>;
 
 function parseValuesRequest(body: unknown, now: Date): { retryEmptyBefore?: Date } {
   const { retryEmpty, retryEmptyBefore } = (body ?? {}) as Record<string, unknown>;
-  if (typeof retryEmptyBefore === "string" && !Number.isNaN(Date.parse(retryEmptyBefore))) return { retryEmptyBefore: new Date(retryEmptyBefore) };
+  if (typeof retryEmptyBefore === "string" && !Number.isNaN(Date.parse(retryEmptyBefore))) {
+    return { retryEmptyBefore: new Date(Math.min(Date.parse(retryEmptyBefore), now.getTime())) };
+  }
   return retryEmpty === true ? { retryEmptyBefore: now } : {};
 }
 
@@ -63,6 +66,14 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
   const valuation = createValuation({ database, discogs, exchangeRates, now });
   const routes = new Hono<{ Variables: { member: Member } }>();
   const valueBatches = new Map<string, Promise<{ sellerSettingsMissing: boolean; more: boolean }>>();
+  const failedAt = new Map<string, Date>();
+
+  function waitsAfterFailure(copyId: string) {
+    const failed = failedAt.get(copyId);
+    if (failed && now().getTime() - failed.getTime() < failedValueRetryMs) return true;
+    failedAt.delete(copyId);
+    return false;
+  }
 
   routes.use("/api/collections/:collectionId/*", async (c, next) => {
     const user = await sessionUser(database, now, c);
@@ -193,14 +204,17 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, secre
   });
 
   async function fetchMissingValues(member: Member, retryEmptyBefore: Date | undefined) {
-    const due = (await collectionCopies(member)).filter((copy) => needsValue(copy, retryEmptyBefore));
+    const due = (await collectionCopies(member)).filter((copy) => needsValue(copy, retryEmptyBefore) && !waitsAfterFailure(copy.id));
     let sellerSettingsMissing = member.sellerSettingsMissing;
+    let valued = false;
     for (const copy of due.slice(0, valueBatchSize)) {
       const outcome = await valuation.fetchValue({ ...copy, discogsReleaseId: copy.release.discogsReleaseId }, member);
       sellerSettingsMissing = sellerSettingsMissingAfter(outcome, sellerSettingsMissing);
-      if (outcome !== "valued") return { sellerSettingsMissing, more: false };
+      if (outcome === "seller-settings-missing") return { sellerSettingsMissing, more: false };
+      if (outcome === "unavailable") failedAt.set(copy.id, now());
+      valued ||= outcome === "valued";
     }
-    return { sellerSettingsMissing, more: due.length > valueBatchSize };
+    return { sellerSettingsMissing, more: valued && due.length > valueBatchSize };
   }
 
   routes.post("/api/collections/:collectionId/values", async (c) => {

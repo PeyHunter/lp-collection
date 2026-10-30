@@ -5,7 +5,7 @@ Every Copy shows its Value, the Discogs suggested price for its Media condition,
 ## Sub-features
 
 - `row-value` shows the Value at the end of each Collection row, as in "252 kr", or "No Value yet". A Copy with no Value stays in the list.
-- `fetch-on-open` fetches, in the background, a Value for each Copy that has none for its current Media condition in the User's currency (a Copy saved before Values existed, a fetch that failed, a currency change). The list shows at once; those rows say "Fetching Value…" until their batch of five answers. A Release Discogs gave no suggestion is not asked again.
+- `fetch-on-open` fetches, in the background, a Value for each Copy that has none for its current Media condition in the User's currency (a Copy saved before Values existed, a fetch that failed, a currency change). The list shows at once; those rows say "Fetching Value…" until their batch of five answers. A Release Discogs gave no suggestion is not asked again. A Copy whose fetch fails is skipped so the rest still fill in, and the list asks for it again after 15 minutes.
 - `copy-page` at `/copies/<id>` shows the cover, title, artist, Release facts, the Value "for VG+", the Lowest listing ("Lowest listing 231 kr, any condition"), and the two condition pickers.
 - `condition-change` saves a new Media condition, fetches its Value, and stores a new ValueSnapshot. A Sleeve condition change alone asks Discogs nothing. Sleeve condition also takes Generic, Not Graded and No Cover.
 - `no-value` shows "No Value yet" when Discogs has no price suggestion. The Lowest listing can still show.

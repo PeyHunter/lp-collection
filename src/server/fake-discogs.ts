@@ -15,6 +15,7 @@ export type FakeDiscogsScript = {
   lowestListings?: Record<number, Money>;
   sellerSettingsMissingFor?: (discogsUsername: string) => boolean;
   unavailable?: boolean;
+  unavailableReleases?: number[];
   loginStartFails?: boolean;
   finishLoginDelayMs?: number;
   priceSuggestionsDelayMs?: number;
@@ -61,6 +62,9 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   function answer(request: FakeDiscogsRequest) {
     requests.push(request);
     if (script.unavailable) throw new Error("Fake Discogs is scripted to be unavailable");
+    if ("discogsReleaseId" in request && script.unavailableReleases?.includes(request.discogsReleaseId)) {
+      throw new Error(`Fake Discogs is scripted to fail for Release ${request.discogsReleaseId}`);
+    }
   }
 
   function callbackFor(requestToken: string, discogsUsername: string) {
