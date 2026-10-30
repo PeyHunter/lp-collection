@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
 function startServer(env: Record<string, string>) {
@@ -99,8 +101,9 @@ test("in production the app refuses to start without a place to keep photos", ()
 });
 
 test("the app refuses to start when it can't write to the photos directory", () => {
-  const result = startServer({ APP_OWNER_DISCOGS_USERNAME: "owner", DISCOGS: "fake", PHOTOS_DIR: "/proc/lp-collection-photos" });
+  const underAFile = join(fileURLToPath(import.meta.url), "photos");
+  const result = startServer({ APP_OWNER_DISCOGS_USERNAME: "owner", DISCOGS: "fake", PHOTOS_DIR: underAFile });
 
   expect(result.status).not.toBe(0);
-  expect(result.stderr).toContain("PHOTOS_DIR (/proc/lp-collection-photos) is not a directory the app can write to");
+  expect(result.stderr).toContain(`PHOTOS_DIR (${underAFile}) is not a directory the app can write to`);
 });
