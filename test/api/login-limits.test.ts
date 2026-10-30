@@ -183,3 +183,92 @@ test("one Invite can start 5 logins per 15 minutes", async () => {
   expect(limited).toBe(`/invite/${code}?login=too-many`);
   expect(later).toMatch(/^\/fake-discogs\//);
 });
+
+test("logged-out logins reach Discogs at most 10 times in any 60 seconds, even around the moment a minute ends", async () => {
+  const app = await createTestApp();
+  const seconds = (count: number) => count * 1000;
+  const startedAt: number[] = [];
+  let elapsed = 0;
+  const burst = async (network: number, size: number) => {
+    for (let i = 0; i < size; i++) {
+      const [location] = await startLogins(app, 1, fromPhone(`10.${network}.0.${i}`));
+      if (location?.startsWith("/fake-discogs/")) startedAt.push(elapsed);
+    }
+  };
+  const wait = (ms: number) => {
+    app.clock.advance(ms);
+    elapsed += ms;
+  };
+
+  await burst(1, 1);
+  wait(seconds(59));
+  await burst(2, 20);
+  wait(seconds(1));
+  await burst(3, 20);
+
+  const mostInOneMinute = Math.max(...startedAt.map((from) => startedAt.filter((at) => at >= from && at < from + seconds(60)).length));
+  expect(startedAt.length).toBeGreaterThan(10);
+  expect(mostInOneMinute).toBe(10);
+});
+
+test("a person told the app is busy keeps every login their device has left", async () => {
+  const app = await createTestApp();
+  for (let i = 0; i < 10; i++) await startLogins(app, 1, fromPhone(`192.0.2.${i}`));
+
+  const whileBusy = await startLogins(app, 15, fromPhone("203.0.113.1"));
+  app.clock.advance(minutes(1));
+  const afterwards = await startLogins(app, 10, fromPhone("203.0.113.1"));
+
+  expect(whileBusy.every((location) => location === "/?login=busy")).toBe(true);
+  expect(afterwards.every((location) => location?.startsWith("/fake-discogs/"))).toBe(true);
+});
+
+test("an invitee whose browser keeps losing its login cookie spends only their login starts", async () => {
+  const app = await createTestApp();
+  const code = await createInvite(app);
+
+  const lostCookie: (string | null)[] = [];
+  for (let i = 0; i < 4; i++) {
+    const login = await app.startLogin({ invite: code, headers: fromPhone("192.0.2.77") });
+    lostCookie.push((await app.request(app.discogs.authorizeAs(login.authorizeUrl!, "friend"), { headers: fromPhone("192.0.2.77") })).headers.get("location"));
+  }
+  const keptCookie = await app.logIn("friend", { invite: code, headers: fromPhone("192.0.2.77") });
+
+  expect(lostCookie.every((location) => location === `/invite/${code}?login=cookie-missing`)).toBe(true);
+  expect(keptCookie.location).toBe("/");
+});
+
+test("callbacks for an Invite's login that Discogs refuses still spend that Invite's budget", async () => {
+  const app = await createTestApp();
+  const code = await createInvite(app);
+  const [authorizeUrl] = await startLogins(app, 1, fromPhone("192.0.2.1"), `/api/login?invite=${code}`);
+  const requestToken = new URL(authorizeUrl!, "http://fake").searchParams.get("oauth_token")!;
+  for (let i = 0; i < 3; i++) await app.request(`/api/login/callback?oauth_token=${requestToken}&oauth_verifier=junk-${i}`, { headers: fromPhone("198.51.100.1") });
+
+  const [allowed] = await startLogins(app, 1, fromPhone("192.0.2.1"), `/api/login?invite=${code}`);
+  const [limited] = await startLogins(app, 1, fromPhone("192.0.2.1"), `/api/login?invite=${code}`);
+
+  expect(allowed).toMatch(/^\/fake-discogs\//);
+  expect(limited).toBe(`/invite/${code}?login=too-many`);
+});
+
+test("concurrent callbacks without the login cookie cannot make an Invite reach Discogs more than its budget allows", async () => {
+  const app = await createTestApp({ discogs: { finishLoginDelayMs: 100 } });
+  const code = await createInvite(app);
+  const before = app.discogs.calls.startLogin + app.discogs.calls.finishLogin;
+
+  const requestTokens: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    const [authorizeUrl] = await startLogins(app, 1, fromPhone(`192.0.2.${i}`), `/api/login?invite=${code}`);
+    requestTokens.push(new URL(authorizeUrl!, "http://fake").searchParams.get("oauth_token")!);
+  }
+  await Promise.all(
+    requestTokens.flatMap((requestToken) =>
+      [0, 1, 2].map((i) => app.request(`/api/login/callback?oauth_token=${requestToken}&oauth_verifier=junk-${i}`, { headers: fromPhone(`203.0.113.${i}`) })),
+    ),
+  );
+  const [afterwards] = await startLogins(app, 1, fromPhone("192.0.2.50"), `/api/login?invite=${code}`);
+
+  expect(app.discogs.calls.startLogin + app.discogs.calls.finishLogin - before).toBe(5);
+  expect(afterwards).toBe(`/invite/${code}?login=too-many`);
+});

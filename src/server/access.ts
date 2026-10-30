@@ -8,6 +8,7 @@ import type { AppDependencies } from "./app.ts";
 import type { Database } from "./db.ts";
 import { sealedPrefix, type SecretBox } from "./secret-box.ts";
 import type { DiscogsIdentity, LoginStart } from "./discogs.ts";
+import { createLoginBudget, type LoginSpender } from "./login-budget.ts";
 import { appOwner, collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
 
 const minute = 60 * 1000;
@@ -20,15 +21,6 @@ const sessionCookie = "lp_session";
 const loginCookie = "lp_login";
 const maxPendingLogins = 5;
 const maxVerifierChecksWithoutCookie = 3;
-const loginLimits = {
-  perUser: { count: 30, windowMs: 15 * minute },
-  perInvite: { count: 5, windowMs: 15 * minute },
-  loggedOutPerDevice: { count: 10, windowMs: 15 * minute },
-  // Discogs allows the home IP about 25 unauthenticated requests a minute; this leaves room for everyone else's calls.
-  loggedOutTotal: { count: 10, windowMs: minute },
-};
-
-type LoginSpender = { kind: "user"; userId: string } | { kind: "invite"; inviteId: string } | { kind: "logged-out"; device: string };
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -213,22 +205,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     });
   }
 
-  const perUser = fixedWindowLimit(loginLimits.perUser, now);
-  const perInvite = fixedWindowLimit(loginLimits.perInvite, now);
-  const loggedOutPerDevice = fixedWindowLimit(loginLimits.loggedOutPerDevice, now);
-  const loggedOutTotal = fixedWindowLimit(loginLimits.loggedOutTotal, now);
-
-  function spendLoginBudget(spender: LoginSpender): Extract<LoginProblem, "too-many" | "busy"> | undefined {
-    switch (spender.kind) {
-      case "user":
-        return perUser(spender.userId) ? undefined : "too-many";
-      case "invite":
-        return perInvite(spender.inviteId) ? undefined : "too-many";
-      case "logged-out":
-        if (!loggedOutPerDevice(spender.device)) return "too-many";
-        return loggedOutTotal("all") ? undefined : "busy";
-    }
-  }
+  const loginBudget = createLoginBudget(now);
 
   function loggedOut(c: Context): LoginSpender {
     return { kind: "logged-out", device: deviceKey(clientAddress(c)) };
@@ -239,7 +216,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     const invite = code === undefined ? undefined : await findInvite(code);
     if (code !== undefined && inviteStatus(invite, now()).status !== "valid") return c.redirect(invitePath(code), 302);
     const user = await currentUser(c);
-    const problem = spendLoginBudget(user ? { kind: "user", userId: user.id } : invite ? { kind: "invite", inviteId: invite.id } : loggedOut(c));
+    const problem = loginBudget.take(user ? { kind: "user", userId: user.id } : invite ? { kind: "invite", inviteId: invite.id } : loggedOut(c));
     if (problem) return c.redirect(loginProblemPath(code, problem), 302);
     const inviteId = invite?.id ?? null;
     let login: LoginStart;
@@ -281,9 +258,10 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     if (now().getTime() - attempt.createdAt.getTime() > loginAttemptLifetime) return c.redirect(loginProblemPath(codeForThisBrowser, "expired"), 302);
     const claim = async () => (await db.delete(loginAttempts).where(eq(loginAttempts.requestToken, requestToken)).returning()).length > 0;
     if (startedInThisBrowser && !(await claim())) return c.redirect(loginProblemPath(code, "expired"), 302);
-    if (!startedInThisBrowser) {
+    const cookielessSpender: LoginSpender | undefined = startedInThisBrowser ? undefined : attempt.inviteId ? { kind: "invite", inviteId: attempt.inviteId } : loggedOut(c);
+    if (cookielessSpender) {
       if (!(await reserveVerifierCheck(requestToken))) return c.redirect(loginProblemPath(undefined, "expired"), 302);
-      const problem = spendLoginBudget(attempt.inviteId ? { kind: "invite", inviteId: attempt.inviteId } : loggedOut(c));
+      const problem = loginBudget.take(cookielessSpender);
       if (problem) return c.redirect(loginProblemPath(undefined, problem), 302);
     }
 
@@ -296,6 +274,8 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     }
     // Discogs accepted the verifier, so this is the person who authorized; only their browser's cookie is missing.
     if (!startedInThisBrowser) {
+      // The Invite already paid for this login's start, so it pays again only for a verifier Discogs refuses.
+      if (cookielessSpender?.kind === "invite") loginBudget.refund(cookielessSpender);
       await claim();
       return c.redirect(loginProblemPath(code, "cookie-missing"), 302);
     }
@@ -381,20 +361,6 @@ function deviceKey(address: string) {
   const zeros = tail === undefined ? [] : Array<string>(8 - headGroups.length - tailGroups.length).fill("0");
   const network = [...headGroups, ...zeros, ...tailGroups].slice(0, 4).map((group) => parseInt(group, 16).toString(16));
   return `${network.join(":")}::/64`;
-}
-
-function fixedWindowLimit({ count: limit, windowMs }: { count: number; windowMs: number }, now: () => Date) {
-  const windows = new Map<string, { windowStart: number; count: number }>();
-  return function allow(key: string) {
-    const at = now().getTime();
-    for (const [stale, window] of windows) {
-      if (at - window.windowStart >= windowMs) windows.delete(stale);
-    }
-    const window = windows.get(key) ?? { windowStart: at, count: 0 };
-    window.count += 1;
-    windows.set(key, window);
-    return window.count <= limit;
-  };
 }
 
 function invitePath(code: string) {
