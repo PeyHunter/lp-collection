@@ -34,4 +34,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Add a Copy by typed barcode](./add-copy.md) covers the Lookup screen, picking one of several pressings, saving the Copy at Very Good Plus, and the Collection list.
 - [Scan a barcode with the camera](./scan.md) covers the camera on the Lookup screen, reading EAN-13 and UPC-A, turning the camera off, and typing when the camera is blocked.
 - [Value](./value.md) covers the Value and Lowest listing on each row and on the Copy page, changing conditions, "No Value yet", the seller settings guide and the currency setting.
+- [Photos](./photos.md) covers taking or picking photos of a Copy, the Discogs cover when there are none, deleting a photo, deleting a Copy with its photos, and who can fetch them.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.

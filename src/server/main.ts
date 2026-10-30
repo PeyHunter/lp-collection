@@ -1,4 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { access, constants, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { sealStoredDiscogsTokens, storedTokensOpenWith } from "./access.ts";
@@ -17,6 +20,7 @@ type Config = {
   publicUrl: URL;
   discogs: { kind: "real"; consumerKey: string; consumerSecret: string } | { kind: "fake" };
   tokenEncryptionKey: Buffer;
+  photosDir: string | undefined;
 };
 
 function readConfig(env: NodeJS.ProcessEnv): Config | { error: string } {
@@ -32,7 +36,11 @@ function readConfig(env: NodeJS.ProcessEnv): Config | { error: string } {
   if ("error" in publicUrl) return publicUrl;
   const tokenEncryptionKey = readTokenEncryptionKey(env, discogs);
   if ("error" in tokenEncryptionKey) return tokenEncryptionKey;
-  return { databaseUrl: DATABASE_URL, port, appOwnerDiscogsUsername: APP_OWNER_DISCOGS_USERNAME, publicUrl, discogs, tokenEncryptionKey };
+  const photosDir = env.PHOTOS_DIR || undefined;
+  if (!photosDir && env.NODE_ENV === "production") {
+    return { error: "PHOTOS_DIR is not set. Set it to a writable directory on a persistent volume, where Copy photos are kept." };
+  }
+  return { databaseUrl: DATABASE_URL, port, appOwnerDiscogsUsername: APP_OWNER_DISCOGS_USERNAME, publicUrl, discogs, tokenEncryptionKey, photosDir };
 }
 
 function readTokenEncryptionKey(env: NodeJS.ProcessEnv, discogs: Config["discogs"]): Buffer | { error: string } {
@@ -109,6 +117,19 @@ if (config.discogs.kind === "real") {
   exchangeRates = createFixedRates();
 }
 
+const photosDir = config.photosDir ?? (await mkdtemp(join(tmpdir(), "lp-collection-photos-")));
+if (!config.photosDir) console.log(`PHOTOS_DIR is not set: keeping Copy photos in ${photosDir} until the app stops.`);
+const writable = await mkdir(photosDir, { recursive: true })
+  .then(() => access(photosDir, constants.W_OK))
+  .then(
+    () => true,
+    () => false,
+  );
+if (!writable) {
+  console.error(`LP-Collection cannot start: PHOTOS_DIR (${photosDir}) is not a directory the app can write to.`);
+  process.exit(1);
+}
+
 const database = connectDatabase(config.databaseUrl);
 await migrate(database);
 const secretBox = createSecretBox(config.tokenEncryptionKey);
@@ -121,7 +142,7 @@ if (!(await storedTokensOpenWith(database, secretBox))) {
 }
 await sealStoredDiscogsTokens(database, secretBox);
 
-const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl });
+const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl, photosDir });
 if (fake) app.route("/", fake.pages);
 // The built phone UI; any path the API doesn't own falls back to the single page.
 app.use("*", serveStatic({ root: "dist/web" }));
@@ -130,5 +151,11 @@ app.get("*", serveStatic({ path: "dist/web/index.html" }));
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => console.log(`LP-Collection listening on :${info.port}`));
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => server.close(() => database.close().then(() => process.exit(0))));
+  process.on(signal, () =>
+    server.close(async () => {
+      await database.close();
+      if (!config.photosDir) await rm(photosDir, { recursive: true, force: true });
+      process.exit(0);
+    }),
+  );
 }

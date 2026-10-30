@@ -129,3 +129,19 @@ export const valueSnapshots = pgTable(
   },
   (table) => [index("value_snapshots_copy_fetched_idx").on(table.copyId, table.fetchedAt)],
 );
+
+export const photos = pgTable(
+  "photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    copyId: uuid("copy_id")
+      .notNull()
+      .references(() => copies.id),
+    fileKey: text("file_key").notNull().unique(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    bytes: integer("bytes").notNull(),
+    createdAt: at("created_at").notNull(),
+  },
+  (table) => [index("photos_copy_created_idx").on(table.copyId, table.createdAt)],
+);

@@ -46,7 +46,7 @@ export function LookupScreen({ collectionId }: { collectionId: string }) {
       return setLookup({ ...found, save: { kind: "failed", message: response ? await errorMessage(response) : unreachable } });
     }
     const { copy } = (await response.json()) as { copy: CopyView };
-    navigate("/", { savedCopyId: copy.id, title: copy.release.title });
+    navigate("/", { kind: "saved", copyId: copy.id, title: copy.release.title });
   }
 
   return (

@@ -3,6 +3,17 @@
 #   lp-collection-discogs (scripts/wizard/discogs.sh): DISCOGS_CONSUMER_KEY,
 #     DISCOGS_CONSUMER_SECRET, APP_OWNER_DISCOGS_USERNAME, PUBLIC_URL
 apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lp-collection-photos
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: lp-collection
@@ -30,16 +41,10 @@ spec:
       labels:
         app: lp-collection
     spec:
-      # Next to PostgreSQL, and off the small k3s-1 when k3s-2 is up.
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values: [k3s-2]
+      # On k3s-2 with PostgreSQL, which the app can't work without anyway. The photos volume is created on the node
+      # of the first pod that mounts it, so a pod that could land on k3s-1 would strand the photos there.
+      nodeSelector:
+        kubernetes.io/hostname: k3s-2
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -61,9 +66,14 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: DATABASE_URL
               value: postgres://lp_collection:$(POSTGRES_PASSWORD)@postgres:5432/lp_collection
+            - name: PHOTOS_DIR
+              value: /var/lib/lp-collection/photos
           envFrom:
             - secretRef:
                 name: lp-collection-discogs
+          volumeMounts:
+            - name: photos
+              mountPath: /var/lib/lp-collection/photos
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -86,3 +96,7 @@ spec:
               memory: 128Mi
             limits:
               memory: 384Mi
+      volumes:
+        - name: photos
+          persistentVolumeClaim:
+            claimName: lp-collection-photos
