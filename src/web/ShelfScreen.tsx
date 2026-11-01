@@ -3,7 +3,7 @@ import type { ShelfCorners } from "../server/schema.ts";
 import type { ShelfView } from "../server/shelves.ts";
 import type { Me } from "./App.tsx";
 import { Header } from "./Header.tsx";
-import { navigate } from "./navigation.ts";
+import { followLink, navigate } from "./navigation.ts";
 import { shrinkToJpegWithoutLocation } from "./photo-file.ts";
 import { ConfirmDelete } from "./Photos.tsx";
 import { ShelfPhoto, type ShelfImage } from "./ShelfPhoto.tsx";
@@ -228,6 +228,8 @@ function ShelfEditor({ saved, draft, saving, reading, onChange, onPhoto, onSave,
         {draft.photo && !name && <p className="caption">Give the Shelf a name.</p>}
       </section>
 
+      {saved && <FillSections shelf={saved} />}
+
       {saved && (
         <section className="section" aria-labelledby="delete-shelf-heading">
           <div className="section-head">
@@ -241,6 +243,26 @@ function ShelfEditor({ saved, draft, saving, reading, onChange, onPhoto, onSave,
         </section>
       )}
     </>
+  );
+}
+
+/** One button per Section, laid out like the Shelf, to start filling it by scanning. */
+function FillSections({ shelf }: { shelf: ShelfView }) {
+  return (
+    <section className="section" aria-labelledby="fill-heading">
+      <div className="section-head">
+        <h2 id="fill-heading">Fill a Section</h2>
+      </div>
+      <p className="hint">Tap a Section, then scan the records in it one after another.</p>
+      <div className="section-grid" style={{ gridTemplateColumns: `repeat(${shelf.columns}, 1fr)` }}>
+        {shelf.sections.map((section) => (
+          <a key={section.id} className="section-cell" href={`/shelves/${shelf.id}/sections/${section.id}`} onClick={followLink} aria-label={`Fill ${sectionLabel(section.column, section.row)}, ${plural(section.copyCount, "Copy", "Copies")}`}>
+            <b>{sectionLabel(section.column, section.row)}</b>
+            <span className="tnum">{section.copyCount}</span>
+          </a>
+        ))}
+      </div>
+    </section>
   );
 }
 

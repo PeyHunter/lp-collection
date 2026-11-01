@@ -1,44 +1,17 @@
-import { readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
 import type { CopyView, LookupView } from "../../src/server/collection.ts";
-import type { ShelfView } from "../../src/server/shelves.ts";
 import { sampleReleases } from "../../src/server/fake-discogs.ts";
 import { logInWithCollection, saveCopy, type Member } from "../support/members.ts";
+import { createShelf as shelf, putIn, sectionAt } from "../support/shelves.ts";
 import { createTestApp } from "../support/test-app.ts";
 
-const photo = await readFile(new URL("../fixtures/photo.jpg", import.meta.url));
 const discovery = 16893476;
 const gas5 = 1503928;
-
-async function shelf(user: Member, name: string) {
-  const body = new FormData();
-  body.set("name", name);
-  body.set("columns", "4");
-  body.set("rows", "6");
-  body.set(
-    "corners",
-    JSON.stringify([
-      { x: 0.1, y: 0.1 },
-      { x: 0.9, y: 0.1 },
-      { x: 0.9, y: 0.9 },
-      { x: 0.1, y: 0.9 },
-    ]),
-  );
-  body.set("photo", new Blob([new Uint8Array(photo)], { type: "image/jpeg" }), "shelf.jpg");
-  const response = await user.as("/shelves", { method: "POST", body });
-  expect(response.status).toBe(201);
-  return ((await response.json()) as { shelf: ShelfView }).shelf;
-}
 
 async function savedCopy(user: Member, discogsReleaseId = discovery) {
   const response = await saveCopy(user, discogsReleaseId);
   expect(response.status).toBe(201);
   return ((await response.json()) as { copy: CopyView }).copy;
-}
-
-async function putIn(user: Member, copyId: string, sectionId: string | null) {
-  const response = await user.as(`/copies/${copyId}/section`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ sectionId }) });
-  expect(response.status).toBe(204);
 }
 
 async function copy(user: Member, copyId: string) {
@@ -50,8 +23,6 @@ async function list(user: Member, query = "") {
   expect(response.status).toBe(200);
   return (await response.json()) as { copies: CopyView[]; total: number };
 }
-
-const sectionAt = (shelf: ShelfView, column: number, row: number) => shelf.sections.find((section) => section.column === column && section.row === row)!;
 
 test("a Copy is put in a Section, moved to another, and taken off the shelf, and its page says where it lives", async () => {
   const app = await createTestApp({ discogs: { releases: sampleReleases } });
