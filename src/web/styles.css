@@ -699,6 +699,19 @@ textarea.input {
   stroke-width: 3px;
   vector-effect: non-scaling-stroke;
 }
+.section-grid { display: grid; gap: 6px; }
+.section-cell {
+  display: grid;
+  place-items: center;
+  min-block-size: var(--tap);
+  padding: 4px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-s);
+  color: var(--ink);
+  text-decoration: none;
+  font-family: var(--display);
+}
+.section-cell span { font-family: var(--body); font-size: 0.75rem; opacity: 0.7; }
 .shelf-photo .cell.on polygon {
   fill: color-mix(in oklch, var(--accent) 45%, transparent);
   stroke: var(--accent);
