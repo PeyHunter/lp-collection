@@ -42,4 +42,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Value history](./value-history.md) covers the monthly refresh (`main.ts refresh` and its CronJob), resuming after a crash, the Collection value it records, and the Value history on a Copy.
 - [Overview](./overview.md) covers the top of the Collection: Collection value, number of Copies, the graph of the Collection value, the ten most valuable Copies, and the dock's Scan.
 - [CSV export](./csv-export.md) covers downloading the Collection as a spreadsheet, with Danish letters intact and without Value columns while Values are hidden.
+- [Browse covers](./browse.md) covers flipping through the Collection as big covers by swiping, in the list's order and filters, coming back to the same cover from a Copy, and loading covers lazily.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.

@@ -34,10 +34,11 @@ test("a User puts a Copy in a Section, sees where it lives, and finds it again f
   await expect(place.locator(".cell.on")).toHaveCount(1);
   await page.screenshot({ path: "test-results/place-copy.png", fullPage: true });
 
+  // Back returns to the list as it was left, still showing only Copies Not on a shelf, which Discovery no longer is.
   await page.getByRole("link", { name: "Back" }).click();
-  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Shelf 1 · C4");
-  await page.getByRole("checkbox", { name: "Not on a shelf" }).check();
   await expect(page.getByText("No Copies match that are Not on a shelf.")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Not on a shelf" }).uncheck();
+  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Shelf 1 · C4");
 
   await addDiscovery(page);
   await page.getByRole("button", { name: /Discovery/ }).click();
