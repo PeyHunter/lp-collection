@@ -72,7 +72,7 @@ export function CopyScreen({ me, copyId, onShowValuesChanged }: { me: Me; copyId
 
   return (
     <>
-      <Header kicker="Copy" title={added} back="/" end={<ValuesSwitch showValues={me.showValues} onChanged={onShowValuesChanged} />} />
+      <Header kicker="Copy" title={added} back="/" backThroughHistory end={<ValuesSwitch showValues={me.showValues} onChanged={onShowValuesChanged} />} />
       <main className="content-grid">
         {state.kind === "loading" && <p className="loading">Loading this Copy…</p>}
         {state.kind === "not-found" && <p className="notice error">This Copy isn't in your Collection.</p>}
