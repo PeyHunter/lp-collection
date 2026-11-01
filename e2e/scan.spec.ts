@@ -15,7 +15,7 @@ test("a User scans a sleeve's barcode and adds the matching Release without typi
 
   await page.getByRole("button", { name: "Add to Collection" }).click();
   await expect(page.getByRole("status")).toHaveText("Added Gas 5 to your Collection.");
-  await expect(page.getByRole("listitem").filter({ hasText: "Gas 5" })).toContainText("Gasolin'");
+  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Gas 5" })).toContainText("Gasolin'");
 });
 
 test.describe("when the camera is blocked", () => {

@@ -53,7 +53,7 @@ test("the tint on a just-saved Copy leaves room around the cover and the Value",
   await page.getByRole("button", { name: "Add to Collection" }).click();
   await expect(page.getByRole("status")).toHaveText("Added Discovery to your Collection.");
 
-  const row = page.getByRole("listitem").filter({ hasText: "Discovery" });
+  const row = page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" });
   const cover = await box(row.locator("img, svg").first());
   const value = await box(row.getByText("252 kr"));
   const middle = cover.y + cover.height / 2;

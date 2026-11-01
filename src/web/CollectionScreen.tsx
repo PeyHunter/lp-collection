@@ -8,6 +8,7 @@ import { Cover } from "./Cover.tsx";
 import { Grade } from "./Grade.tsx";
 import { queryFromSearch, searchFromQuery, shownQuery, useCopyList, type ListQuery } from "./copy-list.ts";
 import { ListControls, periodName } from "./ListControls.tsx";
+import { Overview } from "./Overview.tsx";
 import { locationLabel } from "./shelf-grid.ts";
 import { followLink, useHandoff } from "./navigation.ts";
 import { currencyUnit, hasValues, RowValue, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
@@ -98,6 +99,8 @@ export function CollectionScreen({
     <>
       <Header kicker="LP-Collection" title="Your Collection" end={<ValuesSwitch showValues={me.showValues} onChanged={onShowValuesChanged} />} />
       <main className="content-grid">
+        <Overview collectionId={me.collection.id} reloadKey={`${me.currency} ${me.showValues} ${attempt} ${values.fetching} ${values.valued.size}`} />
+
         <section className="poster" aria-labelledby="records-heading">
           <div className="rule" />
           <h2 id="records-heading" className="poster-h">
