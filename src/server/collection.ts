@@ -5,6 +5,7 @@ import type { AppDependencies } from "./app.ts";
 import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
 import type { Condition, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
 import { createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
+import { collectionCsv } from "./csv.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { uuidPattern, type Member, type MemberEnv } from "./member.ts";
 import { barcodeLookupCache, copies, photos, releases } from "./schema.ts";
@@ -264,6 +265,24 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       copies: await views(member, listed),
       ...page,
       ...valuesState(member, member.sellerSettingsMissing),
+    });
+  });
+
+  routes.get("/api/collections/:collectionId/export.csv", async (c) => {
+    const member = c.var.member;
+    const everyCopy: CopyView[] = [];
+    let after: string[] | null = null;
+    do {
+      const query: ListQuery = { search: "", sort: "artist", direction: "asc", period: null, genre: null, shelf: null, after, limit: maxPageSize };
+      const { listed, next } = await listing.page(member.collectionId, member.currency, query);
+      everyCopy.push(...(await views(member, listed)));
+      after = next ? decodeCursor(next, "artist", "asc")! : null;
+    } while (after);
+    const day = now().toISOString().slice(0, 10);
+    return c.body(collectionCsv(everyCopy, member.showValues), 200, {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="lp-collection-${day}.csv"`,
+      "cache-control": "private, no-store",
     });
   });
 
