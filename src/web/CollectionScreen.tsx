@@ -202,6 +202,9 @@ export function CollectionScreen({
 
         <section className="account" aria-label="Account">
           {me.showValues && <CurrencySetting currency={me.currency} onChanged={onCurrencyChanged} />}
+          <a className="btn quiet" href={`/api/collections/${me.collection.id}/export.csv`} download>
+            Download as spreadsheet (CSV)
+          </a>
           <p>Logged in as {me.discogsUsername}.</p>
           <button className="btn quiet" type="button" onClick={logOut}>
             Log out
