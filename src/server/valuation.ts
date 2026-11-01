@@ -38,7 +38,7 @@ export function createValuation({ database, discogs, exchangeRates, now }: { dat
   }
 
   return {
-    async fetchValue(copy: ValuedCopy, { userId, currency, auth }: Valuer): Promise<ValuationOutcome> {
+    async fetchValue(copy: ValuedCopy, { userId, currency, auth }: Valuer, refreshId?: string): Promise<ValuationOutcome> {
       try {
         const suggestions = await discogs.priceSuggestions(copy.discogsReleaseId, auth);
         if (suggestions.kind === "seller-settings-missing") {
@@ -53,6 +53,7 @@ export function createValuation({ database, discogs, exchangeRates, now }: { dat
           lowestListing: await inUserCurrency(lowest, currency),
           currency,
           fetchedAt: now(),
+          refreshId,
         });
         await markSellerSettings(userId, false);
         return "valued";

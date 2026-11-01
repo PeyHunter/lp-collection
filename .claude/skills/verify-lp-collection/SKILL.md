@@ -76,6 +76,8 @@ All helpers are in `.claude/skills/verify-lp-collection/bin/` and run with plain
 | `drive-search-sort.ts` | `<run-id>` | drives the recipe in `features/search-sort.md` on a fresh run and saves its screenshots |
 | `drive-shelf.ts` | `<run-id>` | drives the Shelf recipe in `features/shelf.md` on a fresh run and saves its screenshots and HTTP answers |
 | `drive-hide-values.ts` | `<run-id>` | drives the recipe in `features/hide-values.md` on a fresh run and saves its screenshots and HTTP answers |
+| `refresh.ts` | `<run-id>` | runs the monthly refresh once against the run (`main.ts refresh`), as the CronJob does |
+| `drive-value-history.ts` | `<run-id>` | drives the recipe in `features/value-history.md` on a fresh run and saves its screenshots and refresh output |
 | `drive-csv-export.ts` | `<run-id>` | drives the recipe in `features/csv-export.md` on a fresh run and saves its screenshots and downloaded files |
 
 Playwright's Chromium must be installed once: `npx playwright install chromium`.

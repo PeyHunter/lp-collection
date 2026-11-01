@@ -1,4 +1,4 @@
-# Only cloudflared reaches the app, and only the app reaches PostgreSQL. Without
+# Only cloudflared reaches the app, and only the app and its monthly refresh reach PostgreSQL. Without
 # this, any pod in the cluster could call the app with a forged CF-Connecting-IP
 # or connect to the database. k3s enforces these with its built-in kube-router;
 # kubelet health checks from the node are always let through.
@@ -55,6 +55,30 @@ spec:
       ports:
         - port: 443
 ---
+# The monthly refresh reaches PostgreSQL and Discogs, like the app, and nothing reaches it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lp-collection-refresh
+spec:
+  podSelector:
+    matchLabels:
+      app: lp-collection-refresh
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10]
+      ports:
+        - port: 443
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -69,6 +93,9 @@ spec:
         - podSelector:
             matchLabels:
               app: lp-collection
+        - podSelector:
+            matchLabels:
+              app: lp-collection-refresh
       ports:
         - port: 5432
 ---

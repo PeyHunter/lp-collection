@@ -138,3 +138,43 @@ export function SellerSettingsGuide({ url, collectionId, onValued }: { url: stri
     </section>
   );
 }
+
+export type HistoryPoint = { recordedAt: string; value: number | null };
+
+const monthName = new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
+
+export function historyMonth(recordedAt: string) {
+  return monthName.format(new Date(recordedAt));
+}
+
+/** A line through the recorded Values, oldest on the left. Months with no Value leave a gap in the line. */
+export function HistoryChart({ points, currency, label }: { points: HistoryPoint[]; currency: Currency; label: string }) {
+  const valued = points.flatMap((point, index) => (point.value === null ? [] : [{ index, value: point.value }]));
+  if (valued.length < 2) return null;
+  const values = valued.map((point) => point.value);
+  const low = Math.min(...values);
+  const span = Math.max(...values) - low || 1;
+  const x = (index: number) => (index / (points.length - 1)) * 100;
+  const y = (value: number) => 36 - ((value - low) / span) * 32;
+  const runs: { index: number; value: number }[][] = [];
+  for (const point of valued) {
+    const run = runs.at(-1);
+    if (run && run.at(-1)!.index === point.index - 1) run.push(point);
+    else runs.push([point]);
+  }
+  const first = valued[0]!;
+  const last = valued.at(-1)!;
+  return (
+    <svg
+      className="history-chart"
+      viewBox="0 0 100 40"
+      preserveAspectRatio="none"
+      role="img"
+      aria-label={`${label}: ${formatAmount(first.value, currency)} in ${historyMonth(points[first.index]!.recordedAt)}, ${formatAmount(last.value, currency)} in ${historyMonth(points[last.index]!.recordedAt)}`}
+    >
+      {runs.map((run) => (
+        <polyline key={run[0]!.index} points={run.map((point) => `${x(point.index)},${y(point.value)}`).join(" ")} vectorEffect="non-scaling-stroke" />
+      ))}
+    </svg>
+  );
+}

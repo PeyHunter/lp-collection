@@ -54,7 +54,7 @@ await owner.goto("/");
 const rows = owner.getByRole("region", { name: "Copies" }).getByRole("listitem");
 await rows.filter({ hasText: "Discovery" }).getByRole("link", { name: "Discovery" }).click();
 
-const value = owner.getByRole("region", { name: "Value" });
+const value = owner.getByRole("region", { name: "Value", exact: true });
 const purchase = owner.getByRole("region", { name: "Purchase" });
 const note = owner.getByRole("region", { name: "Note" });
 await expect(value.locator(".amount")).toBeVisible();

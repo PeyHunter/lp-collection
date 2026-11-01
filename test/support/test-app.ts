@@ -71,6 +71,7 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
       }
     },
     appOwnerDiscogsUsername,
+    now: () => now,
     clock: {
       advance(ms: number) {
         now = new Date(now.getTime() + ms);

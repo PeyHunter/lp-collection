@@ -20,7 +20,7 @@ test("a User saves a Copy, sees its Value in kroner, changes the Media condition
 
   await row.getByRole("link", { name: "Kind Of Blue" }).click();
   await expect(page.getByRole("heading", { name: "Kind Of Blue" })).toBeVisible();
-  const value = page.getByRole("region", { name: "Value" });
+  const value = page.getByRole("region", { name: "Value", exact: true });
   await expect(value).toContainText("134 kr");
   await expect(value).toContainText("Lowest listing 127 kr, any condition");
 
@@ -31,7 +31,7 @@ test("a User saves a Copy, sees its Value in kroner, changes the Media condition
   await expect(page.getByLabel("Sleeve condition")).toBeEnabled();
 
   await page.reload();
-  await expect(page.getByRole("region", { name: "Value" })).toContainText("179 kr");
+  await expect(page.getByRole("region", { name: "Value", exact: true })).toContainText("179 kr");
   await expect(page.getByLabel("Media condition")).toHaveValue("Near Mint (NM or M-)");
   await expect(page.getByLabel("Sleeve condition")).toHaveValue("Generic");
 
@@ -70,8 +70,8 @@ test("a Release with no price suggestion says No Value yet and stays in the list
 
   await expect(page.getByRole("listitem").filter({ hasText: "Gas 5" })).toContainText("No Value yet");
   await page.getByRole("link", { name: "Gas 5" }).click();
-  await expect(page.getByRole("region", { name: "Value" })).toContainText("No Value yet");
-  await expect(page.getByRole("region", { name: "Value" })).toContainText("Lowest listing 90 kr, any condition");
+  await expect(page.getByRole("region", { name: "Value", exact: true })).toContainText("No Value yet");
+  await expect(page.getByRole("region", { name: "Value", exact: true })).toContainText("Lowest listing 90 kr, any condition");
 });
 
 test("a User without Discogs seller settings is guided once to fill them in, then sees Values", async ({ page, context, logInAsNewUser }) => {

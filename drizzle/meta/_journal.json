@@ -71,6 +71,13 @@
       "when": 1793364173308,
       "tag": "0009_show_values",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793570244170,
+      "tag": "0010_value_history",
+      "breakpoints": true
     }
   ]
 }

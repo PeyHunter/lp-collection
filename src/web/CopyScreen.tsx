@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { CopyView, CopyWithValues } from "../server/collection.ts";
-import { conditions, sleeveConditions, type Condition, type SleeveCondition } from "../server/discogs.ts";
+import type { CopyView, CopyWithValues, ValueHistory } from "../server/collection.ts";
+import { conditions, sleeveConditions, type Condition, type Currency, type SleeveCondition } from "../server/discogs.ts";
 import type { Me } from "./App.tsx";
 import { GainFigure, NoteSection, PurchaseLine, PurchaseSection, type DetailChanges } from "./CopyDetails.tsx";
 import { Cover } from "./Cover.tsx";
@@ -9,9 +9,10 @@ import { Header } from "./Header.tsx";
 import { navigate } from "./navigation.ts";
 import { ConfirmDelete, PhotosSection } from "./Photos.tsx";
 import { PlaceSection } from "./PlaceSection.tsx";
-import { Amount, formatAmount, hasValues, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
+import { Amount, formatAmount, hasValues, HistoryChart, historyMonth, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
 
-type Loaded = { copy: CopyView; sellerSettingsMissing?: boolean };
+/** `valueHistory` comes only with the first load; later answers about the Copy keep the one already shown. */
+type Loaded = { copy: CopyView; sellerSettingsMissing?: boolean; valueHistory?: ValueHistory };
 
 type CopyState = { kind: "loading" } | { kind: "failed" } | { kind: "not-found" } | ({ kind: "loaded" } & Loaded);
 
@@ -48,7 +49,7 @@ export function CopyScreen({ me, copyId, onShowValuesChanged }: { me: Me; copyId
       setState({ kind: "loaded", ...loaded });
       return setSaving({ kind: "failed" });
     }
-    setState({ kind: "loaded", ...((await response.json()) as Loaded) });
+    setState({ kind: "loaded", valueHistory: loaded.valueHistory, ...((await response.json()) as Loaded) });
     setSaving({ kind: "idle" });
   }
 
@@ -93,6 +94,9 @@ export function CopyScreen({ me, copyId, onShowValuesChanged }: { me: Me; copyId
               ) : (
                 <ValueSection copy={state.copy} updating={saving.kind === "saving"} />
               ))}
+            {me.showValues && state.valueHistory?.length ? (
+              <ValueHistorySection history={state.valueHistory} currency={me.currency} />
+            ) : null}
             <ReleaseSection copy={state.copy} />
             <ConditionSection copy={state.copy} showValues={me.showValues} saving={saving} onChange={(change) => changeCondition(state, change)} />
             <PlaceSection copy={state.copy} collectionId={me.collection.id} onMoved={() => setAttempt((count) => count + 1)} />
@@ -142,6 +146,27 @@ function ReleaseSection({ copy: { release } }: { copy: CopyView }) {
             </div>
           ))}
       </dl>
+    </section>
+  );
+}
+
+/** What each monthly refresh found, newest first, with the line above it once there are two months to join. */
+function ValueHistorySection({ history, currency }: { history: ValueHistory; currency: Currency }) {
+  return (
+    <section className="section" aria-labelledby="value-history-heading">
+      <div className="section-head">
+        <h2 id="value-history-heading">Value history</h2>
+        <span className="count">monthly</span>
+      </div>
+      <HistoryChart points={history} currency={currency} label="Value history" />
+      <ol className="history-list">
+        {history.toReversed().map((entry) => (
+          <li key={entry.recordedAt}>
+            <span>{historyMonth(entry.recordedAt)}</span>
+            {entry.value === null ? <span className="no-value">No Value</span> : <b className="tnum">{formatAmount(entry.value, currency)}</b>}
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }

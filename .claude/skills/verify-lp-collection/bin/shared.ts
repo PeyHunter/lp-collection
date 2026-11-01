@@ -13,6 +13,7 @@ export type RunState = {
   commit: string;
   dirty: boolean;
   startedAt: string;
+  refreshEnv: { DATABASE_URL: string; TOKEN_ENCRYPTION_KEY: string };
 };
 
 export async function readState(runId: string | undefined): Promise<RunState> {

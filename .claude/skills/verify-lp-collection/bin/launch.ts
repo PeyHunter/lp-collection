@@ -2,6 +2,7 @@
 // Usage (from the repo root, in the background): node .claude/skills/verify-lp-collection/bin/launch.ts [run-id]
 // Prints "READY <run-id> <url>" once the app answers a healthy /api/health. stop.ts (SIGUSR2) tears it all down.
 import { execSync, spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { freePort } from "../../../../test/support/free-port.ts";
@@ -17,8 +18,10 @@ const appPort = await freePort();
 const postgres = await startThrowawayPostgres(`verify-${runId}`);
 await postgres.createDatabase("lp_collection");
 
+// refresh.ts runs the monthly refresh as its own process, which needs the database and the key the app seals tokens with.
+const refreshEnv = { DATABASE_URL: `${postgres.url}/lp_collection`, TOKEN_ENCRYPTION_KEY: randomBytes(32).toString("base64") };
 const app = spawn("node", ["src/server/main.ts"], {
-  env: { APP_OWNER_DISCOGS_USERNAME: "owner", PHOTOS_DIR: join(postgres.dir, "photos"), ...process.env, DISCOGS: "fake", PORT: String(appPort), DATABASE_URL: `${postgres.url}/lp_collection` },
+  env: { APP_OWNER_DISCOGS_USERNAME: "owner", PHOTOS_DIR: join(postgres.dir, "photos"), ...process.env, DISCOGS: "fake", PORT: String(appPort), ...refreshEnv },
   stdio: ["ignore", "inherit", "inherit"],
 });
 
@@ -61,6 +64,7 @@ const state: RunState = {
   commit: execSync("git rev-parse HEAD").toString().trim(),
   dirty: execSync("git status --porcelain").toString().trim() !== "",
   startedAt: new Date().toISOString(),
+  refreshEnv,
 };
 await writeFile(statePath(runId), JSON.stringify(state, null, 2));
 console.log(`READY ${runId} ${appUrl}`);
