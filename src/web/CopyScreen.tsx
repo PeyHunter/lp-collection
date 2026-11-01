@@ -8,6 +8,7 @@ import { Grade } from "./Grade.tsx";
 import { Header } from "./Header.tsx";
 import { navigate } from "./navigation.ts";
 import { ConfirmDelete, PhotosSection } from "./Photos.tsx";
+import { PlaceSection } from "./PlaceSection.tsx";
 import { Amount, formatAmount, hasValues, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
 
 type Loaded = { copy: CopyView; sellerSettingsMissing?: boolean };
@@ -94,6 +95,7 @@ export function CopyScreen({ me, copyId, onShowValuesChanged }: { me: Me; copyId
               ))}
             <ReleaseSection copy={state.copy} />
             <ConditionSection copy={state.copy} showValues={me.showValues} saving={saving} onChange={(change) => changeCondition(state, change)} />
+            <PlaceSection copy={state.copy} collectionId={me.collection.id} onMoved={() => setAttempt((count) => count + 1)} />
             {me.showValues && hasValues(state.copy) && (
               <PurchaseSection key={`purchase-${state.copy.id}`} copy={state.copy} userCurrency={me.currency} onSave={saveDetails} />
             )}

@@ -699,6 +699,11 @@ textarea.input {
   stroke-width: 3px;
   vector-effect: non-scaling-stroke;
 }
+.shelf-photo .cell.on polygon {
+  fill: color-mix(in oklch, var(--accent) 45%, transparent);
+  stroke: var(--accent);
+  stroke-width: 3px;
+}
 .shelf-photo .outline {
   fill: none;
   stroke: var(--accent);

@@ -14,6 +14,8 @@ export type ListQuery = {
   direction: Direction;
   period: number | null;
   genre: string | null;
+  /** "none" lists only the Copies Not on a shelf. */
+  shelf: "none" | null;
   after: string[] | null;
   limit: number;
 };
@@ -262,6 +264,7 @@ export function createListing({ db }: Database) {
       searchCondition(query.search),
       query.period === null ? sql`true` : sql`r.original_year >= ${query.period} and r.original_year < ${query.period + 10}`,
       query.genre === null ? sql`true` : sql`${query.genre} = any(r.genres)`,
+      query.shelf === "none" ? sql`c.section_id is null` : sql`true`,
     ];
     const order = sql.join(
       keys.map((key, index) => sql`${keyColumn(index)} ${sql.raw(key.direction)}`),
