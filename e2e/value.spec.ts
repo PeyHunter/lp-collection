@@ -148,7 +148,8 @@ test("a User adds a photo of a Copy, sees it instead of the cover, deletes it, t
 
   const photo = photos.getByRole("img", { name: "Photo 1 of Discovery" });
   await expect(photo).toBeVisible();
-  expect(await photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(2048);
+  // Visible does not mean decoded: naturalWidth stays 0 until the image has loaded.
+  await expect.poll(() => photo.evaluate((image: HTMLImageElement) => (image.complete ? image.naturalWidth : 0))).toBe(2048);
   await expect(page.locator(".big-cover")).toHaveAttribute("src", copy.photos[0]!.url);
 
   await page.reload();
