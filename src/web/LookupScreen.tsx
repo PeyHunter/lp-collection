@@ -4,6 +4,7 @@ import { Cover } from "./Cover.tsx";
 import { Header } from "./Header.tsx";
 import { navigate } from "./navigation.ts";
 import { Scanner } from "./Scanner.tsx";
+import { locationLabel } from "./shelf-grid.ts";
 
 type Way = "barcode" | "catalogNumber" | "artistTitle";
 
@@ -237,6 +238,11 @@ function LookUpButton({ looking }: { looking: boolean }) {
   );
 }
 
+function whereHeld(held: LookupCandidate["held"]) {
+  const places = held.map(({ location }) => (location ? locationLabel(location) : "Not on a shelf"));
+  return `${held.length === 1 ? "Yours is" : "Yours are"}: ${places.join(", ")}.`;
+}
+
 function copiesText(count: number) {
   return count === 1 ? "1 Copy" : `${count} Copies`;
 }
@@ -316,7 +322,10 @@ function Matches({
               {isChosen && (
                 <div className={candidate.copiesInCollection > 0 ? "save-panel duplicate" : "save-panel"} id={panelId}>
                   {candidate.copiesInCollection > 0 ? (
-                    <p className="warning" role="alert">You already have {copiesText(candidate.copiesInCollection)} of this. Add another?</p>
+                    <>
+                      <p className="warning" role="alert">You already have {copiesText(candidate.copiesInCollection)} of this. Add another?</p>
+                      <p className="where">{whereHeld(candidate.held)}</p>
+                    </>
                   ) : (
                     <p>Will be saved with Media condition and Sleeve condition Very Good Plus.</p>
                   )}

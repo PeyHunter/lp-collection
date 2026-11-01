@@ -44,6 +44,11 @@ export function sectionLabel(column: number, row: number) {
   return `${String.fromCharCode(64 + column)}${row}`;
 }
 
+/** Where a Copy lives, as "Shelf 1 · C4". */
+export function locationLabel({ shelfName, column, row }: { shelfName: string; column: number; row: number }) {
+  return `${shelfName} · ${sectionLabel(column, row)}`;
+}
+
 /** True when the corners, in order top left, top right, bottom right, bottom left, turn the same way at every corner. */
 export function isConvex(corners: ShelfCorners) {
   return corners.every((corner, index) => {

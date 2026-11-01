@@ -1,4 +1,4 @@
-import { and, asc, count, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AppDependencies } from "./app.ts";
@@ -9,6 +9,7 @@ import { collectionCsv } from "./csv.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { uuidPattern, type Member, type MemberEnv } from "./member.ts";
 import { barcodeLookupCache, copies, photos, releases } from "./schema.ts";
+import { locationsOf, type CopyLocation } from "./shelves.ts";
 import { createValuation, type CopyValue, type ValuationOutcome } from "./valuation.ts";
 
 const { searchText: _, artistSortKey: __, ...releaseColumns } = getTableColumns(releases);
@@ -57,7 +58,7 @@ function photoView(collectionId: string, photo: typeof photos.$inferSelect): Pho
   return { id: photo.id, url: `/api/collections/${collectionId}/copies/${photo.copyId}/photos/${photo.id}`, width: photo.width, height: photo.height };
 }
 
-function copyView(row: { copy: typeof copies.$inferSelect; release: CachedRelease }, photos: PhotoView[]) {
+function copyView(row: { copy: typeof copies.$inferSelect; release: CachedRelease }, photos: PhotoView[], location: CopyLocation | null) {
   const { fetchedAt: _, genres, styles, ...release } = row.release;
   return {
     id: row.copy.id,
@@ -65,6 +66,7 @@ function copyView(row: { copy: typeof copies.$inferSelect; release: CachedReleas
     sleeveCondition: row.copy.sleeveCondition,
     addedAt: row.copy.createdAt.toISOString(),
     note: row.copy.note,
+    location,
     photos,
     pictureUrl: photos[0]?.url ?? release.coverImageUrl,
     release: { ...release, genres: genres ?? [], styles: styles ?? [] },
@@ -103,9 +105,11 @@ function parseListQuery(params: Record<string, string>, showValues: boolean): Li
   if (genre !== null && (genre.length === 0 || genre.length > maxGenreLength)) return undefined;
   const limit = params.limit === undefined ? defaultPageSize : /^\d{1,3}$/.test(params.limit) ? Number(params.limit) : 0;
   if (limit < 1 || limit > maxPageSize) return undefined;
+  const shelf = params.shelf === undefined ? null : params.shelf === "none" ? "none" : undefined;
+  if (shelf === undefined) return undefined;
   const after = params.cursor === undefined ? null : decodeCursor(params.cursor, sort, direction);
   if (after === undefined) return undefined;
-  return { search, sort, direction, period, genre, after, limit };
+  return { search, sort, direction, period, genre, shelf, after, limit };
 }
 
 function parseValuesRequest(body: unknown, now: Date): { retryEmptyBefore?: Date } {
@@ -120,7 +124,7 @@ function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, befor
   return outcome === "valued" ? false : outcome === "seller-settings-missing" ? true : before;
 }
 
-export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number };
+export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number; held: { copyId: string; location: CopyLocation | null }[] };
 
 export type LookupView = LookupQuery & { total: number; candidates: LookupCandidate[] };
 
@@ -152,14 +156,24 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     return found;
   }
 
-  async function copiesInCollection(collectionId: string, discogsReleaseIds: number[]) {
-    if (discogsReleaseIds.length === 0) return new Map<number, number>();
-    const rows = await db
-      .select({ discogsReleaseId: copies.discogsReleaseId, copies: count() })
-      .from(copies)
-      .where(and(eq(copies.collectionId, collectionId), inArray(copies.discogsReleaseId, discogsReleaseIds)))
-      .groupBy(copies.discogsReleaseId);
-    return new Map(rows.map((row) => [row.discogsReleaseId, row.copies]));
+  /** The Copies the Collection already holds of each Release, with where each one lives. */
+  async function heldCopies(collectionId: string, discogsReleaseIds: number[]) {
+    const rows =
+      discogsReleaseIds.length === 0
+        ? []
+        : await db
+            .select({ discogsReleaseId: copies.discogsReleaseId, copyId: copies.id, sectionId: copies.sectionId })
+            .from(copies)
+            .where(and(eq(copies.collectionId, collectionId), inArray(copies.discogsReleaseId, discogsReleaseIds)))
+            .orderBy(asc(copies.createdAt), asc(copies.id));
+    const locations = await locationsOf(database, rows.map((row) => row.sectionId));
+    const held = new Map<number, LookupCandidate["held"]>();
+    for (const row of rows) {
+      const list = held.get(row.discogsReleaseId) ?? [];
+      list.push({ copyId: row.copyId, location: (row.sectionId && locations.get(row.sectionId)) || null });
+      held.set(row.discogsReleaseId, list);
+    }
+    return held;
   }
 
   async function cacheRelease(discogsReleaseId: number, auth: DiscogsAuth) {
@@ -182,12 +196,14 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
   }
 
   async function views({ collectionId, showValues }: Member, rows: ListedCopy[]): Promise<CopyView[]> {
-    const [photosByCopy, gains] = await Promise.all([
+    const [photosByCopy, locations, gains] = await Promise.all([
       photosOf(collectionId, rows.map((row) => row.copy.id)),
+      locationsOf(database, rows.map((row) => row.copy.sectionId)),
       showValues ? Promise.all(rows.map((row) => gainOf(row.value, purchaseOf(row.copy), exchangeRates))) : [],
     ]);
     return rows.map((row, index) => {
-      const view = copyView(row, photosByCopy.get(row.copy.id)!);
+      const sectionId = row.copy.sectionId;
+      const view = copyView(row, photosByCopy.get(row.copy.id)!, (sectionId && locations.get(sectionId)) || null);
       if (!showValues) return view;
       return { ...view, purchasePrice: purchaseOf(row.copy), purchaseDate: row.copy.purchaseDate, value: row.value ?? null, gain: gains[index]! };
     });
@@ -223,11 +239,14 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       console.error(`Discogs Lookup of ${JSON.stringify(query)} failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: discogsUnreachable }, 502);
     }
-    const owned = await copiesInCollection(
+    const owned = await heldCopies(
       collectionId,
       found.candidates.map((candidate) => candidate.discogsReleaseId),
     );
-    const candidates = found.candidates.map((candidate) => ({ ...candidate, copiesInCollection: owned.get(candidate.discogsReleaseId) ?? 0 }));
+    const candidates = found.candidates.map((candidate) => {
+      const held = owned.get(candidate.discogsReleaseId) ?? [];
+      return { ...candidate, copiesInCollection: held.length, held };
+    });
     return c.json<LookupView>({ ...query, total: found.total, candidates });
   });
 
@@ -237,7 +256,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     if (!query) {
       const sorts = listSorts(member.showValues);
       return c.json(
-        { error: `Search with up to 200 characters, sort by ${sorts.slice(0, -1).join(", ")} or ${sorts.at(-1)}, and filter by a decade such as 1970 or one genre.` },
+        { error: `Search with up to 200 characters, sort by ${sorts.slice(0, -1).join(", ")} or ${sorts.at(-1)}, filter by a decade such as 1970 or one genre, and use shelf=none for the Copies Not on a shelf.` },
         400,
       );
     }
