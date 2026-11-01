@@ -56,7 +56,7 @@ await expect(rows.filter({ hasText: "Gas 5" })).toContainText("No Value yet");
 await shot(owner, "collection-values");
 
 await rows.filter({ hasText: "Discovery" }).getByRole("link", { name: "Discovery" }).click();
-const value = owner.getByRole("region", { name: "Value" });
+const value = owner.getByRole("region", { name: "Value", exact: true });
 await expect(value).toContainText("252 kr");
 await expect(value).toContainText("Lowest listing 231 kr, any condition");
 await shot(owner, "copy-page");
@@ -67,7 +67,7 @@ await owner.getByLabel("Sleeve condition").selectOption("No Cover");
 await expect(owner.getByLabel("Sleeve condition")).toBeEnabled();
 await shot(owner, "copy-condition-changed", "Value");
 await owner.reload();
-await expect(owner.getByRole("region", { name: "Value" })).toContainText("336 kr");
+await expect(owner.getByRole("region", { name: "Value", exact: true })).toContainText("336 kr");
 await expect(owner.getByLabel("Sleeve condition")).toHaveValue("No Cover");
 console.log("after reload: Value 336 kr, Media NM, Sleeve No Cover");
 
@@ -102,7 +102,7 @@ await settings.getByLabel("Discogs username").fill(noSellerSettings);
 await settings.getByRole("button", { name: "Save seller settings" }).click();
 await settings.close();
 await friend.getByRole("button", { name: "I've saved them, fetch Values" }).click();
-await expect(friend.getByRole("region", { name: "Value" })).toContainText("252 kr");
+await expect(friend.getByRole("region", { name: "Value", exact: true })).toContainText("252 kr");
 await friend.goto("/");
 await expect(friend.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("252 kr");
 await expect(friend.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Gas 5" })).toContainText("No Value yet");

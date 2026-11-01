@@ -30,11 +30,11 @@ test("one switch hides every Value on the Collection and the Copy, and brings th
   await expect(page.getByRole("heading", { name: "Kind Of Blue" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Note" })).toBeVisible();
   await expect(page.locator("main")).not.toContainText(valueText);
-  await expect(page.getByRole("region", { name: "Value" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Value", exact: true })).toHaveCount(0);
 
   await page.getByRole("switch", { name: "Values" }).click();
-  await expect(page.getByRole("region", { name: "Value" })).toContainText(/\d kr/);
-  await expect(page.getByRole("region", { name: "Value" })).toContainText("Paid 100 kr");
+  await expect(page.getByRole("region", { name: "Value", exact: true })).toContainText(/\d kr/);
+  await expect(page.getByRole("region", { name: "Value", exact: true })).toContainText("Paid 100 kr");
   await expect(page.getByRole("region", { name: "Purchase" })).toBeVisible();
 
   await page.getByRole("link", { name: "Back" }).click();
