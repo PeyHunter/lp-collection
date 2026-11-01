@@ -143,6 +143,16 @@ export function latestSnapshot(copy: SQL, currency: Currency) {
     limit 1`;
 }
 
+/** The Collection value in a currency: the sum of every Copy's Value, with Copies that have none counting as zero. */
+export async function collectionValue({ db }: Database, collectionId: string, currency: Currency) {
+  const { rows } = await db.execute<{ value: string; copies: number }>(sql`
+    select coalesce(sum(v.value), 0)::text as value, count(*)::int as copies
+    from copies c
+    left join lateral (${latestSnapshot(sql`c`, currency)}) v on true
+    where c.collection_id = ${collectionId}`);
+  return { value: Number(rows[0]!.value), copies: rows[0]!.copies };
+}
+
 type ListedRow = {
   id: string;
   collection_id: string;

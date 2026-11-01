@@ -68,7 +68,7 @@ test("a Release with no price suggestion says No Value yet and stays in the list
   await logInAsNewUser(page, "collector");
   await addByBarcode(page, "5099969209017", "Gas 5");
 
-  await expect(page.getByRole("listitem").filter({ hasText: "Gas 5" })).toContainText("No Value yet");
+  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Gas 5" })).toContainText("No Value yet");
   await page.getByRole("link", { name: "Gas 5" }).click();
   await expect(page.getByRole("region", { name: "Value" })).toContainText("No Value yet");
   await expect(page.getByRole("region", { name: "Value" })).toContainText("Lowest listing 90 kr, any condition");
@@ -81,7 +81,7 @@ test("a User without Discogs seller settings is guided once to fill them in, the
   const guide = page.getByRole("region", { name: "Fill in your Discogs seller settings to see Values" });
   await expect(guide).toBeVisible();
   await expect(page.getByText("No Value yet")).toHaveCount(0);
-  await expect(page.getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Waits for seller settings");
+  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Waits for seller settings");
 
   const link = guide.getByRole("link", { name: "Open seller settings on Discogs" });
   await expect(link).toHaveAttribute("href", "/fake-discogs/settings/seller");
@@ -94,15 +94,15 @@ test("a User without Discogs seller settings is guided once to fill them in, the
 
   await guide.getByRole("button", { name: "I've saved them, fetch Values" }).click();
   await expect(guide).toHaveCount(0);
-  await expect(page.getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("252 kr");
+  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("252 kr");
 });
 
 test("changing the currency shows every Copy's Value in the new currency", async ({ page, logInAsNewUser }) => {
   await logInAsNewUser(page, "collector");
   await addByBarcode(page, "190295328709", "Discovery");
   await addByBarcode(page, "886979891211", "Kind Of Blue", "Sony Music");
-  const discovery = page.getByRole("listitem").filter({ hasText: "Discovery" });
-  const kindOfBlue = page.getByRole("listitem").filter({ hasText: "Sony Music" });
+  const discovery = page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" });
+  const kindOfBlue = page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Sony Music" });
   await expect(discovery).toContainText("252 kr");
   await expect(kindOfBlue).toContainText("134 kr");
 
@@ -112,7 +112,7 @@ test("changing the currency shows every Copy's Value in the new currency", async
   await expect(kindOfBlue).toContainText("18 €");
   await page.reload();
   await expect(discovery).toContainText("34 €");
-  await expect(page.getByRole("list").filter({ hasText: "Discovery" })).not.toContainText("kr");
+  await expect(page.getByRole("region", { name: "Copies" }).getByRole("list").filter({ hasText: "Discovery" })).not.toContainText("kr");
 });
 
 async function bigPhoto(page: Page) {
@@ -134,7 +134,7 @@ async function bigPhoto(page: Page) {
 test("a User adds a photo of a Copy, sees it instead of the cover, deletes it, then deletes the Copy", async ({ page, logInAsNewUser }) => {
   await logInAsNewUser(page, "photographer");
   await addByBarcode(page, "190295328709", "Discovery");
-  const row = page.getByRole("listitem").filter({ hasText: "Discovery" });
+  const row = page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" });
   await expect(row.locator("img")).toHaveAttribute("src", "/fake-discogs/covers/16893476.svg");
 
   await row.getByRole("link", { name: "Discovery" }).click();

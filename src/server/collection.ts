@@ -4,10 +4,10 @@ import { bodyLimit } from "hono/body-limit";
 import type { AppDependencies } from "./app.ts";
 import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
 import type { Condition, Currency, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
-import { createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
+import { collectionValue, createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { uuidPattern, type Member, type MemberEnv } from "./member.ts";
-import { barcodeLookupCache, copies, photos, releases, valueSnapshots } from "./schema.ts";
+import { barcodeLookupCache, collectionValues, copies, photos, releases, valueSnapshots } from "./schema.ts";
 import { locationsOf, type CopyLocation } from "./shelves.ts";
 import { createValuation, type CopyValue, type ValuationOutcome } from "./valuation.ts";
 
@@ -281,6 +281,32 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       copies: await views(member, listed),
       ...page,
       ...valuesState(member, member.sellerSettingsMissing),
+    });
+  });
+
+  /** The home screen's big picture. While the Member hides Values it is only the number of Copies. */
+  routes.get("/api/collections/:collectionId/overview", async (c) => {
+    const member = c.var.member;
+    const { collectionId, currency } = member;
+    if (!member.showValues) {
+      const { copies: count } = await collectionValue(database, collectionId, currency);
+      return c.json({ copies: count });
+    }
+    const top: ListQuery = { search: "", sort: "value", direction: "desc", period: null, genre: null, shelf: null, after: null, limit: 10 };
+    const [total, { listed }, history] = await Promise.all([
+      collectionValue(database, collectionId, currency),
+      listing.page(collectionId, currency, top),
+      db
+        .select({ recordedAt: collectionValues.recordedAt, value: collectionValues.value })
+        .from(collectionValues)
+        .where(and(eq(collectionValues.collectionId, collectionId), eq(collectionValues.currency, currency)))
+        .orderBy(asc(collectionValues.recordedAt)),
+    ]);
+    return c.json({
+      copies: total.copies,
+      collectionValue: { amount: total.value, currency },
+      mostValuable: await views(member, listed.filter((row) => row.value?.value != null)),
+      history: history.map((entry) => ({ recordedAt: entry.recordedAt.toISOString(), value: entry.value })),
     });
   });
 

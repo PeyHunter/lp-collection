@@ -1,8 +1,8 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database } from "./db.ts";
-import type { DiscogsGateway } from "./discogs.ts";
+import type { Currency, DiscogsGateway } from "./discogs.ts";
 import type { ExchangeRates } from "./exchange-rates.ts";
-import { latestSnapshot } from "./listing.ts";
+import { collectionValue } from "./listing.ts";
 import { collections, collectionValues, copies, users, valueRefreshes, valueSnapshots } from "./schema.ts";
 import type { SecretBox } from "./secret-box.ts";
 import { createValuation } from "./valuation.ts";
@@ -63,14 +63,9 @@ export function createRefresh({ database, discogs, exchangeRates, secretBox, now
       .orderBy(asc(copies.createdAt), asc(copies.id));
   }
 
-  async function recordCollectionValue(refreshId: string, collectionId: string, currency: (typeof users.$inferSelect)["currency"]) {
-    const { rows } = await db.execute<{ value: string; copies: number }>(sql`
-      select coalesce(sum(v.value), 0)::text as value, count(*)::int as copies
-      from copies c
-      left join lateral (${latestSnapshot(sql`c`, currency)}) v on true
-      where c.collection_id = ${collectionId}`);
-    const [{ value, copies: count }] = rows as [{ value: string; copies: number }];
-    await db.insert(collectionValues).values({ refreshId, collectionId, value: Number(value), currency, copies: count, recordedAt: now() }).onConflictDoNothing();
+  async function recordCollectionValue(refreshId: string, collectionId: string, currency: Currency) {
+    const { value, copies: count } = await collectionValue(database, collectionId, currency);
+    await db.insert(collectionValues).values({ refreshId, collectionId, value, currency, copies: count, recordedAt: now() }).onConflictDoNothing();
   }
 
   return {

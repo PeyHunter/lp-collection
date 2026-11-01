@@ -23,7 +23,7 @@ test("a User puts a Copy in a Section, sees where it lives, and finds it again f
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Collection" }).click();
   await page.getByRole("checkbox", { name: "Not on a shelf" }).check();
-  const row = page.getByRole("listitem").filter({ hasText: "Discovery" });
+  const row = page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" });
   await expect(row).toBeVisible();
   await row.getByRole("link", { name: "Discovery" }).click();
 
@@ -35,7 +35,7 @@ test("a User puts a Copy in a Section, sees where it lives, and finds it again f
   await page.screenshot({ path: "test-results/place-copy.png", fullPage: true });
 
   await page.getByRole("link", { name: "Back" }).click();
-  await expect(page.getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Shelf 1 · C4");
+  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Shelf 1 · C4");
   await page.getByRole("checkbox", { name: "Not on a shelf" }).check();
   await expect(page.getByText("No Copies match that are Not on a shelf.")).toBeVisible();
 
