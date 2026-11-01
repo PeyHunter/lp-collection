@@ -9,7 +9,7 @@ import { collectionCsv } from "./csv.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { uuidPattern, type Member, type MemberEnv } from "./member.ts";
 import { barcodeLookupCache, copies, photos, releases } from "./schema.ts";
-import { locationsOf, type CopyLocation } from "./shelves.ts";
+import { isCollectionSection, locationsOf, type CopyLocation } from "./shelves.ts";
 import { createValuation, type CopyValue, type ValuationOutcome } from "./valuation.ts";
 
 const { searchText: _, artistSortKey: __, ...releaseColumns } = getTableColumns(releases);
@@ -287,12 +287,15 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
   });
 
   routes.post("/api/collections/:collectionId/copies", async (c) => {
-    const body = (await c.req.json().catch(() => undefined)) as { discogsReleaseId?: unknown } | undefined;
+    const body = (await c.req.json().catch(() => undefined)) as { discogsReleaseId?: unknown; sectionId?: unknown } | undefined;
     const discogsReleaseId = body?.discogsReleaseId;
     if (typeof discogsReleaseId !== "number" || !Number.isSafeInteger(discogsReleaseId) || discogsReleaseId <= 0) {
       return c.json({ error: "Say which Release to save with its Discogs release id." }, 400);
     }
+    const sectionId = body?.sectionId ?? null;
+    if (sectionId !== null && (typeof sectionId !== "string" || !uuidPattern.test(sectionId))) return c.json({ error: "Say which Section, or leave it out." }, 400);
     const member = c.var.member;
+    if (sectionId !== null && !(await isCollectionSection(database, member.collectionId, sectionId))) return c.json({ error: "No such Section" }, 404);
     try {
       if (!(await cacheRelease(discogsReleaseId, member.auth))) {
         return c.json({ error: `Discogs has no Release ${discogsReleaseId}. Look up the barcode again and pick a Release from the list.` }, 404);
@@ -301,7 +304,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       console.error(`Discogs Release ${discogsReleaseId} failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: discogsUnreachable }, 502);
     }
-    const [copy] = await db.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, createdAt: now() }).returning();
+    const [copy] = await db.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, sectionId, createdAt: now() }).returning();
     const outcome = member.showValues ? await valuation.fetchValue(copy!, member) : undefined;
     return c.json({ copy: await oneCopy(member, copy!.id), ...valuesState(member, sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing)) }, 201);
   });

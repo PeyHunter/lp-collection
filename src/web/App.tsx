@@ -5,6 +5,7 @@ import { Header } from "./Header.tsx";
 import { LookupScreen } from "./LookupScreen.tsx";
 import { followLink, useRoute, type Route } from "./navigation.ts";
 import { ShelfScreen } from "./ShelfScreen.tsx";
+import { FillSectionScreen } from "./FillSectionScreen.tsx";
 import { ShelvesScreen } from "./ShelvesScreen.tsx";
 import type { Currency } from "../server/discogs.ts";
 
@@ -95,6 +96,8 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
             <CopyScreen me={session.me} copyId={route.copyId} onShowValuesChanged={(showValues) => changeMe({ showValues })} />
           ) : route.page === "shelves" ? (
             <ShelvesScreen me={session.me} />
+          ) : route.page === "fill" ? (
+            <FillSectionScreen key={route.sectionId} me={session.me} shelfId={route.shelfId} sectionId={route.sectionId} />
           ) : route.page === "shelf" ? (
             <ShelfScreen key={route.shelfId} me={session.me} shelfId={route.shelfId} />
           ) : (
