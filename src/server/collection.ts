@@ -5,10 +5,11 @@ import type { AppDependencies } from "./app.ts";
 import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
 import type { Condition, Currency, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
 import { collectionValue, createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
+import { collectionCsv } from "./csv.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { uuidPattern, type Member, type MemberEnv } from "./member.ts";
 import { barcodeLookupCache, collectionValues, copies, photos, releases, valueSnapshots } from "./schema.ts";
-import { locationsOf, type CopyLocation } from "./shelves.ts";
+import { isCollectionSection, locationsOf, type CopyLocation } from "./shelves.ts";
 import { createValuation, type CopyValue, type ValuationOutcome } from "./valuation.ts";
 
 const { searchText: _, artistSortKey: __, ...releaseColumns } = getTableColumns(releases);
@@ -310,13 +311,34 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     });
   });
 
+  routes.get("/api/collections/:collectionId/export.csv", async (c) => {
+    const member = c.var.member;
+    const everyCopy: CopyView[] = [];
+    let after: string[] | null = null;
+    do {
+      const query: ListQuery = { search: "", sort: "artist", direction: "asc", period: null, genre: null, shelf: null, after, limit: maxPageSize };
+      const { listed, next } = await listing.page(member.collectionId, member.currency, query);
+      everyCopy.push(...(await views(member, listed)));
+      after = next ? decodeCursor(next, "artist", "asc")! : null;
+    } while (after);
+    const day = now().toISOString().slice(0, 10);
+    return c.body(collectionCsv(everyCopy, member.showValues), 200, {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="lp-collection-${day}.csv"`,
+      "cache-control": "private, no-store",
+    });
+  });
+
   routes.post("/api/collections/:collectionId/copies", async (c) => {
-    const body = (await c.req.json().catch(() => undefined)) as { discogsReleaseId?: unknown } | undefined;
+    const body = (await c.req.json().catch(() => undefined)) as { discogsReleaseId?: unknown; sectionId?: unknown } | undefined;
     const discogsReleaseId = body?.discogsReleaseId;
     if (typeof discogsReleaseId !== "number" || !Number.isSafeInteger(discogsReleaseId) || discogsReleaseId <= 0) {
       return c.json({ error: "Say which Release to save with its Discogs release id." }, 400);
     }
+    const sectionId = body?.sectionId ?? null;
+    if (sectionId !== null && (typeof sectionId !== "string" || !uuidPattern.test(sectionId))) return c.json({ error: "Say which Section, or leave it out." }, 400);
     const member = c.var.member;
+    if (sectionId !== null && !(await isCollectionSection(database, member.collectionId, sectionId))) return c.json({ error: "No such Section" }, 404);
     try {
       if (!(await cacheRelease(discogsReleaseId, member.auth))) {
         return c.json({ error: `Discogs has no Release ${discogsReleaseId}. Look up the barcode again and pick a Release from the list.` }, 404);
@@ -325,7 +347,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       console.error(`Discogs Release ${discogsReleaseId} failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: discogsUnreachable }, 502);
     }
-    const [copy] = await db.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, createdAt: now() }).returning();
+    const [copy] = await db.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, sectionId, createdAt: now() }).returning();
     const outcome = member.showValues ? await valuation.fetchValue(copy!, member) : undefined;
     return c.json({ copy: await oneCopy(member, copy!.id), ...valuesState(member, sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing)) }, 201);
   });

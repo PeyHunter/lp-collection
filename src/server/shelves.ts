@@ -232,14 +232,7 @@ export function createShelfRoutes({ database, now, photosDir }: AppDependencies)
     const copyId = c.req.param("copyId");
     const { sectionId } = ((await c.req.json().catch(() => undefined)) ?? {}) as { sectionId?: unknown };
     if (sectionId !== null && (typeof sectionId !== "string" || !uuidPattern.test(sectionId))) return c.json({ error: "Say which Section, or null for Not on a shelf." }, 400);
-    if (sectionId !== null) {
-      const [section] = await db
-        .select({ id: sections.id })
-        .from(sections)
-        .innerJoin(shelves, eq(shelves.id, sections.shelfId))
-        .where(and(eq(sections.id, sectionId), eq(shelves.collectionId, collectionId)));
-      if (!section) return c.json({ error: "No such Section" }, 404);
-    }
+    if (sectionId !== null && !(await isCollectionSection(database, collectionId, sectionId))) return c.json({ error: "No such Section" }, 404);
     if (!uuidPattern.test(copyId)) return c.json({ error: "No such Copy" }, 404);
     const updated = await db
       .update(copies)
@@ -250,6 +243,15 @@ export function createShelfRoutes({ database, now, photosDir }: AppDependencies)
   });
 
   return routes;
+}
+
+export async function isCollectionSection({ db }: Database, collectionId: string, sectionId: string) {
+  const [section] = await db
+    .select({ id: sections.id })
+    .from(sections)
+    .innerJoin(shelves, eq(shelves.id, sections.shelfId))
+    .where(and(eq(sections.id, sectionId), eq(shelves.collectionId, collectionId)));
+  return section !== undefined;
 }
 
 /** Where Copies live, by the Section they are in. */
