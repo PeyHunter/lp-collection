@@ -760,3 +760,42 @@ textarea.input {
 @media (prefers-reduced-motion: no-preference) {
   .corner::before { transition: scale 160ms var(--ease-out); }
 }
+
+.browse-link { justify-self: start; }
+
+/* Browse: one cover at a time, swiped sideways. Native scroll snapping keeps the swipe smooth on iPhone. */
+.browse { display: grid; gap: var(--space-m); padding-block-end: var(--space-xl); }
+.browse > :not(.crate) { margin-inline: var(--gutter); }
+.crate {
+  list-style: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.crate::-webkit-scrollbar { display: none; }
+.crate-slide {
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  display: grid;
+  align-content: start;
+  gap: var(--space-2xs);
+  padding-inline: var(--gutter);
+  text-align: center;
+}
+.crate-link { display: grid; gap: var(--space-s); color: inherit; text-decoration: none; }
+.crate-cover {
+  inline-size: min(100%, 30rem);
+  block-size: auto;
+  aspect-ratio: 1;
+  justify-self: center;
+  box-shadow: 0 1.5rem 3rem -1.5rem rgb(0 0 0 / 0.6);
+}
+.crate-title { font-family: var(--display); font-size: var(--text-xl); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
+.crate-artist { font-size: var(--text-m); color: var(--ink-dim); }
+.crate-value { font-family: var(--display); font-size: var(--text-l); font-weight: 700; }
+.crate-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--space-s); }
+.crate-position { font-size: var(--text-sm); color: var(--ink-dim); }

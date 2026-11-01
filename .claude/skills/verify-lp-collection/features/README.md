@@ -40,4 +40,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Shelf](./shelf.md) covers setting up a Shelf from a photo, dragging its four corners, the Section grid over the photo, editing, shrinking and deleting a Shelf, and who can see it.
 - [Hide Values](./hide-values.md) covers the "Values" switch that hides every Value, Gain, Purchase price, Value sort and currency picker for one User, in the app and in the API, and brings them back without asking Discogs.
 - [CSV export](./csv-export.md) covers downloading the Collection as a spreadsheet, with Danish letters intact and without Value columns while Values are hidden.
+- [Browse covers](./browse.md) covers flipping through the Collection as big covers by swiping, in the list's order and filters, coming back to the same cover from a Copy, and loading covers lazily.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.
