@@ -273,7 +273,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     const everyCopy: CopyView[] = [];
     let after: string[] | null = null;
     do {
-      const query: ListQuery = { search: "", sort: "artist", direction: "asc", period: null, genre: null, after, limit: maxPageSize };
+      const query: ListQuery = { search: "", sort: "artist", direction: "asc", period: null, genre: null, shelf: null, after, limit: maxPageSize };
       const { listed, next } = await listing.page(member.collectionId, member.currency, query);
       everyCopy.push(...(await views(member, listed)));
       after = next ? decodeCursor(next, "artist", "asc")! : null;
