@@ -8,6 +8,7 @@ import { Cover } from "./Cover.tsx";
 import { Grade } from "./Grade.tsx";
 import { queryFromSearch, searchFromQuery, shownQuery, useCopyList, type ListQuery } from "./copy-list.ts";
 import { ListControls, periodName } from "./ListControls.tsx";
+import { locationLabel } from "./shelf-grid.ts";
 import { followLink, useHandoff } from "./navigation.ts";
 import { currencyUnit, hasValues, RowValue, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
 
@@ -87,7 +88,7 @@ export function CollectionScreen({
     onLoggedOut();
   }
 
-  const filtered = query.q.trim() !== "" || query.period !== null || query.genre !== null;
+  const filtered = query.q.trim() !== "" || query.period !== null || query.genre !== null || query.notOnAShelf;
   const listed = list.kind === "loaded" ? list : undefined;
   // A list still sorted by Value from before the switch went off would show its Value bands until the reload lands.
   const loaded = listed && (me.showValues || listed.sort !== "value") ? listed : undefined;
@@ -145,13 +146,14 @@ export function CollectionScreen({
               <p>
                 No Copies match{query.q.trim() ? ` “${query.q.trim()}”` : ""}
                 {query.period !== null ? ` in the ${periodName(query.period)}` : ""}
-                {query.genre !== null ? ` in ${query.genre}` : ""}.
+                {query.genre !== null ? ` in ${query.genre}` : ""}
+                {query.notOnAShelf ? " that are Not on a shelf" : ""}.
               </p>
               <button
                 className="btn quiet"
                 type="button"
                 onClick={() => {
-                  changeQuery({ ...query, q: "", period: null, genre: null });
+                  changeQuery({ ...query, q: "", period: null, genre: null, notOnAShelf: false });
                   setControlsKey((count) => count + 1);
                 }}
               >
@@ -244,6 +246,7 @@ function CopyRow({
         <span className="row-meta">
           Media <Grade condition={copy.mediaCondition} /> · Sleeve <Grade condition={copy.sleeveCondition} />
         </span>
+        {copy.location && <span className="row-meta row-place">{locationLabel(copy.location)}</span>}
       </span>
       {showValues && hasValues(copy) && <RowValue value={copy.value} sellerSettingsMissing={sellerSettingsMissing} fetching={fetching} />}
     </li>

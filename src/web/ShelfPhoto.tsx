@@ -10,6 +10,8 @@ type Props = {
   columns: number;
   rows: number;
   labels?: boolean;
+  /** The one Section to pick out, such as the one a Copy lives in. */
+  highlight?: { column: number; row: number };
   label: string;
   frameRef?: Ref<HTMLDivElement>;
   children?: ReactNode;
@@ -21,7 +23,7 @@ const distance = (a: PhotoPoint, b: PhotoPoint) => Math.hypot(a.x - b.x, a.y - b
  * The Shelf photo with its Sections drawn over it. The SVG's viewBox is the photo's own pixel size,
  * so the drawn squares stay on the photo at any screen size.
  */
-export function ShelfPhoto({ photo, corners, columns, rows, labels = true, label, frameRef, children }: Props) {
+export function ShelfPhoto({ photo, corners, columns, rows, labels = true, highlight, label, frameRef, children }: Props) {
   const { width, height } = photo;
   const inPixels = ({ x, y }: PhotoPoint) => ({ x: x * width, y: y * height });
   const points = (quad: readonly PhotoPoint[]) => quad.map((point) => `${point.x * width},${point.y * height}`).join(" ");
@@ -36,7 +38,7 @@ export function ShelfPhoto({ photo, corners, columns, rows, labels = true, label
           const center = inPixels(middle({ x: (quad.column - 0.5) / columns, y: (quad.row - 0.5) / rows }));
           const size = Math.min(distance(a, b), distance(a, d)) * 0.32;
           return (
-            <g key={`${quad.column},${quad.row}`} className="cell">
+            <g key={`${quad.column},${quad.row}`} className={highlight?.column === quad.column && highlight.row === quad.row ? "cell on" : "cell"}>
               <polygon points={points(quad.points)} />
               {labels && (
                 <text x={center.x} y={center.y} fontSize={size} textAnchor="middle" dominantBaseline="central">

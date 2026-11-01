@@ -3,7 +3,7 @@ import type { CopyView } from "../server/collection.ts";
 import type { Direction, Facets, ListGroup, SortName } from "../server/listing.ts";
 import { fetchValues } from "./Value.tsx";
 
-export type ListQuery = { q: string; sort: SortName; dir: Direction; period: number | null; genre: string | null };
+export type ListQuery = { q: string; sort: SortName; dir: Direction; period: number | null; genre: string | null; notOnAShelf: boolean };
 
 export const sortOptions: { sort: SortName; label: string; dir: Direction; order: Record<Direction, string> }[] = [
   { sort: "value", label: "Value", dir: "desc", order: { desc: "High first", asc: "Low first" } },
@@ -38,6 +38,7 @@ export function queryFromSearch(search: string): ListQuery {
     dir: dir === "asc" || dir === "desc" ? dir : option.dir,
     period: period && /^\d{3}0$/.test(period) ? Number(period) : null,
     genre: params.get("genre") || null,
+    notOnAShelf: params.get("shelf") === "none",
   };
 }
 
@@ -48,6 +49,7 @@ export function searchFromQuery(query: ListQuery, { forApi = false } = {}) {
   if (forApi || query.dir !== sortOptions.find((option) => option.sort === query.sort)!.dir) params.set("dir", query.dir);
   if (query.period !== null) params.set("period", String(query.period));
   if (query.genre !== null) params.set("genre", query.genre);
+  if (query.notOnAShelf) params.set("shelf", "none");
   return params.toString();
 }
 

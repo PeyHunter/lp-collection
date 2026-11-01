@@ -69,6 +69,7 @@ test("a barcode Discogs doesn't know finds nothing, and the Catalog number from 
         format: "Vinyl, LP, Album, Stereo",
         coverImageUrl: `/fake-discogs/covers/${sgtPepperUk}.svg`,
         copiesInCollection: 0,
+        held: [],
       },
     ],
   });

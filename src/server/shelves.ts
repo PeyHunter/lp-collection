@@ -2,6 +2,7 @@ import { and, asc, count, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AppDependencies } from "./app.ts";
+import type { Database } from "./db.ts";
 import { uuidPattern, type MemberEnv } from "./member.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize, type PhotoSize } from "./photos.ts";
 import { copies, sections, shelves, type ShelfCorners } from "./schema.ts";
@@ -250,6 +251,22 @@ export function createShelfRoutes({ database, now, photosDir }: AppDependencies)
 
   return routes;
 }
+
+/** Where Copies live, by the Section they are in. */
+export async function locationsOf({ db }: Database, sectionIds: (string | null)[]) {
+  const ids = [...new Set(sectionIds.filter((id) => id !== null))];
+  const rows =
+    ids.length === 0
+      ? []
+      : await db
+          .select({ shelfId: shelves.id, shelfName: shelves.name, sectionId: sections.id, column: sections.column, row: sections.row })
+          .from(sections)
+          .innerJoin(shelves, eq(shelves.id, sections.shelfId))
+          .where(inArray(sections.id, ids));
+  return new Map<string, CopyLocation>(rows.map((row) => [row.sectionId, row]));
+}
+
+export type CopyLocation = { shelfId: string; shelfName: string; sectionId: string; column: number; row: number };
 
 function cells(shelfId: string, columns: number, rows: number) {
   return Array.from({ length: columns * rows }, (_, index) => ({ shelfId, column: (index % columns) + 1, row: Math.floor(index / columns) + 1 }));

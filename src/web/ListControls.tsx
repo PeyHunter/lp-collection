@@ -57,6 +57,11 @@ export function ListControls({ query, facets, showValues, onChange }: { query: L
         {query.sort === "value" ? ". Copies with no Value always come last." : "."}
       </p>
 
+      <label className="chip shelf-filter">
+        <input type="checkbox" checked={query.notOnAShelf} onChange={(event) => onChange({ ...query, notOnAShelf: event.currentTarget.checked })} />
+        Not on a shelf
+      </label>
+
       {facets.periods.length > 1 && (
         <FilterChips legend="Period" anyLabel="Any period" chosen={query.period} onChoose={(period) => onChange({ ...query, period })}>
           {facets.periods.map(({ period, count }) => ({ value: period, label: periodName(period), count }))}
