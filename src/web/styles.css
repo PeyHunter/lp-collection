@@ -747,3 +747,9 @@ textarea.input {
 @media (prefers-reduced-motion: no-preference) {
   .corner::before { transition: scale 160ms var(--ease-out); }
 }
+
+.history-chart { inline-size: 100%; block-size: 4.5rem; overflow: visible; }
+.history-chart polyline { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.history-list { list-style: none; display: grid; font-size: var(--text-sm); }
+.history-list li { display: flex; justify-content: space-between; gap: var(--space-s); padding-block: var(--space-2xs); border-block-end: 1px solid var(--line); color: var(--ink-dim); }
+.history-list b { font-weight: 600; color: var(--ink); }

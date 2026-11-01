@@ -173,6 +173,32 @@ export const copies = pgTable(
   ],
 );
 
+/** One monthly refresh of every Collection's Values. It is finished once every Collection has its Collection value recorded. */
+export const valueRefreshes = pgTable("value_refreshes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  month: text("month").notNull().unique(),
+  startedAt: at("started_at").notNull(),
+  finishedAt: at("finished_at"),
+});
+
+/** A Collection's Collection value at one monthly refresh, in its Owner's currency. Copies with no Value count as zero. */
+export const collectionValues = pgTable(
+  "collection_values",
+  {
+    refreshId: uuid("refresh_id")
+      .notNull()
+      .references(() => valueRefreshes.id),
+    collectionId: uuid("collection_id")
+      .notNull()
+      .references(() => collections.id),
+    value: money("value").notNull(),
+    currency: currency("currency").notNull(),
+    copies: integer("copies").notNull(),
+    recordedAt: at("recorded_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.refreshId, table.collectionId] }), index("collection_values_collection_idx").on(table.collectionId, table.recordedAt)],
+);
+
 /** One Value fetch for a Copy, kept so the Value history can be drawn. A null Value means Discogs had no suggestion. */
 export const valueSnapshots = pgTable(
   "value_snapshots",
@@ -186,6 +212,8 @@ export const valueSnapshots = pgTable(
     lowestListing: money("lowest_listing"),
     currency: currency("currency").notNull(),
     fetchedAt: at("fetched_at").notNull(),
+    /** Set on the snapshots a monthly refresh took; these are the Copy's Value history. */
+    refreshId: uuid("refresh_id").references(() => valueRefreshes.id),
   },
   (table) => [
     // The latest snapshot per Copy, currency and Media condition is the first entry; Value and Lowest listing ride along so the list reads only the index.
@@ -198,6 +226,7 @@ export const valueSnapshots = pgTable(
       table.value,
       table.lowestListing,
     ),
+    unique("value_snapshots_refresh_copy_unique").on(table.refreshId, table.copyId),
   ],
 );
 

@@ -10,6 +10,7 @@ import { connectDatabase, migrate } from "./db.ts";
 import { createEcbRates, createFixedRates, type ExchangeRates } from "./exchange-rates.ts";
 import { createFakeDiscogs, sampleLowestListings, samplePrices, sampleReleases, type FakeDiscogs } from "./fake-discogs.ts";
 import { createRealDiscogs } from "./real-discogs.ts";
+import { createRefresh } from "./refresh.ts";
 import { createSecretBox } from "./secret-box.ts";
 import type { DiscogsGateway } from "./discogs.ts";
 
@@ -22,6 +23,9 @@ type Config = {
   tokenEncryptionKey: Buffer;
   photosDir: string | undefined;
 };
+
+/** `node src/server/main.ts refresh` runs the monthly refresh of every Value once and exits, instead of serving the app. */
+const command = process.argv[2] === "refresh" ? "refresh" : "serve";
 
 function readConfig(env: NodeJS.ProcessEnv): Config | { error: string } {
   const { DATABASE_URL, APP_OWNER_DISCOGS_USERNAME } = env;
@@ -37,7 +41,7 @@ function readConfig(env: NodeJS.ProcessEnv): Config | { error: string } {
   const tokenEncryptionKey = readTokenEncryptionKey(env, discogs);
   if ("error" in tokenEncryptionKey) return tokenEncryptionKey;
   const photosDir = env.PHOTOS_DIR || undefined;
-  if (!photosDir && env.NODE_ENV === "production") {
+  if (!photosDir && env.NODE_ENV === "production" && command === "serve") {
     return { error: "PHOTOS_DIR is not set. Set it to a writable directory on a persistent volume, where Copy photos are kept." };
   }
   return { databaseUrl: DATABASE_URL, port, appOwnerDiscogsUsername: APP_OWNER_DISCOGS_USERNAME, publicUrl, discogs, tokenEncryptionKey, photosDir };
@@ -115,6 +119,26 @@ if (config.discogs.kind === "real") {
     sellerSettingsMissingFor: (discogsUsername) => discogsUsername.startsWith("no-seller-settings"),
   });
   exchangeRates = createFixedRates();
+}
+
+if (command === "refresh") {
+  const database = connectDatabase(config.databaseUrl);
+  await migrate(database);
+  const secretBox = createSecretBox(config.tokenEncryptionKey);
+  if (!(await storedTokensOpenWith(database, secretBox))) {
+    console.error("The refresh cannot start: TOKEN_ENCRYPTION_KEY cannot open the Discogs tokens already stored. Run it with the key the app uses.");
+    await database.close();
+    process.exit(1);
+  }
+  // The fake Discogs has no rate limit to keep to.
+  const wait = config.discogs.kind === "fake" ? async () => {} : (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const refresh = createRefresh({ database, discogs, exchangeRates, secretBox, now: () => new Date(), wait });
+  const result = await refresh.run();
+  console.log(
+    `Refresh ${result.month}: ${result.copies} Values fetched, ${result.collections} Collection values recorded${result.finished ? ", month finished" : ", some Collections skipped (see above)"}.`,
+  );
+  await database.close();
+  process.exit(0);
 }
 
 const photosDir = config.photosDir ?? (await mkdtemp(join(tmpdir(), "lp-collection-photos-")));

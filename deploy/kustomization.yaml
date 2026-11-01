@@ -4,5 +4,6 @@ namespace: lp-collection
 resources:
   - postgres.yaml
   - app.yaml
+  - refresh.yaml
   - cloudflared.yaml
   - network-policy.yaml

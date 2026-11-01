@@ -1,13 +1,13 @@
-import { and, asc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNotNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AppDependencies } from "./app.ts";
 import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
-import type { Condition, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
+import type { Condition, Currency, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
 import { createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { uuidPattern, type Member, type MemberEnv } from "./member.ts";
-import { barcodeLookupCache, copies, photos, releases } from "./schema.ts";
+import { barcodeLookupCache, copies, photos, releases, valueSnapshots } from "./schema.ts";
 import { locationsOf, type CopyLocation } from "./shelves.ts";
 import { createValuation, type CopyValue, type ValuationOutcome } from "./valuation.ts";
 
@@ -72,8 +72,15 @@ function copyView(row: { copy: typeof copies.$inferSelect; release: CachedReleas
   };
 }
 
+export type ValueHistory = { recordedAt: string; mediaCondition: Condition; value: number | null }[];
+
 /** What a Copy is worth to the Member looking at it. Every answer leaves these out while that Member hides Values. */
-export type CopyValues = { purchasePrice: Money | null; purchaseDate: string | null; value: CopyValue | null; gain: number | null };
+export type CopyValues = {
+  purchasePrice: Money | null;
+  purchaseDate: string | null;
+  value: CopyValue | null;
+  gain: number | null;
+};
 
 export type CopyWithoutValues = ReturnType<typeof copyView>;
 
@@ -213,6 +220,16 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     return showValues ? { sellerSettingsMissing } : {};
   }
 
+  /** The Values monthly refreshes recorded for a Copy in the viewer's currency, oldest first. */
+  async function valueHistory(copyId: string, currency: Currency): Promise<ValueHistory> {
+    const rows = await db
+      .select({ fetchedAt: valueSnapshots.fetchedAt, mediaCondition: valueSnapshots.mediaCondition, value: valueSnapshots.value })
+      .from(valueSnapshots)
+      .where(and(eq(valueSnapshots.copyId, copyId), eq(valueSnapshots.currency, currency), isNotNull(valueSnapshots.refreshId)))
+      .orderBy(asc(valueSnapshots.fetchedAt), asc(valueSnapshots.id));
+    return rows.map(({ fetchedAt, ...entry }) => ({ recordedAt: fetchedAt.toISOString(), ...entry }));
+  }
+
   async function oneCopy(member: Member, copyId: string) {
     const { collectionId, currency, showValues } = member;
     if (!uuidPattern.test(copyId)) return undefined;
@@ -291,7 +308,8 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     const member = c.var.member;
     const copy = await oneCopy(member, c.req.param("copyId"));
     if (!copy) return c.json({ error: "No such Copy" }, 404);
-    return c.json({ copy, ...valuesState(member, member.sellerSettingsMissing) });
+    const history = member.showValues ? { valueHistory: await valueHistory(copy.id, member.currency) } : {};
+    return c.json({ copy, ...valuesState(member, member.sellerSettingsMissing), ...history });
   });
 
   routes.patch("/api/collections/:collectionId/copies/:copyId", async (c) => {

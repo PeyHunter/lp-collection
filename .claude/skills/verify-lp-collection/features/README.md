@@ -39,4 +39,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Search, sort and filter](./search-sort.md) covers the search box, the sort chips and direction, Period and genre filters, the group headings, paging as the User scrolls, and Original and Pressing year on each row.
 - [Shelf](./shelf.md) covers setting up a Shelf from a photo, dragging its four corners, the Section grid over the photo, editing, shrinking and deleting a Shelf, and who can see it.
 - [Hide Values](./hide-values.md) covers the "Values" switch that hides every Value, Gain, Purchase price, Value sort and currency picker for one User, in the app and in the API, and brings them back without asking Discogs.
+- [Value history](./value-history.md) covers the monthly refresh (`main.ts refresh` and its CronJob), resuming after a crash, the Collection value it records, and the Value history on a Copy.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.

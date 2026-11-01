@@ -1,0 +1,62 @@
+# The monthly refresh: a new Value for every Copy and the Collection value, kept as the Value history.
+# It runs the app image with `node src/server/main.ts refresh`, which exits when the month is done.
+# A run that dies partway is retried and carries on where it stopped.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lp-collection-refresh
+spec:
+  # 03:00 on the 1st of each month, in the node's time zone.
+  schedule: "0 3 1 * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 86400
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 4
+      # Paced to Discogs' rate limit, about 2.4 s per Copy: 5,000 Copies take about 3.5 hours.
+      activeDeadlineSeconds: 43200
+      template:
+        metadata:
+          labels:
+            app: lp-collection-refresh
+        spec:
+          restartPolicy: OnFailure
+          # On k3s-2 with PostgreSQL, like the app.
+          nodeSelector:
+            kubernetes.io/hostname: k3s-2
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: refresh
+              # The Argo CD Application sets the immutable sha-<commit> tag, the same as the app's.
+              image: ghcr.io/peyhunter/lp-collection:latest
+              command: ["node", "src/server/main.ts", "refresh"]
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: lp-collection-db
+                      key: POSTGRES_PASSWORD
+                - name: DATABASE_URL
+                  value: postgres://lp_collection:$(POSTGRES_PASSWORD)@postgres:5432/lp_collection
+              envFrom:
+                - secretRef:
+                    name: lp-collection-discogs
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 96Mi
+                limits:
+                  memory: 256Mi
