@@ -83,7 +83,7 @@ await expect(page.locator("main")).not.toContainText(valueText);
 await shot("copy-values-off");
 
 await valuesSwitch.click();
-await expect(page.getByRole("region", { name: "Value" })).toContainText("Paid 100 kr on 12 Mar 2019");
+await expect(page.getByRole("region", { name: "Value", exact: true })).toContainText("Paid 100 kr on 12 Mar 2019");
 await shot("copy-values-on");
 const copyAfter = await keep("copy-values-back-on", `GET ${api}/copies/${kindOfBlue}`, await page.request.get(`${api}/copies/${kindOfBlue}`));
 expect(copyAfter).toEqual(copyBefore);
