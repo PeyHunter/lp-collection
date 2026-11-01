@@ -6,6 +6,7 @@ export type Route =
   | { page: "copy"; copyId: string }
   | { page: "shelves" }
   | { page: "shelf"; shelfId: string | null }
+  | { page: "fill"; shelfId: string; sectionId: string }
   | { page: "invite"; code: string };
 
 export type Handoff = { kind: "saved"; copyId: string; title: string } | { kind: "deleted"; title: string } | null;
@@ -18,6 +19,8 @@ function routeFrom(pathname: string): Route {
   if (copy) return { page: "copy", copyId: decodeURIComponent(copy[1]!) };
   if (/^\/shelves\/?$/.test(pathname)) return { page: "shelves" };
   if (/^\/shelves\/new\/?$/.test(pathname)) return { page: "shelf", shelfId: null };
+  const fill = /^\/shelves\/([^/]+)\/sections\/([^/]+)\/?$/.exec(pathname);
+  if (fill) return { page: "fill", shelfId: decodeURIComponent(fill[1]!), sectionId: decodeURIComponent(fill[2]!) };
   const shelf = /^\/shelves\/([^/]+)\/?$/.exec(pathname);
   if (shelf) return { page: "shelf", shelfId: decodeURIComponent(shelf[1]!) };
   return { page: "collection" };
