@@ -15,6 +15,8 @@ export type TestAppOptions = {
   discogs?: FakeDiscogsScript;
   appOwnerDiscogsUsername?: string;
   publicUrl?: string;
+  backupToken?: string;
+  tokenEncryptionKey?: Buffer;
 };
 
 export type LoginResult = {
@@ -27,7 +29,7 @@ export type LoginResult = {
  * Starts the app against a brand-new PostgreSQL database and a scripted fake Discogs.
  * Tests talk to it only through `request`, the same HTTP API the phone UI uses.
  */
-export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsername = "app-owner", publicUrl = "http://localhost" }: TestAppOptions = {}) {
+export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsername = "app-owner", publicUrl = "http://localhost", backupToken, tokenEncryptionKey = randomBytes(32) }: TestAppOptions = {}) {
   const serverUrl = inject("postgresUrl");
   const name = `test_${randomUUID().replaceAll("-", "")}`;
   const admin = new pg.Client({ connectionString: `${serverUrl}/postgres` });
@@ -40,14 +42,14 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   const discogs = createFakeDiscogs(script);
   const photosDir = await mkdtemp(join(inject("scratchDir"), "photos-"));
   let now = new Date("2026-03-01T12:00:00Z");
-  let secretBox = createSecretBox(randomBytes(32));
+  let secretBox = createSecretBox(tokenEncryptionKey);
   let owner = appOwnerDiscogsUsername;
   let mirror: Mirror;
   let importer: Importer;
   const start = () => {
     mirror = createMirror({ database, discogs, secretBox, now: () => now });
     importer = createImporter({ database, discogs, secretBox, now: () => now, wait: async () => {} });
-    return createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl), photosDir, mirror, importer });
+    return createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl), photosDir, mirror, importer, backupToken });
   };
   let app = start();
 

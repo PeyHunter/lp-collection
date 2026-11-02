@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { createAccessRoutes } from "./access.ts";
+import { createBackupRoutes } from "./backup-routes.ts";
 import { createCollectionRoutes } from "./collection.ts";
 import type { Database } from "./db.ts";
 import type { DiscogsGateway } from "./discogs.ts";
@@ -21,6 +22,8 @@ export type AppDependencies = {
   photosDir: string;
   mirror: Mirror;
   importer: Importer;
+  /** Lets the nightly backup fetch Photo files over the cluster network. Unset, the backup route doesn't exist. */
+  backupToken?: string;
 };
 
 export function createApp(dependencies: AppDependencies) {
@@ -32,6 +35,7 @@ export function createApp(dependencies: AppDependencies) {
     return c.json({ status: reachable ? "ok" : "degraded", database: reachable ? "ok" : "unreachable" }, reachable ? 200 : 503);
   });
 
+  if (dependencies.backupToken) app.route("/", createBackupRoutes(dependencies.backupToken, dependencies.photosDir));
   app.route("/", createAccessRoutes(dependencies));
   app.use("/api/collections/:collectionId/*", membersOnly(dependencies));
   app.route("/", createCollectionRoutes(dependencies));

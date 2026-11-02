@@ -45,4 +45,5 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Browse covers](./browse.md) covers flipping through the Collection as big covers by swiping, in the list's order and filters, coming back to the same cover from a Copy, and loading covers lazily.
 - [Discogs mirror](./discogs-mirror.md) covers mirroring each add, change and delete of a Copy into the Owner's Discogs collection, retrying failures, the rate limit, and the "Not synced to Discogs yet" marker.
 - [First-login import](./discogs-import.md) covers importing a new User's Discogs collection once at first login, in pages, within the rate limit, with progress on the Collection.
+- [Home-screen app and backups](./home-screen-and-backups.md) covers installing the app on the iPhone home screen, the service worker, and the nightly backup and its restore.
 - [Health check](./health.md) covers the status endpoint that tells whether the app and its database are up.
