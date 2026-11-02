@@ -1,0 +1,90 @@
+# Nightly backups on k3s-1, the other node from the app and PostgreSQL (k3s-2), keeping 30 days.
+# The job runs the app image: `node src/server/backup-cli.ts backup` dumps the database over the network and copies
+# each new Photo from the app (a token-guarded route), into the lp-collection-backups volume on k3s-1.
+# Restoring is by hand: docs/backup-restore.md.
+# Secrets this file reads, created by scripts/wizard/deploy.sh and never committed:
+#   lp-collection-db: POSTGRES_PASSWORD
+#   lp-collection-backup: BACKUP_TOKEN
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lp-collection-backups
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lp-collection-backup
+spec:
+  # 02:30 every night, in the node's time zone.
+  schedule: "30 2 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 21600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: lp-collection-backup
+        spec:
+          restartPolicy: OnFailure
+          # The backups volume is created on k3s-1, the first node a pod mounting it lands on; keep it there.
+          nodeSelector:
+            kubernetes.io/hostname: k3s-1
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              # The Argo CD Application sets the immutable sha-<commit> tag, the same as the app's.
+              image: ghcr.io/peyhunter/lp-collection:latest
+              command: ["node", "src/server/backup-cli.ts", "backup"]
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: lp-collection-db
+                      key: POSTGRES_PASSWORD
+                - name: DATABASE_URL
+                  value: postgres://lp_collection:$(POSTGRES_PASSWORD)@postgres:5432/lp_collection
+                - name: BACKUP_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: lp-collection-backup
+                      key: BACKUP_TOKEN
+                - name: APP_URL
+                  value: http://lp-collection
+                - name: BACKUP_DIR
+                  value: /var/backups/lp-collection
+              volumeMounts:
+                - name: backups
+                  mountPath: /var/backups/lp-collection
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 128Mi
+                limits:
+                  memory: 384Mi
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: lp-collection-backups

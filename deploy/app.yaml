@@ -1,5 +1,6 @@
 # Secrets this file reads, never committed:
 #   lp-collection-db (scripts/wizard/deploy.sh): POSTGRES_PASSWORD
+#   lp-collection-backup (scripts/wizard/deploy.sh): BACKUP_TOKEN, optional
 #   lp-collection-discogs (scripts/wizard/discogs.sh): DISCOGS_CONSUMER_KEY,
 #     DISCOGS_CONSUMER_SECRET, APP_OWNER_DISCOGS_USERNAME, PUBLIC_URL
 apiVersion: v1
@@ -68,6 +69,13 @@ spec:
               value: postgres://lp_collection:$(POSTGRES_PASSWORD)@postgres:5432/lp_collection
             - name: PHOTOS_DIR
               value: /var/lib/lp-collection/photos
+            # Lets the nightly backup copy Photos from the app. Without the secret the backup route doesn't exist.
+            - name: BACKUP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lp-collection-backup
+                  key: BACKUP_TOKEN
+                  optional: true
           envFrom:
             - secretRef:
                 name: lp-collection-discogs

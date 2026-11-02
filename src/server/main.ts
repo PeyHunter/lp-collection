@@ -176,7 +176,7 @@ const mirror = createMirror({ database, discogs, secretBox, now: () => new Date(
 // The fake Discogs has no rate limit to keep to.
 const pace = config.discogs.kind === "fake" ? async () => {} : (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const importer = createImporter({ database, discogs, secretBox, now: () => new Date(), wait: pace });
-const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl, photosDir, mirror, importer });
+const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl, photosDir, mirror, importer, backupToken: process.env.BACKUP_TOKEN || undefined });
 // Mirror changes Discogs refused or that waited for the rate limit are tried again every minute, and once at start.
 // Imports a restart interrupted, or that wait after a failure, carry on the same way.
 const background = () => {
