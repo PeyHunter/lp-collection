@@ -30,8 +30,7 @@ export type RefreshResult = { month: string; collections: number; copies: number
  * The monthly refresh: a new Value for every Copy in every Collection, fetched with its Owner's Discogs account in
  * the Owner's currency, and then the Collection value. One refresh per calendar month (UTC). Everything it records
  * names the refresh, so a run that stops partway carries on with the Copies and Collections it hasn't done yet.
- * A Collection whose Owner has no seller settings is skipped and the month stays unfinished, so a later run that
- * month tries it again. A Copy Discogs fails to value keeps its earlier Value in the Collection value.
+ * A Copy Discogs fails to value keeps its earlier Value in the Collection value.
  */
 export function createRefresh({ database, discogs, exchangeRates, secretBox, now, wait }: RefreshOptions) {
   const { db } = database;
@@ -75,20 +74,10 @@ export function createRefresh({ database, discogs, exchangeRates, secretBox, now
       if (refresh.finishedAt) return result;
       for (const collection of await collectionsToDo(refresh.id)) {
         const owner = { userId: collection.ownerId, currency: collection.currency, auth: { token: secretBox.open(collection.token), secret: secretBox.open(collection.secret) } };
-        let sellerSettingsMissing = false;
         for (const copy of await copiesToDo(refresh.id, collection.id)) {
           await wait(pauseBetweenCopiesMs);
           const outcome = await valuation.fetchValue(copy, owner, refresh.id);
-          if (outcome === "seller-settings-missing") {
-            sellerSettingsMissing = true;
-            break;
-          }
-          if (outcome === "valued") result.copies += 1;
-        }
-        if (sellerSettingsMissing) {
-          console.log(`Refresh ${refresh.month}: skipped Collection ${collection.id}, its Owner has no Discogs seller settings.`);
-          result.finished = false;
-          continue;
+          if (outcome.kind === "valued") result.copies += 1;
         }
         await recordCollectionValue(refresh.id, collection.id, collection.currency);
         result.collections += 1;

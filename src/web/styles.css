@@ -513,18 +513,8 @@ main.content-grid { row-gap: var(--space-xl); align-content: start; padding-bloc
 .row-value small, .amount small { font-family: var(--body); font-size: var(--text-xs); font-weight: 500; color: var(--ink-dim); }
 .waiting { font-size: var(--text-xs); line-height: 1.2; color: var(--ink-faint); }
 
-.guide {
-  display: grid;
-  gap: var(--space-s);
-  padding: var(--space-m);
-  border-radius: var(--radius-m);
-  border: 1.5px solid var(--accent);
-  background: color-mix(in oklch, var(--accent) 10%, var(--bg));
-}
-.guide h2 { font-family: var(--display); font-size: var(--text-l); font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
-.guide p { font-size: var(--text-sm); color: var(--ink-dim); }
-.steps { display: grid; gap: var(--space-xs); }
-.steps .btn { inline-size: 100%; }
+.seller-settings-hint a { color: inherit; text-decoration: underline; }
+.row-value-note { display: block; }
 
 .big-cover {
   inline-size: min(100%, 13rem);

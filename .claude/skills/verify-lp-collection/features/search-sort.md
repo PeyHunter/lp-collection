@@ -6,7 +6,7 @@ The Collection list has one search box, sort chips with a button that reverses t
 
 - `search` matches artist, title, label, Catalog number, genre and style, in any case. Every word must match. A Catalog number also matches without its spaces or dashes ("kab1" finds "KAB 1").
 - `sort` offers Value, Artist, Period, Year (Original year) and Added. Each has a default direction: Value high first, Artist A to Z, Period and Year oldest first, Added newest first. The arrows button reverses it, and the note under the chips says the order ("Low first. Copies with no Value always come last.").
-- `no-value-last` puts Copies with no Value in their own last group, "No Value yet", whichever way Value sorts. When the seller settings are missing, that group says "Waits for seller settings".
+- `no-value-last` puts Copies with no Value in their own last group, "No Value yet", whichever way Value sorts.
 - `groups` heads each group with a poster line: Value bands ("500+ kr", "Under 10 kr"), the artist's first letter ("B" for The Beatles, since a leading "The" is ignored), the year, the Period ("The 70s"), or the month added. "Year unknown" holds Copies without an Original year.
 - `filters` show the Collection's Periods and genres with counts, as chips with "Any period" and "Any genre". They combine with each other, the search and the sort.
 - `years` shows "1969 · pressed 2019 · Apple Records · PCS 7088" on each row.

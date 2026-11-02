@@ -3,7 +3,7 @@ import type { CopyView } from "../server/collection.ts";
 import type { Currency } from "../server/discogs.ts";
 import { Cover } from "./Cover.tsx";
 import { followLink } from "./navigation.ts";
-import { Amount, hasValues, HistoryChart, type HistoryPoint } from "./Value.tsx";
+import { Amount, hasValues, HistoryChart, type HistoryPoint, RowValue } from "./Value.tsx";
 
 type OverviewAnswer = {
   copies: number;
@@ -70,7 +70,7 @@ export function Overview({ collectionId, reloadKey }: { collectionId: string; re
                   </a>
                   <span className="row-artist">{copy.release.artist}</span>
                 </span>
-                {hasValues(copy) && copy.value?.value != null && <Amount amount={copy.value.value} currency={copy.value.currency} className="row-end row-value" />}
+                {hasValues(copy) && copy.value?.value != null && <RowValue value={copy.value} fetching={false} />}
               </li>
             ))}
           </ol>

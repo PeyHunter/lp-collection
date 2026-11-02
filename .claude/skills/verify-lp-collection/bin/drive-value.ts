@@ -85,27 +85,26 @@ await friend.getByLabel("Discogs username").fill(noSellerSettings);
 await friend.getByRole("button", { name: "Authorize" }).click();
 await add(friend, "190295328709");
 await add(friend, "5099969209017");
-const guide = friend.getByRole("region", { name: "Fill in your Discogs seller settings to see Values" });
-await expect(guide).toBeVisible();
-await expect(friend.getByText("No Value yet")).toHaveCount(0);
 await friend.goto("/");
-await shot(friend, "seller-settings-guide");
+await expect(friend.getByText("For now, Values are the lowest price on Discogs.")).toHaveCount(1);
+await expect(friend.getByText("No Value yet")).toHaveCount(0);
+await expect(friend.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Lowest price");
+await shot(friend, "seller-settings-hint");
 await friend.getByRole("region", { name: "Copies" }).getByRole("link", { name: "Discovery" }).click();
-await expect(friend.getByRole("region", { name: "Fill in your Discogs seller settings to see Values" })).toBeVisible();
-await shot(friend, "seller-settings-guide-copy", "Fill in your Discogs seller settings to see Values");
+await expect(friend.getByRole("region", { name: "Value", exact: true })).toContainText("Lowest price on Discogs");
+await shot(friend, "seller-settings-hint-copy", "Value");
 
-const [settings] = await Promise.all([
-  friend.waitForEvent("popup"),
-  friend.getByRole("link", { name: "Open seller settings on Discogs" }).click(),
-]);
+const [settings] = await Promise.all([friend.waitForEvent("popup"), friend.getByRole("link", { name: "Discogs seller settings" }).click()]);
 await settings.getByLabel("Discogs username").fill(noSellerSettings);
 await settings.getByRole("button", { name: "Save seller settings" }).click();
 await settings.close();
-await friend.getByRole("button", { name: "I've saved them, fetch Values" }).click();
+// A new fetch uses the suggestion at once; a condition change is the quickest way to get one.
+await friend.getByLabel("Media condition").selectOption("Near Mint (NM or M-)");
+await expect(friend.getByRole("region", { name: "Value", exact: true })).not.toContainText("Lowest price on Discogs");
+await friend.getByLabel("Media condition").selectOption("Very Good Plus (VG+)");
 await expect(friend.getByRole("region", { name: "Value", exact: true })).toContainText("252 kr");
 await friend.goto("/");
 await expect(friend.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("252 kr");
-await expect(friend.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Gas 5" })).toContainText("No Value yet");
 await shot(friend, "seller-settings-resolved");
 
 await friend.getByLabel("Currency").selectOption("EUR");

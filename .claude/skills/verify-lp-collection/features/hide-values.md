@@ -1,11 +1,11 @@
 # Hide Values
 
-A "Values" switch in the header of the Collection and of every Copy hides everything about Value, so the User can show their Collection to others without showing what it is worth. With it off, the app looks as if Values never existed: no amount, Gain, Lowest listing, Purchase price, Value sort, Value group heading, seller settings guide or currency picker, and no gap where they were. The API leaves the same fields out, so nothing leaks over the network. Turning it on shows every Value again from what is already stored, without asking Discogs. Each User has their own switch, kept across reloads and devices.
+A "Values" switch in the header of the Collection and of every Copy hides everything about Value, so the User can show their Collection to others without showing what it is worth. With it off, the app looks as if Values never existed: no amount, Gain, Lowest listing, Purchase price, Value sort, Value group heading, seller settings hint or currency picker, and no gap where they were. The API leaves the same fields out, so nothing leaks over the network. Turning it on shows every Value again from what is already stored, without asking Discogs. Each User has their own switch, kept across reloads and devices.
 
 ## Sub-features
 
 - `switch` is a `role="switch"` button named "Values" at the end of the header on the Collection (`/`) and on a Copy (`/copies/<id>`). It is checked while Values show. It saves at once and stays as set after a reload.
-- `collection-off` hides the amount on each row, the Value sort chip (Artist becomes the first and default sort), the Value group headings, the seller settings guide and the currency picker. A list sorted by Value shows by Artist A to Z.
+- `collection-off` hides the amount on each row, the Value sort chip (Artist becomes the first and default sort), the Value group headings, the seller settings hint and the currency picker. A list sorted by Value shows by Artist A to Z.
 - `copy-off` hides the Value section (amount, Gain, Lowest listing, "Paid …") and the Purchase section, and the hint that the Value follows the Media condition.
 - `api-off` leaves `value`, `gain`, `purchasePrice`, `purchaseDate` and `sellerSettingsMissing` out of every Copy answer (list, Copy, save, change, photos), refuses `sort=value` with `400`, and makes `POST /values` fetch no Value (it only fills in missing genres and answers `{ "more": … }`). Saving a Copy or changing its Media condition asks Discogs for no Value.
 - `back-on` shows the stored Values, Gain and Purchase price again without a Discogs request. Copies saved while Values were off get their Value from the background fetch.
