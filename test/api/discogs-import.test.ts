@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createImporter, importPauseMs } from "../../src/server/discogs-import.ts";
 import { priceLadder, sampleReleases, type FakeDiscogsScript } from "../../src/server/fake-discogs.ts";
-import { logInWithCollection, saveCopy, type Member, type TestApp } from "../support/members.ts";
+import { invitedFriend, logInWithCollection, type Member, type TestApp } from "../support/members.ts";
 import { createTestApp } from "../support/test-app.ts";
 
 type Listed = { copies: { id: string; mediaCondition: string; sleeveCondition: string; release: { discogsReleaseId: number; title: string } }[]; total: number };
@@ -97,4 +97,28 @@ test("the import keeps to 40 Discogs requests a minute, pausing before each, and
   expect(importPauseMs).toBe(1500);
   expect(waits).toEqual(Array(1 + 4 * 2).fill(importPauseMs));
   expect((await list(owner)).total).toBe(4);
+});
+
+test("Users' imports run side by side, so one large import never holds up another User's", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases, collections: { "app-owner": releaseIds.slice(0, 2), friend: releaseIds.slice(0, 3) } } });
+  const owner = await logInWithCollection(app);
+  const friend = await invitedFriend(app, owner.session, "friend");
+  await app.query("delete from copies");
+  await app.query("update discogs_imports set status = 'running', next_page = 1, imported = 0");
+  let release!: () => void;
+  const ownersPageHeld = new Promise<void>((resolve) => (release = resolve));
+  const listed = app.discogs.collectionPage.bind(app.discogs);
+  app.discogs.collectionPage = async (discogsUsername, ...rest) => {
+    if (discogsUsername === "app-owner") await ownersPageHeld;
+    return listed(discogsUsername, ...rest);
+  };
+  const importer = createImporter({ database: app.database, discogs: app.discogs, secretBox: app.secretBox, now: app.now, wait: async () => {} });
+
+  const all = importer.runDue();
+  await expect.poll(async () => (await list(friend)).total).toBe(3);
+  expect((await list(owner)).total).toBe(0);
+
+  release();
+  await all;
+  expect((await list(owner)).total).toBe(2);
 });

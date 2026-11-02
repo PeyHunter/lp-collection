@@ -37,7 +37,7 @@ await expect(progress).toBeVisible();
 console.log("while it runs:", await progress.textContent());
 await shot(page, "import-running");
 
-await expect(page.getByRole("region", { name: "Overview" })).toContainText("120 Copies", { timeout: 20_000 });
+await expect(page.getByRole("region", { name: "Overview" })).toContainText("250 Copies", { timeout: 20_000 });
 await expect(progress).toHaveCount(0);
 await shot(page, "import-done");
 const me = await page.request.get("/api/me");
@@ -46,9 +46,9 @@ console.log("after:", JSON.stringify(((await me.json()) as { discogsImport: unkn
 
 const again = await (await browser.newContext({ ...iPhone, baseURL: state.appUrl })).newPage();
 await logIn(again, "with-discogs-collection-demo");
-await expect(again.getByRole("region", { name: "Overview" })).toContainText("120 Copies");
+await expect(again.getByRole("region", { name: "Overview" })).toContainText("250 Copies");
 await expect(again.getByText("Importing your Discogs collection")).toHaveCount(0);
-console.log("logging in again: still 120 Copies, no second import");
+console.log("logging in again: still 250 Copies, no second import");
 
 await writeFile(`${evidence}/console-errors.json`, JSON.stringify(consoleErrors, null, 2));
 console.log("console errors:", consoleErrors);
