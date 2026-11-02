@@ -55,6 +55,7 @@ await refused.goto("/");
 const row = refused.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Kind Of Blue" });
 await expect(row).toContainText("Not synced to Discogs yet");
 console.log("a User whose Discogs collection refuses changes: the Copy is saved and marked");
+await row.evaluate((element) => element.scrollIntoView({ block: "center" }));
 await shot(refused, "not-synced-row");
 await keep(refused, "not-synced-list", `${refusedApi}/copies`);
 await row.getByRole("link", { name: "Kind Of Blue" }).click();
