@@ -5,6 +5,7 @@ import type { Database } from "./db.ts";
 import type { DiscogsGateway } from "./discogs.ts";
 import type { ExchangeRates } from "./exchange-rates.ts";
 import { membersOnly } from "./member.ts";
+import type { Mirror } from "./mirror.ts";
 import type { SecretBox } from "./secret-box.ts";
 import { createShelfRoutes } from "./shelves.ts";
 
@@ -17,6 +18,7 @@ export type AppDependencies = {
   appOwnerDiscogsUsername: string;
   publicUrl: URL;
   photosDir: string;
+  mirror: Mirror;
 };
 
 export function createApp(dependencies: AppDependencies) {

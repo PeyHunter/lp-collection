@@ -98,6 +98,12 @@ export type DiscogsIdentity = {
   accessSecret: string;
 };
 
+/** Where a Copy sits in its Owner's Discogs collection. New items go in folder 1, "Uncategorized". */
+export type CollectionItem = { discogsReleaseId: number; folderId: number; instanceId: number };
+
+/** What the app keeps in step on a Discogs collection item. A null note clears the Notes field. */
+export type CollectionFields = { mediaCondition: Condition; sleeveCondition: SleeveCondition; note: string | null };
+
 /** The only way the app talks to Discogs. Tests use a scripted fake. */
 export type DiscogsGateway = {
   lookup(query: LookupQuery, auth: DiscogsAuth): Promise<LookupResult>;
@@ -106,6 +112,11 @@ export type DiscogsGateway = {
   /** The cheapest asking price right now in any condition, or null when nothing is for sale. */
   lowestListing(discogsReleaseId: number, currency: DiscogsCurrency, auth: DiscogsAuth): Promise<Money | null>;
   sellerSettingsUrl: string;
+  /** Adds the Release to the user's Discogs collection once more, as a new item. */
+  addToCollection(discogsUsername: string, discogsReleaseId: number, auth: DiscogsAuth): Promise<CollectionItem>;
+  setCollectionFields(discogsUsername: string, item: CollectionItem, fields: CollectionFields, auth: DiscogsAuth): Promise<void>;
+  /** Removes one item. An item Discogs no longer has counts as removed. */
+  removeFromCollection(discogsUsername: string, item: CollectionItem, auth: DiscogsAuth): Promise<void>;
   startLogin(callbackUrl: string): Promise<LoginStart>;
   finishLogin(callback: LoginCallback): Promise<DiscogsIdentity>;
 };

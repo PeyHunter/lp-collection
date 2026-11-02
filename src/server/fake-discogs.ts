@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { conditions, lookupPageSize, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type LookupQuery, type Money, type Release } from "./discogs.ts";
+import { conditions, lookupPageSize, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type LookupQuery, type Money, type Release } from "./discogs.ts";
 import { converter, sampleRatesPerEuro } from "./exchange-rates.ts";
 import { priceSuggestionsFrom } from "./real-discogs.ts";
 
@@ -19,13 +19,23 @@ export type FakeDiscogsScript = {
   loginStartFails?: boolean;
   finishLoginDelayMs?: number;
   priceSuggestionsDelayMs?: number;
+  /** Every call that changes a Discogs collection fails while this is set. */
+  collectionUnavailable?: boolean;
+  /** Calls that change these users' Discogs collections fail. */
+  collectionUnavailableFor?: (discogsUsername: string) => boolean;
 };
+
+/** One item in a fake Discogs collection, with the fields the app sets. */
+export type FakeCollectionItem = CollectionItem & Partial<CollectionFields>;
 
 export type FakeDiscogsRequest = (
   | ({ endpoint: "search" } & LookupQuery)
   | { endpoint: "release"; discogsReleaseId: number }
   | { endpoint: "price-suggestions"; discogsReleaseId: number }
   | { endpoint: "stats"; discogsReleaseId: number; currency: DiscogsCurrency }
+  | { endpoint: "collection-add"; discogsUsername: string; discogsReleaseId: number }
+  | { endpoint: "collection-fields"; discogsUsername: string; discogsReleaseId: number; instanceId: number }
+  | { endpoint: "collection-remove"; discogsUsername: string; discogsReleaseId: number; instanceId: number }
 ) &
   DiscogsAuth;
 
@@ -38,6 +48,8 @@ export type FakeDiscogs = DiscogsGateway & {
   calls: { startLogin: number; finishLogin: number };
   requests: FakeDiscogsRequest[];
   pages: Hono;
+  /** The user's Discogs collection as the app has left it, in the order the items were added. */
+  collectionOf(discogsUsername: string): FakeCollectionItem[];
 };
 
 const authorizePath = "/fake-discogs/authorize";
@@ -48,6 +60,19 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   const pending = new Map<string, { requestSecret: string; callbackUrl: string; authorized?: { verifier: string; discogsUsername: string } }>();
   const issuedIdentities: DiscogsIdentity[] = [];
   const calls = { startLogin: 0, finishLogin: 0 };
+  const collections = new Map<string, FakeCollectionItem[]>();
+  let nextInstanceId = 1000;
+  const collectionOf = (discogsUsername: string) => {
+    const key = discogsUsername.toLowerCase();
+    if (!collections.has(key)) collections.set(key, []);
+    return collections.get(key)!;
+  };
+  function changeCollection(request: FakeDiscogsRequest & { discogsUsername: string }) {
+    answer(request);
+    if (script.collectionUnavailable || script.collectionUnavailableFor?.(request.discogsUsername)) {
+      throw new Error(`Fake Discogs is scripted to refuse changes to ${request.discogsUsername}'s collection`);
+    }
+  }
   const renamedAccounts = new Map<string, number>();
   const discogsUserIdOf = (discogsUsername: string) =>
     renamedAccounts.get(discogsUsername.toLowerCase()) ?? fakeDiscogsUserId(discogsUsername);
@@ -123,6 +148,25 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   });
 
   return {
+    collectionOf: (discogsUsername) => collectionOf(discogsUsername).map((item) => ({ ...item })),
+    async addToCollection(discogsUsername, discogsReleaseId, auth) {
+      changeCollection({ endpoint: "collection-add", discogsUsername, discogsReleaseId, ...auth });
+      const item = { discogsReleaseId, folderId: 1, instanceId: nextInstanceId++ };
+      collectionOf(discogsUsername).push(item);
+      return { ...item };
+    },
+    async setCollectionFields(discogsUsername, { discogsReleaseId, instanceId }, fields, auth) {
+      changeCollection({ endpoint: "collection-fields", discogsUsername, discogsReleaseId, instanceId, ...auth });
+      const item = collectionOf(discogsUsername).find((each) => each.instanceId === instanceId);
+      if (!item) throw new Error(`Fake Discogs has no collection item ${instanceId} for ${discogsUsername}`);
+      Object.assign(item, fields);
+    },
+    async removeFromCollection(discogsUsername, { discogsReleaseId, instanceId }, auth) {
+      changeCollection({ endpoint: "collection-remove", discogsUsername, discogsReleaseId, instanceId, ...auth });
+      const items = collectionOf(discogsUsername);
+      const index = items.findIndex((each) => each.instanceId === instanceId);
+      if (index >= 0) items.splice(index, 1);
+    },
     sellerSettingsUrl: sellerSettingsPath,
     async priceSuggestions(discogsReleaseId, auth) {
       answer({ endpoint: "price-suggestions", discogsReleaseId, ...auth });

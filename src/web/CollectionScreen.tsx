@@ -185,6 +185,7 @@ export function CollectionScreen({
                         showValues={me.showValues}
                         sellerSettingsMissing={loaded.sellerSettingsMissing}
                         fetching={values.fetching}
+                        notSynced={loaded.notSyncedYet.has(copy.id)}
                       />
                     ))}
                   </ol>
@@ -226,12 +227,14 @@ function CopyRow({
   showValues,
   sellerSettingsMissing,
   fetching,
+  notSynced,
 }: {
   copy: CopyView;
   fresh: boolean;
   showValues: boolean;
   sellerSettingsMissing: boolean;
   fetching: boolean;
+  notSynced: boolean;
 }) {
   const { release } = copy;
   const row = useRef<HTMLLIElement>(null);
@@ -253,6 +256,7 @@ function CopyRow({
           Media <Grade condition={copy.mediaCondition} /> · Sleeve <Grade condition={copy.sleeveCondition} />
         </span>
         {copy.location && <span className="row-meta row-place">{locationLabel(copy.location)}</span>}
+        {notSynced && <span className="row-meta not-synced">Not synced to Discogs yet</span>}
       </span>
       {showValues && hasValues(copy) && <RowValue value={copy.value} sellerSettingsMissing={sellerSettingsMissing} fetching={fetching} />}
     </li>

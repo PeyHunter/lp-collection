@@ -775,3 +775,5 @@ textarea.input {
 .overview-count { font-size: var(--text-sm); color: var(--ink-dim); }
 .overview-count b { font-weight: 600; color: var(--ink); }
 .overview-graph .history-chart { block-size: 6rem; }
+
+.not-synced { color: var(--accent); }

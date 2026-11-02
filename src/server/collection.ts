@@ -135,7 +135,7 @@ export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number; h
 
 export type LookupView = LookupQuery & { total: number; candidates: LookupCandidate[] };
 
-export function createCollectionRoutes({ database, discogs, exchangeRates, now, photosDir }: AppDependencies) {
+export function createCollectionRoutes({ database, discogs, exchangeRates, now, photosDir, mirror }: AppDependencies) {
   const { db } = database;
   const photoStore = createPhotoStore(photosDir);
   const valuation = createValuation({ database, discogs, exchangeRates, now });
@@ -216,6 +216,11 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     });
   }
 
+  /** Whether a change to the Copy is still to reach the Owner's Discogs collection. */
+  async function syncState(copyId: string) {
+    return { notSyncedYet: (await mirror.pending([copyId])).has(copyId) };
+  }
+
   /** The seller settings state is about Values, so it is left out with them. */
   function valuesState({ showValues }: Member, sellerSettingsMissing: boolean) {
     return showValues ? { sellerSettingsMissing } : {};
@@ -280,6 +285,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     const { listed, ...page } = await listing.page(member.collectionId, member.currency, query);
     return c.json({
       copies: await views(member, listed),
+      notSyncedYet: [...(await mirror.pending(listed.map((row) => row.copy.id)))],
       ...page,
       ...valuesState(member, member.sellerSettingsMissing),
     });
@@ -348,8 +354,12 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       return c.json({ error: discogsUnreachable }, 502);
     }
     const [copy] = await db.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, sectionId, createdAt: now() }).returning();
+    await mirror.copyAdded(copy!);
     const outcome = member.showValues ? await valuation.fetchValue(copy!, member) : undefined;
-    return c.json({ copy: await oneCopy(member, copy!.id), ...valuesState(member, sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing)) }, 201);
+    return c.json(
+      { copy: await oneCopy(member, copy!.id), ...valuesState(member, sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing)), ...(await syncState(copy!.id)) },
+      201,
+    );
   });
 
   routes.get("/api/collections/:collectionId/copies/:copyId", async (c) => {
@@ -357,7 +367,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     const copy = await oneCopy(member, c.req.param("copyId"));
     if (!copy) return c.json({ error: "No such Copy" }, 404);
     const history = member.showValues ? { valueHistory: await valueHistory(copy.id, member.currency) } : {};
-    return c.json({ copy, ...valuesState(member, member.sellerSettingsMissing), ...history });
+    return c.json({ copy, ...valuesState(member, member.sellerSettingsMissing), ...history, ...(await syncState(copy.id)) });
   });
 
   routes.patch("/api/collections/:collectionId/copies/:copyId", async (c) => {
@@ -369,12 +379,14 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     if ("error" in parsed) return c.json({ error: parsed.error }, 400);
     const { changes } = parsed;
     const [copy] = await db.update(copies).set(changes).where(eq(copies.id, copyId)).returning();
+    if (changes.mediaCondition !== undefined || changes.sleeveCondition !== undefined || changes.note !== undefined) await mirror.copyChanged(copy!);
     const conditionChanged = changes.mediaCondition !== undefined || changes.sleeveCondition !== undefined;
     const valueOutdated = "value" in before && (copy!.mediaCondition !== before.mediaCondition || !before.value);
     const outcome = conditionChanged && valueOutdated ? await valuation.fetchValue(copy!, member) : undefined;
     return c.json({
       copy: await oneCopy(member, copyId),
       ...valuesState(member, sellerSettingsMissingAfter(outcome, member.sellerSettingsMissing)),
+      ...(await syncState(copyId)),
     });
   });
 
@@ -382,15 +394,16 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     const { collectionId } = c.var.member;
     const copyId = c.req.param("copyId");
     if (!uuidPattern.test(copyId)) return c.json({ error: "No such Copy" }, 404);
-    const fileKeys = await db.transaction(async (tx) => {
-      const [copy] = await tx.select({ id: copies.id }).from(copies).where(and(eq(copies.id, copyId), eq(copies.collectionId, collectionId))).for("update");
+    const deleted = await db.transaction(async (tx) => {
+      const [copy] = await tx.select().from(copies).where(and(eq(copies.id, copyId), eq(copies.collectionId, collectionId))).for("update");
       if (!copy) return undefined;
       const removed = await tx.delete(photos).where(eq(photos.copyId, copyId)).returning({ fileKey: photos.fileKey });
       await tx.delete(copies).where(eq(copies.id, copyId));
-      return removed.map((photo) => photo.fileKey);
+      return { copy, fileKeys: removed.map((photo) => photo.fileKey) };
     });
-    if (!fileKeys) return c.json({ error: "No such Copy" }, 404);
-    await photoStore.remove(fileKeys);
+    if (!deleted) return c.json({ error: "No such Copy" }, 404);
+    await mirror.copyDeleted(deleted.copy);
+    await photoStore.remove(deleted.fileKeys);
     return c.body(null, 204);
   });
 
