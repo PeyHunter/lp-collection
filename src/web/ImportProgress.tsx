@@ -22,7 +22,7 @@ export function ImportProgress({ initial, onFinished }: { initial: Progress | nu
 
   if (!running) return null;
   return (
-    <p className="notice import-progress" role="status">
+    <p className="notice import-progress" aria-live="polite">
       Importing your Discogs collection…{" "}
       {progress.total === null ? "" : (
         <b className="tnum">
