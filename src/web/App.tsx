@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { BrowseScreen } from "./BrowseScreen.tsx";
 import { CollectionScreen } from "./CollectionScreen.tsx";
+import { chosenCollection } from "./Members.tsx";
 import { CopyScreen } from "./CopyScreen.tsx";
 import { Header } from "./Header.tsx";
 import { LookupScreen } from "./LookupScreen.tsx";
@@ -19,6 +20,7 @@ export type Me = {
   showValues: boolean;
   sellerSettingsUrl: string;
   discogsImport: ImportProgress | null;
+  collections: { id: string; ownerDiscogsUsername: string; own: boolean }[];
 };
 
 const loginProblems = {
@@ -68,7 +70,8 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
       .then(async (response) => {
         if (response.status === 401) return setSession({ kind: "signed-out" });
         if (!response.ok) return setSession({ kind: "unreachable" });
-        setSession({ kind: "signed-in", me: (await response.json()) as Me });
+        const me = (await response.json()) as Me;
+        setSession({ kind: "signed-in", me: { ...me, collection: chosenCollection(me) } });
       })
       .catch(() => setSession({ kind: "unreachable" }));
   }, []);
@@ -114,7 +117,9 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
             <ShelfScreen key={route.shelfId} me={session.me} shelfId={route.shelfId} />
           ) : (
             <CollectionScreen
+              key={session.me.collection.id}
               me={session.me}
+              onSwitched={(collection) => changeMe({ collection })}
               onCurrencyChanged={(currency) => changeMe({ currency })}
               onShowValuesChanged={(showValues) => changeMe({ showValues })}
               onLoggedOut={() => setSession({ kind: "signed-out" })}

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { isIPv6 } from "node:net";
-import { and, eq, gt, isNull, like, lt, lte, notLike, or, sql, TransactionRollbackError } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, like, lt, lte, notLike, or, sql, TransactionRollbackError } from "drizzle-orm";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -171,10 +171,19 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
     const user = await currentUser(c);
     if (!user) return c.json({ error: "Not logged in" }, 401);
     const [collection] = await db.select({ id: collections.id }).from(collections).where(eq(collections.ownerId, user.id));
+    const mine = await db
+      .select({ id: collections.id, ownerDiscogsUsername: users.discogsUsername, ownerId: collections.ownerId })
+      .from(memberships)
+      .innerJoin(collections, eq(collections.id, memberships.collectionId))
+      .innerJoin(users, eq(users.id, collections.ownerId))
+      .where(eq(memberships.userId, user.id))
+      .orderBy(sql`${collections.ownerId} <> ${user.id}`, asc(sql`lower(${users.discogsUsername})`));
     return c.json({
       discogsUsername: user.discogsUsername,
       canCreateInvites: await isAppOwner(user),
       collection: { id: collection!.id },
+      /** Every Collection the User is a Member of, their own first. */
+      collections: mine.map(({ id, ownerDiscogsUsername, ownerId }) => ({ id, ownerDiscogsUsername, own: ownerId === user.id })),
       currency: user.currency,
       showValues: user.showValues,
       sellerSettingsUrl: discogs.sellerSettingsUrl,

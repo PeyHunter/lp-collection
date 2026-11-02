@@ -90,6 +90,8 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
     get importer() {
       return importer;
     },
+    /** Every route the app answers, for tests that go through all of them. */
+    routes: () => app.routes.map(({ method, path }) => ({ method, path })),
     now: () => now,
     clock: {
       advance(ms: number) {
