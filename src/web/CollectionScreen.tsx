@@ -9,6 +9,7 @@ import { Grade } from "./Grade.tsx";
 import { queryFromSearch, searchFromQuery, shownQuery, useCopyList, type ListQuery } from "./copy-list.ts";
 import { ListControls, periodName } from "./ListControls.tsx";
 import { ImportProgress } from "./ImportProgress.tsx";
+import { CollectionSwitcher, collectionTitle, MembersSection } from "./Members.tsx";
 import { Overview } from "./Overview.tsx";
 import { locationLabel } from "./shelf-grid.ts";
 import { followLink, useHandoff } from "./navigation.ts";
@@ -57,11 +58,13 @@ export function CollectionScreen({
   onCurrencyChanged,
   onShowValuesChanged,
   onLoggedOut,
+  onSwitched,
 }: {
   me: Me;
   onCurrencyChanged: (currency: Currency) => void;
   onShowValuesChanged: (showValues: boolean) => void;
   onLoggedOut: () => void;
+  onSwitched: (collection: Me["collection"]) => void;
 }) {
   const [chosenQuery, setQuery] = useState(() => queryFromSearch(location.search));
   const query = shownQuery(chosenQuery, me.showValues);
@@ -99,8 +102,10 @@ export function CollectionScreen({
 
   return (
     <>
-      <Header kicker="LP-Collection" title="Your Collection" end={<ValuesSwitch showValues={me.showValues} onChanged={onShowValuesChanged} />} />
+      <Header kicker="LP-Collection" title={collectionTitle(me)} end={<ValuesSwitch showValues={me.showValues} onChanged={onShowValuesChanged} />} />
       <main className="content-grid">
+        <CollectionSwitcher me={me} onSwitched={onSwitched} />
+
         <ImportProgress initial={me.discogsImport} onFinished={reloadAfterImport} />
 
         <Overview collectionId={me.collection.id} reloadKey={`${me.currency} ${me.showValues} ${attempt} ${values.fetching} ${values.valued.size}`} />
@@ -213,6 +218,8 @@ export function CollectionScreen({
             </button>
           )}
         </section>
+
+        <MembersSection me={me} />
 
         {me.canCreateInvites && <InviteCreator />}
 

@@ -43,6 +43,7 @@ test("a valid Invite lets a new person log in with Discogs and gives them their 
     body: { discogsUsername: "friend", canCreateInvites: false, collection: { id: expect.any(String) }, currency: "DKK", showValues: true,
       sellerSettingsUrl: "/fake-discogs/settings/seller",
       discogsImport: { status: "done", imported: 0, total: 0 },
+      collections: [{ id: expect.any(String), ownerDiscogsUsername: "friend", own: true }],
     },
   });
   expect(friend.body.collection.id).not.toBe(ownerMe.body.collection.id);

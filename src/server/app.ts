@@ -5,6 +5,7 @@ import type { Database } from "./db.ts";
 import type { DiscogsGateway } from "./discogs.ts";
 import type { ExchangeRates } from "./exchange-rates.ts";
 import { membersOnly } from "./member.ts";
+import { createMemberRoutes } from "./members.ts";
 import type { Importer } from "./discogs-import.ts";
 import type { Mirror } from "./mirror.ts";
 import type { SecretBox } from "./secret-box.ts";
@@ -36,6 +37,7 @@ export function createApp(dependencies: AppDependencies) {
   app.use("/api/collections/:collectionId/*", membersOnly(dependencies));
   app.route("/", createCollectionRoutes(dependencies));
   app.route("/", createShelfRoutes(dependencies));
+  app.route("/", createMemberRoutes(dependencies));
 
   return app;
 }

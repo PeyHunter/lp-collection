@@ -815,3 +815,8 @@ textarea.input {
 .crate-value { font-family: var(--display); font-size: var(--text-l); font-weight: 700; }
 .crate-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--space-s); }
 .crate-position { font-size: var(--text-sm); color: var(--ink-dim); }
+
+.collection-switcher { margin-block-end: calc(var(--space-xl) * -0.5); }
+.member-row { min-block-size: auto; }
+.inline-form { display: flex; gap: var(--space-xs); }
+.inline-form .input { flex: 1; min-inline-size: 0; }

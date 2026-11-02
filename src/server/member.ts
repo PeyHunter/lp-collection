@@ -2,10 +2,10 @@ import { and, eq } from "drizzle-orm";
 import { createMiddleware } from "hono/factory";
 import { sessionUser } from "./access.ts";
 import type { AppDependencies } from "./app.ts";
-import { memberships } from "./schema.ts";
+import { collections, memberships } from "./schema.ts";
 import type { Valuer } from "./valuation.ts";
 
-export type Member = Valuer & { collectionId: string; sellerSettingsMissing: boolean; showValues: boolean };
+export type Member = Valuer & { collectionId: string; isOwner: boolean; sellerSettingsMissing: boolean; showValues: boolean };
 export type MemberEnv = { Variables: { member: Member } };
 
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,8 +17,9 @@ export function membersOnly({ database, secretBox, now }: AppDependencies) {
     const collectionId = c.req.param("collectionId") ?? "";
     const [membership] = uuidPattern.test(collectionId)
       ? await database.db
-          .select()
+          .select({ ownerId: collections.ownerId })
           .from(memberships)
+          .innerJoin(collections, eq(collections.id, memberships.collectionId))
           .where(and(eq(memberships.collectionId, collectionId), eq(memberships.userId, user.id)))
       : [];
     if (!membership) return c.json({ error: "No such Collection" }, 404);
@@ -29,6 +30,7 @@ export function membersOnly({ database, secretBox, now }: AppDependencies) {
       showValues: user.showValues,
       auth: { token: secretBox.open(user.discogsAccessToken), secret: secretBox.open(user.discogsAccessSecret) },
       collectionId,
+      isOwner: membership.ownerId === user.id,
     });
     await next();
   });
