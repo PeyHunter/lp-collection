@@ -13,6 +13,8 @@ COPY --from=build /app/dist ./dist
 COPY package.json ./
 COPY drizzle ./drizzle
 COPY src/server ./src/server
+# The server shares the shelf grid maths with the phone UI.
+COPY src/web/shelf-grid.ts ./src/web/shelf-grid.ts
 USER node
 EXPOSE 3000
 CMD ["node", "src/server/main.ts"]
