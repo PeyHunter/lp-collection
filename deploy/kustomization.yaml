@@ -5,5 +5,6 @@ resources:
   - postgres.yaml
   - app.yaml
   - refresh.yaml
+  - backup.yaml
   - cloudflared.yaml
   - network-policy.yaml

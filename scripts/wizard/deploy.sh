@@ -262,6 +262,13 @@ else
 fi
 pause
 
+if has_secret lp-collection-backup; then
+  say "The backup token already exists, so it stays as it is."
+else
+  save_secret lp-collection-backup BACKUP_TOKEN "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  say "Made a random token the nightly backup uses to copy Photos from the app."
+fi
+
 stage "Discogs login keys"
 if has_secret lp-collection-discogs; then
   say "The Discogs keys are already in the cluster. Nothing to do here."
