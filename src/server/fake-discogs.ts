@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { conditions, lookupPageSize, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type LookupQuery, type Money, type Release } from "./discogs.ts";
+import { collectionPageSize, conditions, lookupPageSize, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type LookupQuery, type Money, type Release } from "./discogs.ts";
 import { converter, sampleRatesPerEuro } from "./exchange-rates.ts";
 import { priceSuggestionsFrom } from "./real-discogs.ts";
 
@@ -21,6 +21,14 @@ export type FakeDiscogsScript = {
   priceSuggestionsDelayMs?: number;
   /** Every call that changes a Discogs collection fails while this is set. */
   collectionUnavailable?: boolean;
+  /** What each user's Discogs collection holds before the app touches it: Release ids, one item each. */
+  collections?: Record<string, number[]>;
+  /** What a user not named in `collections` holds, worked out at the user's first look. */
+  collectionFor?: (discogsUsername: string) => number[] | undefined;
+  /** Each page of a non-empty collection takes this long to list, so an import can be watched. */
+  collectionPageDelayMs?: number;
+  /** Listing any Discogs collection fails while this is set. */
+  collectionListUnavailable?: boolean;
   /** Calls that change these users' Discogs collections fail. */
   collectionUnavailableFor?: (discogsUsername: string) => boolean;
 };
@@ -33,6 +41,7 @@ export type FakeDiscogsRequest = (
   | { endpoint: "release"; discogsReleaseId: number }
   | { endpoint: "price-suggestions"; discogsReleaseId: number }
   | { endpoint: "stats"; discogsReleaseId: number; currency: DiscogsCurrency }
+  | { endpoint: "collection-page"; discogsUsername: string; page: number }
   | { endpoint: "collection-add"; discogsUsername: string; discogsReleaseId: number }
   | { endpoint: "collection-fields"; discogsUsername: string; discogsReleaseId: number; instanceId: number }
   | { endpoint: "collection-remove"; discogsUsername: string; discogsReleaseId: number; instanceId: number }
@@ -62,9 +71,18 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
   const calls = { startLogin: 0, finishLogin: 0 };
   const collections = new Map<string, FakeCollectionItem[]>();
   let nextInstanceId = 1000;
+  for (const [discogsUsername, releaseIds] of Object.entries(script.collections ?? {})) {
+    collections.set(
+      discogsUsername.toLowerCase(),
+      releaseIds.map((discogsReleaseId) => ({ discogsReleaseId, folderId: 1, instanceId: nextInstanceId++ })),
+    );
+  }
   const collectionOf = (discogsUsername: string) => {
     const key = discogsUsername.toLowerCase();
-    if (!collections.has(key)) collections.set(key, []);
+    if (!collections.has(key)) {
+      const releaseIds = script.collectionFor?.(discogsUsername) ?? [];
+      collections.set(key, releaseIds.map((discogsReleaseId) => ({ discogsReleaseId, folderId: 1, instanceId: nextInstanceId++ })));
+    }
     return collections.get(key)!;
   };
   function changeCollection(request: FakeDiscogsRequest & { discogsUsername: string }) {
@@ -149,6 +167,14 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
 
   return {
     collectionOf: (discogsUsername) => collectionOf(discogsUsername).map((item) => ({ ...item })),
+    async collectionPage(discogsUsername, page, auth) {
+      answer({ endpoint: "collection-page", discogsUsername, page, ...auth });
+      if (script.collectionListUnavailable) throw new Error("Fake Discogs is scripted to refuse listing collections");
+      const all = collectionOf(discogsUsername);
+      const items = all.slice((page - 1) * collectionPageSize, page * collectionPageSize).map(({ discogsReleaseId, folderId, instanceId }) => ({ discogsReleaseId, folderId, instanceId }));
+      if (items.length > 0 && script.collectionPageDelayMs) await new Promise((resolve) => setTimeout(resolve, script.collectionPageDelayMs));
+      return { items, pages: Math.max(1, Math.ceil(all.length / collectionPageSize)), total: all.length };
+    },
     async addToCollection(discogsUsername, discogsReleaseId, auth) {
       changeCollection({ endpoint: "collection-add", discogsUsername, discogsReleaseId, ...auth });
       const item = { discogsReleaseId, folderId: 1, instanceId: nextInstanceId++ };

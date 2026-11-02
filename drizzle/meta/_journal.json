@@ -85,6 +85,13 @@
       "when": 1793574799950,
       "tag": "0011_discogs_mirror",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793584785498,
+      "tag": "0012_discogs_import",
+      "breakpoints": true
     }
   ]
 }

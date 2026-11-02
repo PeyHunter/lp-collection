@@ -6,6 +6,7 @@ import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
 import type { Condition, Currency, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
 import { collectionValue, createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
 import { collectionCsv } from "./csv.ts";
+import { cacheRelease as cacheReleaseOnce } from "./releases.ts";
 import { createPhotoStore, maxPhotoBytes, readJpegSize } from "./photos.ts";
 import { uuidPattern, type Member, type MemberEnv } from "./member.ts";
 import { barcodeLookupCache, collectionValues, copies, photos, releases, valueSnapshots } from "./schema.ts";
@@ -183,17 +184,7 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     return held;
   }
 
-  async function cacheRelease(discogsReleaseId: number, auth: DiscogsAuth) {
-    const [cached] = await db.select({ id: releases.discogsReleaseId }).from(releases).where(eq(releases.discogsReleaseId, discogsReleaseId));
-    if (cached) return true;
-    const release = await discogs.release(discogsReleaseId, auth);
-    if (!release) return false;
-    await db
-      .insert(releases)
-      .values({ ...release, fetchedAt: now() })
-      .onConflictDoNothing();
-    return true;
-  }
+  const cacheRelease = (discogsReleaseId: number, auth: DiscogsAuth) => cacheReleaseOnce(database, discogs, now, discogsReleaseId, auth);
 
   async function photosOf(collectionId: string, copyIds: string[]) {
     const rows = copyIds.length === 0 ? [] : await db.select().from(photos).where(inArray(photos.copyId, copyIds)).orderBy(asc(photos.createdAt), asc(photos.id));

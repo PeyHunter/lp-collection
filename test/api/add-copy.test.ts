@@ -1,10 +1,13 @@
 import { expect, test } from "vitest";
 import { sampleReleases, type FakeRelease } from "../../src/server/fake-discogs.ts";
-import { invitedFriend, listCopies, logInWithCollection, saveCopy } from "../support/members.ts";
+import { invitedFriend, listCopies, logInWithCollection, saveCopy, type TestApp } from "../support/members.ts";
 import { createTestApp } from "../support/test-app.ts";
 
 const kindOfBlue = "886979891211";
 const discovery = "190295328709";
+
+/** What a test asked Discogs, leaving out the first-login import's look at each new User's Discogs collection. */
+const lookups = (app: TestApp) => app.discogs.requests.filter((request) => request.endpoint !== "collection-page");
 
 test("a barcode that matches one Release shows that Release with cover, artist, title, label, country and year", async () => {
   const app = await createTestApp({ discogs: { releases: sampleReleases } });
@@ -72,7 +75,7 @@ test("a barcode Discogs doesn't know finds no Releases, and something that isn't
   expect(notABarcode.status).toBe(400);
   expect(await notABarcode.json()).toEqual({ error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." });
   expect(tenDigits.status).toBe(400);
-  expect(app.discogs.requests).toHaveLength(1);
+  expect(lookups(app)).toHaveLength(1);
 });
 
 test("a 14-digit barcode is looked up like any other", async () => {
@@ -82,7 +85,7 @@ test("a 14-digit barcode is looked up like any other", async () => {
   const response = await owner.as(`/lookup?barcode=0${discovery}`);
 
   expect(response.status).toBe(200);
-  expect(app.discogs.requests).toMatchObject([{ endpoint: "search", barcode: `0${discovery}` }]);
+  expect(lookups(app)).toMatchObject([{ endpoint: "search", barcode: `0${discovery}` }]);
 });
 
 test("saving a picked Release creates a Copy with both conditions Very Good Plus, shown in the Collection", async () => {
@@ -173,7 +176,7 @@ test("Discogs is asked with the logged-in User's own Discogs token", async () =>
   await friend.as(`/lookup?barcode=${discovery}`);
 
   const [ownerIdentity, friendIdentity] = app.discogs.issuedIdentities;
-  expect(app.discogs.requests.map(({ token, secret }) => ({ token, secret }))).toEqual([
+  expect(lookups(app).map(({ token, secret }) => ({ token, secret }))).toEqual([
     { token: ownerIdentity!.accessToken, secret: ownerIdentity!.accessSecret },
     { token: friendIdentity!.accessToken, secret: friendIdentity!.accessSecret },
   ]);

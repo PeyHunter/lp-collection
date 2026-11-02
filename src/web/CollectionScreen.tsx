@@ -8,6 +8,7 @@ import { Cover } from "./Cover.tsx";
 import { Grade } from "./Grade.tsx";
 import { queryFromSearch, searchFromQuery, shownQuery, useCopyList, type ListQuery } from "./copy-list.ts";
 import { ListControls, periodName } from "./ListControls.tsx";
+import { ImportProgress } from "./ImportProgress.tsx";
 import { Overview } from "./Overview.tsx";
 import { locationLabel } from "./shelf-grid.ts";
 import { followLink, useHandoff } from "./navigation.ts";
@@ -69,6 +70,7 @@ export function CollectionScreen({
   const handoff = useHandoff();
   const { list, values, loadMore } = useCopyList(me.collection.id, query, `${me.currency} ${me.showValues} ${attempt}`);
   const moreButton = useRef<HTMLButtonElement>(null);
+  const reloadAfterImport = useCallback(() => setAttempt((count) => count + 1), []);
 
   const changeQuery = useCallback((next: ListQuery) => {
     setQuery(next);
@@ -99,6 +101,8 @@ export function CollectionScreen({
     <>
       <Header kicker="LP-Collection" title="Your Collection" end={<ValuesSwitch showValues={me.showValues} onChanged={onShowValuesChanged} />} />
       <main className="content-grid">
+        <ImportProgress initial={me.discogsImport} onFinished={reloadAfterImport} />
+
         <Overview collectionId={me.collection.id} reloadKey={`${me.currency} ${me.showValues} ${attempt} ${values.fetching} ${values.valued.size}`} />
 
         <section className="poster" aria-labelledby="records-heading">

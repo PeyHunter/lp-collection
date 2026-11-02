@@ -77,6 +77,7 @@ All helpers are in `.claude/skills/verify-lp-collection/bin/` and run with plain
 | `drive-shelf.ts` | `<run-id>` | drives the Shelf recipe in `features/shelf.md` on a fresh run and saves its screenshots and HTTP answers |
 | `drive-hide-values.ts` | `<run-id>` | drives the recipe in `features/hide-values.md` on a fresh run and saves its screenshots and HTTP answers |
 | `drive-discogs-mirror.ts` | `<run-id>` | drives the recipe in `features/discogs-mirror.md` on a fresh run and saves its screenshots and HTTP answers |
+| `drive-discogs-import.ts` | `<run-id>` | drives the recipe in `features/discogs-import.md` on a fresh run and saves its screenshots and HTTP answers |
 | `refresh.ts` | `<run-id>` | runs the monthly refresh once against the run (`main.ts refresh`), as the CronJob does |
 | `drive-value-history.ts` | `<run-id>` | drives the recipe in `features/value-history.md` on a fresh run and saves its screenshots and refresh output |
 | `drive-overview.ts` | `<run-id>` | drives the recipe in `features/overview.md` on a fresh run and saves its screenshots and HTTP answers |
