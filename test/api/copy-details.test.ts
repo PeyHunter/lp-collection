@@ -71,12 +71,13 @@ test("a note, Purchase price and purchase date can be set, are shown in the Coll
   expect(await copyPage(owner, id)).toEqual(cleared);
 });
 
-test("each detail changes on its own and leaves the others, the conditions and the Value alone, without asking Discogs", async () => {
+test("each detail changes on its own and leaves the others, the conditions and the Value alone, without fetching the Value again", async () => {
   const app = await createTestApp({ discogs: priced });
   const owner = await logInWithCollection(app);
   const { id } = await saved(owner);
   await changed(owner, id, { note: "Signed", purchasePrice: { amount: 100, currency: "DKK" }, purchaseDate: "2020-01-02" });
-  const asked = app.discogs.requests.length;
+  const valueRequests = () => app.discogs.requests.filter((request) => !request.endpoint.startsWith("collection-")).length;
+  const asked = valueRequests();
 
   await changed(owner, id, { purchaseDate: "2021-05-06" });
   await changed(owner, id, { note: "" });
@@ -90,7 +91,8 @@ test("each detail changes on its own and leaves the others, the conditions and t
     sleeveCondition: "Very Good Plus (VG+)",
     value: { value: 223.8, currency: "DKK" },
   });
-  expect(app.discogs.requests).toHaveLength(asked);
+  // The note goes to the Owner's Discogs collection (the mirror), but no Value is fetched again.
+  expect(valueRequests()).toBe(asked);
 });
 
 test("Gain is the Value minus the Purchase price, and is negative when the Copy is worth less than was paid", async () => {

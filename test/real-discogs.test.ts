@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, expect, test } from "vitest";
 import { createRealDiscogs } from "../src/server/real-discogs.ts";
 
-type Received = { method: string; path: string; headers: IncomingHttpHeaders; at: number };
+type Received = { method: string; path: string; headers: IncomingHttpHeaders; at: number; body: string };
 
 const kindOfBlueSearch = {
   pagination: { page: 1, pages: 1, per_page: 50, items: 2 },
@@ -74,9 +74,12 @@ const lostMasterRelease = {
 async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
   const received: Received[] = [];
   let throttled = 0;
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
     const path = request.url ?? "";
-    received.push({ method: request.method ?? "", path, headers: request.headers, at: performance.now() });
+    const at = performance.now();
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    received.push({ method: request.method ?? "", path, headers: request.headers, at, body });
     const json = (body: unknown) => {
       response.setHeader("Content-Type", "application/json");
       response.end(JSON.stringify(body));
@@ -119,6 +122,23 @@ async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
       json({ lowest_price: { currency: "EUR", value: 19.5 }, num_for_sale: 4, blocked_from_sale: false });
     } else if (path === "/marketplace/stats/1503928?curr_abbr=SEK") {
       json({ lowest_price: null, num_for_sale: null, blocked_from_sale: false });
+    } else if (request.method === "POST" && path === "/users/vinyl-fan/collection/folders/1/releases/2335811") {
+      response.statusCode = 201;
+      json({ instance_id: 77, resource_url: "https://api.discogs.com/users/vinyl-fan/collection/folders/1/releases/2335811/instances/77" });
+    } else if (path === "/users/vinyl-fan/collection/fields") {
+      json({
+        fields: [
+          { id: 4, name: "Media Condition", type: "dropdown", position: 1, public: true },
+          { id: 5, name: "Sleeve Condition", type: "dropdown", position: 2, public: true },
+          { id: 7, name: "Notes", type: "textarea", position: 3, public: true },
+        ],
+      });
+    } else if (request.method === "POST" && /^\/users\/vinyl-fan\/collection\/folders\/1\/releases\/2335811\/instances\/77\/fields\/[457]$/.test(path)) {
+      response.statusCode = 204;
+      response.end();
+    } else if (request.method === "DELETE" && path === "/users/vinyl-fan/collection/folders/1/releases/2335811/instances/77") {
+      response.statusCode = 204;
+      response.end();
     } else if (path === "/oauth/request_token") {
       response.end("oauth_token=request-token&oauth_token_secret=request-secret&oauth_callback_confirmed=true");
     } else if (path === "/oauth/access_token") {
@@ -406,4 +426,54 @@ test("the real gateway asks for the Lowest listing in the given currency, which 
   expect(await discogs.lowestListing(2335811, "EUR", auth)).toEqual({ amount: 19.5, currency: "EUR" });
   expect(await discogs.lowestListing(1503928, "SEK", auth)).toBeNull();
   expect(await discogs.lowestListing(404404, "EUR", auth)).toBeNull();
+});
+
+test("the real gateway adds a Release to the user's collection in Uncategorized and reads the new instance id", async () => {
+  const stub = await startDiscogsStub();
+
+  const item = await gateway(stub.url).addToCollection("vinyl-fan", 2335811, auth);
+
+  expect(item).toEqual({ discogsReleaseId: 2335811, folderId: 1, instanceId: 77 });
+  expect(stub.received.map(({ method, path }) => `${method} ${path}`)).toEqual(["POST /users/vinyl-fan/collection/folders/1/releases/2335811"]);
+  expect(oauthParams(stub.received[0]!.headers).oauth_token).toBe(auth.token);
+});
+
+test("the real gateway sets both conditions and the note on a collection item, finding each field by its name", async () => {
+  const stub = await startDiscogsStub();
+  const discogs = gateway(stub.url);
+  const item = { discogsReleaseId: 2335811, folderId: 1, instanceId: 77 };
+
+  await discogs.setCollectionFields("vinyl-fan", item, { mediaCondition: "Near Mint (NM or M-)", sleeveCondition: "Generic", note: "Signed" }, auth);
+  await discogs.setCollectionFields("vinyl-fan", item, { mediaCondition: "Good (G)", sleeveCondition: "No Cover", note: null }, auth);
+
+  const instance = "/users/vinyl-fan/collection/folders/1/releases/2335811/instances/77";
+  expect(stub.received.map(({ method, path, body }) => `${method} ${path} ${body}`)).toEqual([
+    "GET /users/vinyl-fan/collection/fields ",
+    `POST ${instance}/fields/4 {"value":"Near Mint (NM or M-)"}`,
+    `POST ${instance}/fields/5 {"value":"Generic"}`,
+    `POST ${instance}/fields/7 {"value":"Signed"}`,
+    `POST ${instance}/fields/4 {"value":"Good (G)"}`,
+    `POST ${instance}/fields/5 {"value":"No Cover"}`,
+    `POST ${instance}/fields/7 {"value":""}`,
+  ]);
+  expect(stub.received[1]!.headers["content-type"]).toBe("application/json");
+});
+
+test("the real gateway removes a collection item, and an item Discogs no longer has counts as removed", async () => {
+  const stub = await startDiscogsStub();
+  const discogs = gateway(stub.url);
+
+  await discogs.removeFromCollection("vinyl-fan", { discogsReleaseId: 2335811, folderId: 1, instanceId: 77 }, auth);
+  await discogs.removeFromCollection("vinyl-fan", { discogsReleaseId: 2335811, folderId: 1, instanceId: 78 }, auth);
+
+  expect(stub.received.map(({ method, path }) => `${method} ${path}`)).toEqual([
+    "DELETE /users/vinyl-fan/collection/folders/1/releases/2335811/instances/77",
+    "DELETE /users/vinyl-fan/collection/folders/1/releases/2335811/instances/78",
+  ]);
+});
+
+test("a collection change Discogs refuses throws, so the mirror tries it again later", async () => {
+  const stub = await startDiscogsStub();
+
+  await expect(gateway(stub.url).addToCollection("vinyl-fan", 1503928, auth)).rejects.toThrow(/HTTP 404/);
 });

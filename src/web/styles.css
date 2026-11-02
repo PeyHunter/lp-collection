@@ -776,6 +776,7 @@ textarea.input {
 .overview-count b { font-weight: 600; color: var(--ink); }
 .overview-graph .history-chart { block-size: 6rem; }
 
+.not-synced { color: var(--accent); }
 .browse-link { justify-self: start; }
 
 /* Browse: one cover at a time, swiped sideways. Native scroll snapping keeps the swipe smooth on iPhone. */

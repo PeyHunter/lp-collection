@@ -53,12 +53,24 @@ export function searchFromQuery(query: ListQuery, { forApi = false } = {}) {
   return params.toString();
 }
 
-type Page = { copies: CopyView[]; groups: ListGroup[]; total: number; next: string | null; facets: Facets | null; sellerSettingsMissing?: boolean };
+type Page = { copies: CopyView[]; groups: ListGroup[]; total: number; next: string | null; facets: Facets | null; sellerSettingsMissing?: boolean; notSyncedYet?: string[] };
 
 export type CopyList =
   | { kind: "loading" }
   | { kind: "failed" }
-  | { kind: "loaded"; copies: CopyView[]; groups: ListGroup[]; total: number; next: string | null; facets: Facets; more: "idle" | "loading" | "failed"; sellerSettingsMissing: boolean; sort: SortName };
+  | {
+      kind: "loaded";
+      copies: CopyView[];
+      groups: ListGroup[];
+      total: number;
+      next: string | null;
+      facets: Facets;
+      more: "idle" | "loading" | "failed";
+      sellerSettingsMissing: boolean;
+      sort: SortName;
+      /** Copies with a change still to reach the Owner's Discogs collection. */
+      notSyncedYet: Set<string>;
+    };
 
 type Action = { type: "load" } | { type: "failed" } | { type: "first-page"; page: Page; sort: SortName } | { type: "more" } | { type: "more-failed" } | { type: "next-page"; page: Page };
 
@@ -77,7 +89,15 @@ function reduce(state: CopyList, action: Action): CopyList {
     case "failed":
       return { kind: "failed" };
     case "first-page":
-      return { kind: "loaded", ...action.page, facets: action.page.facets ?? { periods: [], genres: [] }, sellerSettingsMissing: action.page.sellerSettingsMissing ?? false, sort: action.sort, more: "idle" };
+      return {
+        kind: "loaded",
+        ...action.page,
+        facets: action.page.facets ?? { periods: [], genres: [] },
+        sellerSettingsMissing: action.page.sellerSettingsMissing ?? false,
+        sort: action.sort,
+        more: "idle",
+        notSyncedYet: new Set(action.page.notSyncedYet),
+      };
     case "more":
       return state.kind === "loaded" ? { ...state, more: "loading" } : state;
     case "more-failed":
@@ -86,7 +106,14 @@ function reduce(state: CopyList, action: Action): CopyList {
       if (state.kind !== "loaded") return state;
       const known = new Set(state.copies.map((copy) => copy.id));
       const fresh = action.page.copies.filter((copy) => !known.has(copy.id));
-      return { ...state, copies: [...state.copies, ...fresh], groups: appendGroups(state.groups, action.page.groups), next: action.page.next, more: "idle" };
+      return {
+        ...state,
+        copies: [...state.copies, ...fresh],
+        groups: appendGroups(state.groups, action.page.groups),
+        next: action.page.next,
+        more: "idle",
+        notSyncedYet: new Set([...state.notSyncedYet, ...(action.page.notSyncedYet ?? [])]),
+      };
     }
   }
 }

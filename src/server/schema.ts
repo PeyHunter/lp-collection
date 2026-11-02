@@ -164,6 +164,9 @@ export const copies = pgTable(
     purchaseCurrency: currency("purchase_currency"),
     purchaseDate: date("purchase_date", { mode: "string" }),
     sectionId: uuid("section_id").references(() => sections.id, { onDelete: "set null" }),
+    /** The Copy's item in the Owner's Discogs collection, once the mirror has added it. */
+    discogsFolderId: integer("discogs_folder_id"),
+    discogsInstanceId: integer("discogs_instance_id"),
     createdAt: at("created_at").notNull(),
   },
   (table) => [
@@ -197,6 +200,33 @@ export const collectionValues = pgTable(
     recordedAt: at("recorded_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.refreshId, table.collectionId] }), index("collection_values_collection_idx").on(table.collectionId, table.recordedAt)],
+);
+
+export const mirrorJobKind = pgEnum("mirror_job_kind", ["add", "update", "remove"]);
+
+/**
+ * One change to a Copy still to be made in the Owner's Discogs collection. Jobs for a Copy run oldest first, and a job
+ * that fails waits longer each time before it is tried again. A "remove" keeps the Discogs item, as the Copy is gone.
+ */
+export const mirrorJobs = pgTable(
+  "mirror_jobs",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    copyId: uuid("copy_id").notNull(),
+    collectionId: uuid("collection_id")
+      .notNull()
+      .references(() => collections.id),
+    kind: mirrorJobKind("kind").notNull(),
+    discogsReleaseId: integer("discogs_release_id").notNull(),
+    discogsFolderId: integer("discogs_folder_id"),
+    discogsInstanceId: integer("discogs_instance_id"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: at("next_attempt_at").notNull(),
+    claimedUntil: at("claimed_until"),
+    lastError: text("last_error"),
+    createdAt: at("created_at").notNull(),
+  },
+  (table) => [index("mirror_jobs_copy_idx").on(table.copyId, table.id), index("mirror_jobs_due_idx").on(table.nextAttemptAt)],
 );
 
 /** One Value fetch for a Copy, kept so the Value history can be drawn. A null Value means Discogs had no suggestion. */

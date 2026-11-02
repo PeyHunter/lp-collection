@@ -12,7 +12,7 @@ import { PlaceSection } from "./PlaceSection.tsx";
 import { Amount, formatAmount, hasValues, HistoryChart, historyMonth, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
 
 /** `valueHistory` comes only with the first load; later answers about the Copy keep the one already shown. */
-type Loaded = { copy: CopyView; sellerSettingsMissing?: boolean; valueHistory?: ValueHistory };
+type Loaded = { copy: CopyView; sellerSettingsMissing?: boolean; valueHistory?: ValueHistory; notSyncedYet?: boolean };
 
 type CopyState = { kind: "loading" } | { kind: "failed" } | { kind: "not-found" } | ({ kind: "loaded" } & Loaded);
 
@@ -63,8 +63,8 @@ export function CopyScreen({ me, copyId, onShowValuesChanged }: { me: Me; copyId
       const body = (await response?.json().catch(() => undefined)) as { error?: string } | undefined;
       return body?.error ?? "Check your connection and try again.";
     }
-    const { copy } = (await response.json()) as Loaded;
-    setState((current) => (current.kind === "loaded" ? { ...current, copy } : current));
+    const { copy, notSyncedYet } = (await response.json()) as Loaded;
+    setState((current) => (current.kind === "loaded" ? { ...current, copy, notSyncedYet } : current));
     return undefined;
   }
 
@@ -87,6 +87,9 @@ export function CopyScreen({ me, copyId, onShowValuesChanged }: { me: Me; copyId
         {state.kind === "loaded" && (
           <>
             <TitleSection copy={state.copy} />
+            {state.notSyncedYet && (
+              <p className="hint not-synced">Not synced to Discogs yet. The app keeps trying; the change is saved here either way.</p>
+            )}
             {me.showValues &&
               hasValues(state.copy) &&
               (state.sellerSettingsMissing ? (

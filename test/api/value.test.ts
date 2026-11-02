@@ -138,17 +138,18 @@ test("changing the Media condition fetches the Value for the new condition at on
   ]);
 });
 
-test("the Sleeve condition takes the Discogs sleeve grades and changing it alone asks Discogs nothing", async () => {
+test("the Sleeve condition takes the Discogs sleeve grades and changing it alone fetches no Value", async () => {
   const app = await createTestApp({ discogs: priced });
   const owner = await logInWithCollection(app);
   const { copy } = await saved(owner, discovery);
-  const asked = app.discogs.requests.length;
+  const valueRequests = () => app.discogs.requests.filter((request) => !request.endpoint.startsWith("collection-")).length;
+  const asked = valueRequests();
 
   const response = await changeConditions(owner, copy.id, { sleeveCondition: "No Cover" });
 
   expect(response.status).toBe(200);
   expect(((await response.json()) as CopyAnswer).copy).toMatchObject({ sleeveCondition: "No Cover", value: { value: 223.8 } });
-  expect(app.discogs.requests).toHaveLength(asked);
+  expect(valueRequests()).toBe(asked);
 });
 
 test("a condition that isn't on the Discogs scale is refused and changes nothing", async () => {

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { conditions, isCurrency, lookupPageSize, type Condition, type DiscogsAuth, type DiscogsGateway, type LookupQuery, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
+import { conditions, isCurrency, lookupPageSize, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsGateway, type LookupQuery, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
 
 export type RealDiscogsOptions = {
   consumerKey: string;
@@ -39,10 +39,11 @@ export function createRealDiscogs({
     if (turn > now) await sleep(turn - now);
   }
 
-  async function send(method: "GET" | "POST", path: string, tokenSecret: string, params: Record<string, string>, deadline: number) {
+  async function send(method: "GET" | "POST" | "DELETE", path: string, tokenSecret: string, params: Record<string, string>, deadline: number, json?: object) {
     await waitForTurn(path, deadline);
     return fetch(`${apiBaseUrl}${path}`, {
       method,
+      body: json && JSON.stringify(json),
       signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 0) + requestTimeoutMs),
       headers: {
         Authorization: authorizationHeader({
@@ -53,7 +54,7 @@ export function createRealDiscogs({
           oauth_timestamp: String(Math.floor(Date.now() / 1000)),
           ...params,
         }),
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": json ? "application/json" : "application/x-www-form-urlencoded",
         "User-Agent": userAgent,
       },
     });
@@ -66,9 +67,14 @@ export function createRealDiscogs({
   }
 
   async function getResponseAs(auth: DiscogsAuth, path: string) {
+    return requestAs(auth, "GET", path);
+  }
+
+  /** One request as the user, sent again after a short wait while Discogs answers 429 (too many requests). */
+  async function requestAs(auth: DiscogsAuth, method: "GET" | "POST" | "DELETE", path: string, json?: object) {
     const deadline = Date.now() + maxWaitMs;
     for (let retry = 0; ; retry++) {
-      const response = await send("GET", path, auth.secret, { oauth_token: auth.token }, deadline);
+      const response = await send(method, path, auth.secret, { oauth_token: auth.token }, deadline, json);
       const backoff = backoffMs[retry];
       if (response.status === 429 && backoff !== undefined && Date.now() + backoff <= deadline) {
         await sleep(backoff);
@@ -93,7 +99,55 @@ export function createRealDiscogs({
     return { token, secret };
   }
 
+  async function changeAs(auth: DiscogsAuth, method: "POST" | "DELETE", path: string, json?: object) {
+    const response = await requestAs(auth, method, path, json);
+    if (!response.ok) throw new Error(`Discogs answered ${method} ${path} with HTTP ${response.status}: ${await response.text()}`);
+    return response;
+  }
+
+  /** Each Discogs user numbers their collection fields; the default Media Condition, Sleeve Condition and Notes are found by name. */
+  const fieldIds = new Map<string, Promise<Record<keyof CollectionFields, number>>>();
+  function collectionFieldIds(discogsUsername: string, auth: DiscogsAuth) {
+    const key = discogsUsername.toLowerCase();
+    let ids = fieldIds.get(key);
+    if (!ids) {
+      ids = (async () => {
+        const { fields = [] } = ((await getAs(auth, `/users/${encodeURIComponent(discogsUsername)}/collection/fields`)) ?? {}) as { fields?: { id: number; name: string }[] };
+        const idOf = (name: string) => {
+          const field = fields.find((each) => each.name.toLowerCase() === name.toLowerCase());
+          if (!field) throw new Error(`${discogsUsername}'s Discogs collection has no "${name}" field`);
+          return field.id;
+        };
+        return { mediaCondition: idOf("Media Condition"), sleeveCondition: idOf("Sleeve Condition"), note: idOf("Notes") };
+      })();
+      ids.catch(() => fieldIds.delete(key));
+      fieldIds.set(key, ids);
+    }
+    return ids;
+  }
+
+  const itemPath = (discogsUsername: string, { folderId, discogsReleaseId, instanceId }: CollectionItem) =>
+    `/users/${encodeURIComponent(discogsUsername)}/collection/folders/${folderId}/releases/${discogsReleaseId}/instances/${instanceId}`;
+
   return {
+    async addToCollection(discogsUsername, discogsReleaseId, auth) {
+      const folderId = 1;
+      const response = await changeAs(auth, "POST", `/users/${encodeURIComponent(discogsUsername)}/collection/folders/${folderId}/releases/${discogsReleaseId}`);
+      const { instance_id: instanceId } = (await response.json()) as { instance_id?: unknown };
+      if (typeof instanceId !== "number") throw new Error(`Discogs added Release ${discogsReleaseId} to ${discogsUsername}'s collection but sent no instance id`);
+      return { discogsReleaseId, folderId, instanceId };
+    },
+    async setCollectionFields(discogsUsername, item, fields, auth) {
+      const ids = await collectionFieldIds(discogsUsername, auth);
+      for (const name of ["mediaCondition", "sleeveCondition", "note"] as const) {
+        await changeAs(auth, "POST", `${itemPath(discogsUsername, item)}/fields/${ids[name]}`, { value: fields[name] ?? "" });
+      }
+    },
+    async removeFromCollection(discogsUsername, item, auth) {
+      const path = itemPath(discogsUsername, item);
+      const response = await requestAs(auth, "DELETE", path);
+      if (!response.ok && response.status !== 404) throw new Error(`Discogs answered DELETE ${path} with HTTP ${response.status}: ${await response.text()}`);
+    },
     sellerSettingsUrl: `${webBaseUrl}/settings/seller`,
     async priceSuggestions(discogsReleaseId, auth) {
       return priceSuggestionsFrom(await getResponseAs(auth, `/marketplace/price_suggestions/${discogsReleaseId}`));
