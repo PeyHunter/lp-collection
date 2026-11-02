@@ -16,10 +16,10 @@ When a User logs in for the first time, everything already in their Discogs coll
 
 ## Driving it with verify-lp-collection
 
-Preconditions: baseline state, `doctor.ts` reports `HEALTHY`. The fake Discogs gives a username starting with `with-discogs-collection` 120 records to import, and takes 1.5 s per page so the progress can be seen.
+Preconditions: baseline state, `doctor.ts` reports `HEALTHY`. The fake Discogs gives a username starting with `with-discogs-collection` 250 records to import, and takes 1.5 s per page so the progress can be seen. The notice appears once the first page says how many records there are.
 
-- Log in as `owner` and create an Invite. Through it, log in as `with-discogs-collection-demo`: the notice shows, then the Overview says 120 Copies and the notice is gone.
-- Log in again as the same User: still 120 Copies, no notice.
+- Log in as `owner` and create an Invite. Through it, log in as `with-discogs-collection-demo`: the notice shows, then the Overview says 250 Copies and the notice is gone.
+- Log in again as the same User: still 250 Copies, no notice.
 - `node .claude/skills/verify-lp-collection/bin/drive-discogs-import.ts <run-id>` drives all of this and saves `import-running.png`, `import-done.png`, `me-after-import.http.txt` and `console-errors.json` (only the `401` before login is expected).
 
 ## Gotchas
