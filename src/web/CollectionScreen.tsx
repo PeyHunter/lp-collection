@@ -13,17 +13,17 @@ import { CollectionSwitcher, collectionTitle, MembersSection } from "./Members.t
 import { Overview } from "./Overview.tsx";
 import { locationLabel } from "./shelf-grid.ts";
 import { followLink, useHandoff } from "./navigation.ts";
-import { currencyUnit, hasValues, RowValue, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
+import { currencyUnit, hasValues, RowValue, SellerSettingsHint, ValuesSwitch } from "./Value.tsx";
 
 const monthFormat = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 const bandFormat = new Intl.NumberFormat("da-DK");
 
-function GroupHeading({ sort, groupKey, currency, sellerSettingsMissing }: { sort: SortName; groupKey: string; currency: Currency; sellerSettingsMissing: boolean }) {
+function GroupHeading({ sort, groupKey, currency }: { sort: SortName; groupKey: string; currency: Currency }) {
   const unit = <small>{currencyUnit(currency)}</small>;
   if (groupKey === "unknown") return <>Year unknown</>;
   switch (sort) {
     case "value":
-      if (groupKey === "none") return sellerSettingsMissing ? <>Waits for seller settings</> : <>No Value yet</>;
+      if (groupKey === "none") return <>No Value yet</>;
       if (groupKey === "0") return <>Under 10{unit}</>;
       return (
         <>
@@ -123,9 +123,7 @@ export function CollectionScreen({
           )}
         </section>
 
-        {me.showValues && loaded?.sellerSettingsMissing && (
-          <SellerSettingsGuide url={me.sellerSettingsUrl} collectionId={me.collection.id} onValued={() => setAttempt((count) => count + 1)} />
-        )}
+        {me.showValues && loaded?.sellerSettingsMissing && <SellerSettingsHint url={me.sellerSettingsUrl} />}
 
         {handoff && (
           <p className="notice done" role="status">
@@ -185,7 +183,7 @@ export function CollectionScreen({
                 <section className={group.key === "none" || group.key === "unknown" ? "group muted" : "group"} key={group.key}>
                   <h3 className="group-h">
                     <span className="poster-h">
-                      <GroupHeading sort={loaded.sort} groupKey={group.key} currency={me.currency} sellerSettingsMissing={loaded.sellerSettingsMissing} />
+                      <GroupHeading sort={loaded.sort} groupKey={group.key} currency={me.currency} />
                     </span>
                     <span className="n tnum">
                       {group.total} {group.total === 1 ? "LP" : "LPs"}
@@ -198,7 +196,6 @@ export function CollectionScreen({
                         copy={copy}
                         fresh={handoff?.kind === "saved" && copy.id === handoff.copyId}
                         showValues={me.showValues}
-                        sellerSettingsMissing={loaded.sellerSettingsMissing}
                         fetching={values.fetching}
                         notSynced={loaded.notSyncedYet.has(copy.id)}
                       />
@@ -242,14 +239,12 @@ function CopyRow({
   copy,
   fresh,
   showValues,
-  sellerSettingsMissing,
   fetching,
   notSynced,
 }: {
   copy: CopyView;
   fresh: boolean;
   showValues: boolean;
-  sellerSettingsMissing: boolean;
   fetching: boolean;
   notSynced: boolean;
 }) {
@@ -275,7 +270,7 @@ function CopyRow({
         {copy.location && <span className="row-meta row-place">{locationLabel(copy.location)}</span>}
         {notSynced && <span className="row-meta not-synced">Not synced to Discogs yet</span>}
       </span>
-      {showValues && hasValues(copy) && <RowValue value={copy.value} sellerSettingsMissing={sellerSettingsMissing} fetching={fetching} />}
+      {showValues && hasValues(copy) && <RowValue value={copy.value} fetching={fetching} />}
     </li>
   );
 }

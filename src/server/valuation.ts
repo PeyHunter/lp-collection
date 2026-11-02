@@ -4,7 +4,10 @@ import { discogsCurrencies, type Condition, type Currency, type DiscogsAuth, typ
 import type { ExchangeRates } from "./exchange-rates.ts";
 import { copies, users, valueSnapshots } from "./schema.ts";
 
-/** The latest Value fetched for a Copy's current Media condition. A null `value` means Discogs had no suggestion. */
+/**
+ * The latest Value fetched for a Copy's current Media condition: Discogs' suggestion for that condition, or the Lowest
+ * listing while the User has no Discogs seller settings. A null `value` means Discogs had neither.
+ */
 export type CopyValue = {
   mediaCondition: Condition;
   value: number | null;
@@ -15,7 +18,8 @@ export type CopyValue = {
 
 export type Valuer = { userId: string; currency: Currency; auth: DiscogsAuth };
 
-export type ValuationOutcome = "valued" | "seller-settings-missing" | "unavailable";
+/** `sellerSettingsMissing` says the Value is the Lowest listing, because Discogs suggests prices only with seller settings. */
+export type ValuationOutcome = { kind: "valued"; sellerSettingsMissing: boolean } | { kind: "unavailable" };
 
 type ValuedCopy = { id: string; discogsReleaseId: number; mediaCondition: Condition };
 
@@ -41,25 +45,22 @@ export function createValuation({ database, discogs, exchangeRates, now }: { dat
     async fetchValue(copy: ValuedCopy, { userId, currency, auth }: Valuer, refreshId?: string): Promise<ValuationOutcome> {
       try {
         const suggestions = await discogs.priceSuggestions(copy.discogsReleaseId, auth);
-        if (suggestions.kind === "seller-settings-missing") {
-          await markSellerSettings(userId, true);
-          return "seller-settings-missing";
-        }
-        const lowest = await discogs.lowestListing(copy.discogsReleaseId, statsCurrency(currency), auth);
+        const sellerSettingsMissing = suggestions.kind === "seller-settings-missing";
+        const lowestListing = await inUserCurrency(await discogs.lowestListing(copy.discogsReleaseId, statsCurrency(currency), auth), currency);
         await db.insert(valueSnapshots).values({
           copyId: copy.id,
           mediaCondition: copy.mediaCondition,
-          value: await inUserCurrency(suggestions.prices[copy.mediaCondition], currency),
-          lowestListing: await inUserCurrency(lowest, currency),
+          value: sellerSettingsMissing ? lowestListing : await inUserCurrency(suggestions.prices[copy.mediaCondition], currency),
+          lowestListing,
           currency,
           fetchedAt: now(),
           refreshId,
         });
-        await markSellerSettings(userId, false);
-        return "valued";
+        await markSellerSettings(userId, sellerSettingsMissing);
+        return { kind: "valued", sellerSettingsMissing };
       } catch (error) {
         console.error(`Value of Release ${copy.discogsReleaseId} failed: ${error instanceof Error ? error.message : String(error)}`);
-        return "unavailable";
+        return { kind: "unavailable" };
       }
     },
 

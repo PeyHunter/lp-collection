@@ -74,30 +74,26 @@ test("a Release with no price suggestion says No Value yet and stays in the list
   await expect(page.getByRole("region", { name: "Value", exact: true })).toContainText("Lowest listing 90 kr, any condition");
 });
 
-test("a User without Discogs seller settings is guided once to fill them in, then sees Values", async ({ page, context, logInAsNewUser }) => {
-  const username = await logInAsNewUser(page, "no-seller-settings");
+test("a User without Discogs seller settings sees the lowest price on Discogs as Value, with one quiet hint", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "no-seller-settings");
   await addByBarcode(page, "190295328709", "Discovery");
 
-  const guide = page.getByRole("region", { name: "Fill in your Discogs seller settings to see Values" });
-  await expect(guide).toBeVisible();
+  const row = page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" });
+  await expect(row).toContainText(/\d+ kr/);
+  await expect(row).toContainText("Lowest price");
   await expect(page.getByText("No Value yet")).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("Waits for seller settings");
-
-  const link = guide.getByRole("link", { name: "Open seller settings on Discogs" });
+  const hint = page.getByText("For now, Values are the lowest price on Discogs.");
+  await expect(hint).toHaveCount(1);
+  const link = page.getByRole("link", { name: "Discogs seller settings" });
   await expect(link).toHaveAttribute("href", "/fake-discogs/settings/seller");
   await expect(link).toHaveAttribute("target", "_blank");
-  const settings = await context.newPage();
-  await settings.goto("/fake-discogs/settings/seller");
-  await settings.getByLabel("Discogs username").fill(username);
-  await settings.getByRole("button", { name: "Save seller settings" }).click();
-  await settings.close();
-  // Back to the app's tab, as the User would be. Chromium can leave a background tab's aria-labelledby names
-  // uncomputed, so the guide is found by its heading and button text from here on, never by the region's name (#55).
-  await page.bringToFront();
 
-  await page.getByRole("button", { name: "I've saved them, fetch Values" }).click();
-  await expect(page.getByRole("heading", { name: "Fill in your Discogs seller settings to see Values" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("252 kr");
+  await row.getByRole("link", { name: "Discovery" }).click();
+  const value = page.getByRole("region", { name: "Value", exact: true });
+  await expect(value).toContainText(/\d+ kr/);
+  await expect(value).toContainText("Lowest price on Discogs");
+  await expect(value).not.toContainText("any condition");
+  await expect(page.getByText("For now, Values are the lowest price on Discogs.")).toHaveCount(1);
 });
 
 test("changing the currency shows every Copy's Value in the new currency", async ({ page, logInAsNewUser }) => {

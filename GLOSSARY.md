@@ -75,7 +75,7 @@ The grade of the vinyl itself, on the Discogs scale: Mint, Near Mint, Very Good 
 The grade of the cover, on the Media condition scale plus three grades Discogs has for covers: Generic (a plain or company sleeve), Not Graded, and No Cover. It defaults to Very Good Plus.
 
 **Value**:
-The Discogs suggested price for a Release in a Copy's Media condition. This is the main number shown and sorted on.
+The Discogs suggested price for a Release in a Copy's Media condition. This is the main number shown and sorted on. While a User has no Seller settings it is the Lowest listing instead, labelled "Lowest price".
 _Avoid_: price, worth
 
 **Currency**:
@@ -86,7 +86,7 @@ One Value fetch for a Copy: the Media condition, the Value (or none), the Lowest
 _Avoid_: price record
 
 **Seller settings**:
-The Discogs account settings for selling. Discogs suggests prices only to accounts that have filled them in, so a User without them is shown how to fill them in instead of "No Value yet".
+The Discogs account settings for selling. Discogs suggests prices only to accounts that have filled them in, so a User without them gets the Lowest listing as Value and one hint that filling them in gives the price by condition.
 
 **Lowest listing**:
 The cheapest asking price on the Discogs marketplace for a Release right now. It ignores condition and can be missing.

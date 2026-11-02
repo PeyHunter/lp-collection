@@ -33,7 +33,7 @@ Each feature file has an H1 title and one paragraph on the user-visible behavior
 - [Invite and log in](./invite-login.md) covers the app's Owner creating an Invite, the invited person logging in with Discogs into their own empty Collection, staying logged in, and logging out.
 - [Add a Copy by typed barcode](./add-copy.md) covers the Lookup screen, picking one of several pressings, saving the Copy at Very Good Plus, and the Collection list.
 - [Scan a barcode with the camera](./scan.md) covers the camera on the Lookup screen, reading EAN-13 and UPC-A, turning the camera off, and typing when the camera is blocked.
-- [Value](./value.md) covers the Value and Lowest listing on each row and on the Copy page, changing conditions, "No Value yet", the seller settings guide and the currency setting.
+- [Value](./value.md) covers the Value and Lowest listing on each row and on the Copy page, changing conditions, "No Value yet", the seller settings hint and the currency setting.
 - [Photos](./photos.md) covers taking or picking photos of a Copy, the Discogs cover when there are none, deleting a photo, deleting a Copy with its photos, and who can fetch them.
 - [Copy details](./copy-details.md) covers the note, Purchase price and purchase date on a Copy, its Gain next to the Value, clearing them, and deleting the Copy.
 - [Search, sort and filter](./search-sort.md) covers the search box, the sort chips and direction, Period and genre filters, the group headings, paging as the User scrolls, and Original and Pressing year on each row.
