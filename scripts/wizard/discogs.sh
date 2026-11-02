@@ -237,6 +237,15 @@ stage "Copy the keys and your Discogs username"
 say "Paste each value. The secret is hidden while you type."
 ask DISCOGS_CONSUMER_KEY "Consumer Key:"
 ask_secret DISCOGS_CONSUMER_SECRET "Consumer Secret:"
+# The secret is hidden while typing, so pasting it twice goes unnoticed. Discogs secrets are 32 characters.
+DISCOGS_CONSUMER_SECRET=${DISCOGS_CONSUMER_SECRET//[[:space:]]/}
+while (( ${#DISCOGS_CONSUMER_SECRET} != 32 )); do
+  warn "That secret is ${#DISCOGS_CONSUMER_SECRET} characters long, but a Discogs Consumer Secret is 32. Paste it just once, then press Enter."
+  printf '  %sConsumer Secret:%s ' "$BOLD" "$RESET"
+  read -rs DISCOGS_CONSUMER_SECRET || exit 1
+  printf '\n'
+  DISCOGS_CONSUMER_SECRET=${DISCOGS_CONSUMER_SECRET//[[:space:]]/}
+done
 say "The app's Owner is the one person who may log in without an Invite and create Invites."
 ask APP_OWNER_DISCOGS_USERNAME "Your Discogs username (the app's Owner):"
 if [[ -z "$DISCOGS_CONSUMER_KEY" || -z "$DISCOGS_CONSUMER_SECRET" || -z "$APP_OWNER_DISCOGS_USERNAME" ]]; then

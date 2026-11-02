@@ -270,7 +270,15 @@ else
 fi
 
 stage "Discogs login keys"
-if has_secret lp-collection-discogs; then
+discogs_secret_length() { kubectl -n "$NAMESPACE" get secret lp-collection-discogs -o jsonpath='{.data.DISCOGS_CONSUMER_SECRET}' 2>/dev/null | base64 -d | wc -c; }
+if has_secret lp-collection-discogs && (( $(discogs_secret_length) != 32 )); then
+  warn "The saved Discogs Consumer Secret is $(discogs_secret_length) characters, not 32, so Discogs refuses the login."
+  say "The Discogs wizard starts now. Press Enter to keep the other values, and paste the secret just once."
+  pause
+  bash "$REPO_DIR/scripts/wizard/discogs.sh"
+  # The app reads the secret only when it starts.
+  kubectl -n "$NAMESPACE" rollout restart deployment/lp-collection >/dev/null 2>&1 || true
+elif has_secret lp-collection-discogs; then
   say "The Discogs keys are already in the cluster. Nothing to do here."
   pause
 else
