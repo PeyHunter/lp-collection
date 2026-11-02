@@ -32,7 +32,8 @@ const page = await context.newPage();
 page.on("console", (message) => message.type() === "error" && consoleErrors.push(`${page.url()} ${message.text()}`));
 await logIn(page, "with-discogs-collection-demo", new URL(invite.url).pathname);
 
-const progress = page.getByRole("status").filter({ hasText: "Importing your Discogs collection" });
+// The notice is a polite live region, not a status, so it doesn't clash with the Collection's own status messages.
+const progress = page.getByText(/Importing your Discogs collection/);
 await expect(progress).toBeVisible();
 console.log("while it runs:", await progress.textContent());
 await shot(page, "import-running");
