@@ -199,7 +199,7 @@ finish() {
 
 run_wizard() {
 
-TOTAL_STAGES=7
+TOTAL_STAGES=8
 K3S_HOST="${K3S_HOST:-peyton@100.96.98.57}"
 NAMESPACE="lp-collection"
 APP_URL="https://lp-collection.peytonhunter.com"
@@ -288,6 +288,36 @@ else
   if ! has_secret lp-collection-discogs; then
     warn "The Discogs keys are still missing. Run this wizard again when you're ready."
     exit 1
+  fi
+fi
+
+stage "Cover photos (optional)"
+if has_secret lp-collection-anthropic; then
+  say "The Claude key for cover photos is already in the cluster. Nothing to do here."
+  pause
+else
+  say "With a Claude API key, Lookup gets a 'Photo of the cover' button for records with no barcode."
+  say "Without one the app works the same, just without that button."
+  if confirm "Add a Claude key now?"; then
+    step "Log in and press 'Create Key'. Name it lp-collection."
+    open_url "https://console.anthropic.com/settings/keys"
+    ANTHROPIC_API_KEY=""
+    while :; do
+      ask_secret ANTHROPIC_API_KEY "Paste the key (hidden; Enter alone skips):" || ANTHROPIC_API_KEY=""
+      ANTHROPIC_API_KEY=$(printf '%s' "$ANTHROPIC_API_KEY" | tr -d '[:space:]')
+      [[ -z "$ANTHROPIC_API_KEY" || "$ANTHROPIC_API_KEY" == sk-ant-* ]] && break
+      warn "That doesn't look like a Claude API key. It starts with sk-ant-."
+    done
+    if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+      save_secret lp-collection-anthropic ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+      # The app reads the key only when it starts.
+      kubectl -n "$NAMESPACE" rollout restart deployment/lp-collection >/dev/null 2>&1 || true
+      say "Cover photos are on once the app has restarted."
+    else
+      SKIPPED+=("Cover photos: run this wizard again to add a Claude key")
+    fi
+  else
+    SKIPPED+=("Cover photos: run this wizard again to add a Claude key")
   fi
 fi
 

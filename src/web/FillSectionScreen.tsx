@@ -3,6 +3,7 @@ import type { CopyView, LookupCandidate, LookupView } from "../server/collection
 import type { ShelfView } from "../server/shelves.ts";
 import type { Me } from "./App.tsx";
 import { Cover } from "./Cover.tsx";
+import { BestMatch, CoverPhotoButton, lookUpCover, unreadCover } from "./CoverPhoto.tsx";
 import { Header } from "./Header.tsx";
 import { Scanner } from "./Scanner.tsx";
 import { ShelfPhoto } from "./ShelfPhoto.tsx";
@@ -14,6 +15,8 @@ type Held = LookupCandidate["held"][number];
 type Step =
   | { kind: "ready" }
   | { kind: "busy" }
+  | { kind: "reading-cover" }
+  | { kind: "best"; candidates: LookupCandidate[] }
   | { kind: "placed"; title: string }
   | { kind: "which"; title: string; held: Held[] }
   | { kind: "unknown"; candidates: LookupCandidate[] }
@@ -80,6 +83,27 @@ export function FillSectionScreen({ me, shelfId, sectionId }: { me: Me; shelfId:
     setStep({ kind: "placed", title: candidate.title });
   }
 
+  /** Places the Copy the Collection holds of the Release, or adds one here if it holds none. */
+  function take(candidate: LookupCandidate) {
+    const held = candidate.held;
+    if (held.length === 1) return place(held[0]!.copyId, candidate.title);
+    if (held.length > 1) return setStep({ kind: "which", title: candidate.title, held });
+    return addAndPlace(candidate);
+  }
+
+  async function readCover(file: File) {
+    setStep({ kind: "reading-cover" });
+    const found = await lookUpCover(me.collection.id, file);
+    if (found.kind === "failed") return setStep({ kind: "failed", message: found.message });
+    if (found.kind === "unread") return setStep({ kind: "failed", message: unreadCover });
+    const { candidates } = found.view;
+    if (candidates.length === 0) {
+      const read = [found.reading.artist, found.reading.title].filter(Boolean).join(" · ");
+      return setStep({ kind: "failed", message: `The cover reads as ${read}, but nothing on Discogs matches. Find it under No barcode? if it is in your Collection.` });
+    }
+    setStep({ kind: "best", candidates });
+  }
+
   async function scanned(barcode: string) {
     // The camera reads the same barcode many times a second while it is in view.
     const now = Date.now();
@@ -128,6 +152,7 @@ export function FillSectionScreen({ me, shelfId, sectionId }: { me: Me; shelfId:
             </section>
 
             <section className="section" aria-label="Scan">
+              {me.coverReading && <CoverPhotoButton busy={step.kind === "busy" || step.kind === "reading-cover"} reading={step.kind === "reading-cover"} onFile={(file) => void readCover(file)} />}
               <Scanner onRead={scanned} />
               <form className="field-row" onSubmit={typedBarcode}>
                 <input className="input" aria-label="Barcode" inputMode="numeric" autoComplete="off" value={typed} onChange={(event) => setTyped(event.currentTarget.value)} />
@@ -135,7 +160,7 @@ export function FillSectionScreen({ me, shelfId, sectionId }: { me: Me; shelfId:
                   Place
                 </button>
               </form>
-              <StepNotice step={step} here={here} onPlace={place} onAdd={addAndPlace} />
+              <StepNotice step={step} here={here} onPlace={place} onAdd={addAndPlace} onTake={take} />
             </section>
 
             <section className="section" aria-labelledby="no-barcode-heading">
@@ -171,17 +196,43 @@ function StepNotice({
   here,
   onPlace,
   onAdd,
+  onTake,
 }: {
   step: Step;
   here: string;
   onPlace: (copyId: string, title: string) => void;
   onAdd: (candidate: LookupCandidate) => void;
+  onTake: (candidate: LookupCandidate) => void;
 }) {
   switch (step.kind) {
     case "ready":
       return <p className="hint">Scan a record, or type its barcode, to put it in {here}.</p>;
     case "busy":
       return <p className="loading">Looking…</p>;
+    case "reading-cover":
+      return <p className="loading">Reading the cover…</p>;
+    case "best": {
+      const [best, ...others] = step.candidates;
+      return (
+        <>
+          <BestMatch candidate={best!}>
+            <button className="btn primary" type="button" onClick={() => onTake(best!)}>
+              {best!.held.length > 0 ? `Put it in ${here}` : "Add to my collection"}
+            </button>
+          </BestMatch>
+          {others.length > 0 && (
+            <div className="others">
+              <p className="hint">Not this one?</p>
+              {others.map((candidate) => (
+                <button className="btn secondary" type="button" key={candidate.discogsReleaseId} onClick={() => onTake(candidate)}>
+                  {candidate.title} ({[candidate.country, candidate.pressingYear].filter(Boolean).join(", ")})
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      );
+    }
     case "placed":
       return (
         <p className="notice done" role="status">

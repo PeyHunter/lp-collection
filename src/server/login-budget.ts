@@ -53,7 +53,7 @@ export function createLoginBudget(now: () => Date) {
   };
 }
 
-function fixedWindows({ count, windowMs }: Limit, clock: () => number) {
+export function fixedWindows({ count, windowMs }: Limit, clock: () => number) {
   // A window is added when it starts and dropped when it ends, so the Map stays in start order and the sweep stops at the first live one.
   const windows = new Map<string, { start: number; spent: number }>();
   function current(key: string) {

@@ -14,6 +14,7 @@ import { createImporter } from "./discogs-import.ts";
 import { createMirror } from "./mirror.ts";
 import { createRefresh } from "./refresh.ts";
 import { createSecretBox } from "./secret-box.ts";
+import { createClaudeCoverReader, createFakeCoverReader, type CoverReader } from "./cover-reader.ts";
 import type { DiscogsGateway } from "./discogs.ts";
 
 type Config = {
@@ -127,6 +128,15 @@ if (config.discogs.kind === "real") {
   exchangeRates = createFixedRates();
 }
 
+const sgtPepper = sampleReleases.find((release) => release.discogsReleaseId === 1095979)!;
+const anthropicApiKey = process.env.ANTHROPIC_API_KEY?.trim();
+const coverReader: CoverReader | undefined = anthropicApiKey
+  ? createClaudeCoverReader(anthropicApiKey)
+  : fake
+    ? createFakeCoverReader({ artist: sgtPepper.artist, title: sgtPepper.title, confidence: "high" })
+    : undefined;
+if (!anthropicApiKey) console.log(fake ? "ANTHROPIC_API_KEY is not set: every photo of a cover reads as Sgt. Pepper." : "ANTHROPIC_API_KEY is not set: finding an LP from a photo of its cover is off.");
+
 if (command === "refresh") {
   const database = connectDatabase(config.databaseUrl);
   await migrate(database);
@@ -176,7 +186,7 @@ const mirror = createMirror({ database, discogs, secretBox, now: () => new Date(
 // The fake Discogs has no rate limit to keep to.
 const pace = config.discogs.kind === "fake" ? async () => {} : (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const importer = createImporter({ database, discogs, secretBox, now: () => new Date(), wait: pace });
-const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl, photosDir, mirror, importer, backupToken: process.env.BACKUP_TOKEN || undefined });
+const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl, photosDir, mirror, importer, backupToken: process.env.BACKUP_TOKEN || undefined, coverReader });
 // Mirror changes Discogs refused or that waited for the rate limit are tried again every minute, and once at start.
 // Imports a restart interrupted, or that wait after a failure, carry on the same way.
 const background = () => {

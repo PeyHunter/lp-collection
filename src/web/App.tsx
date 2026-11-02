@@ -20,6 +20,7 @@ export type Me = {
   showValues: boolean;
   sellerSettingsUrl: string;
   discogsImport: ImportProgress | null;
+  coverReading: boolean;
   collections: { id: string; ownerDiscogsUsername: string; own: boolean }[];
 };
 
@@ -104,7 +105,7 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
       return (
         <>
           {route.page === "lookup" ? (
-            <LookupScreen collectionId={session.me.collection.id} />
+            <LookupScreen collectionId={session.me.collection.id} coverReading={session.me.coverReading} />
           ) : route.page === "browse" ? (
             <BrowseScreen me={session.me} onShowValuesChanged={(showValues) => changeMe({ showValues })} />
           ) : route.page === "copy" ? (

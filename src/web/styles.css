@@ -820,3 +820,23 @@ textarea.input {
 .member-row { min-block-size: auto; }
 .inline-form { display: flex; gap: var(--space-xs); }
 .inline-form .input { flex: 1; min-inline-size: 0; }
+
+/* Cover reading: the easiest way to add a record, so it leads the Lookup. */
+.cover-photo { justify-self: stretch; min-block-size: 4rem; font-size: var(--text-l); cursor: pointer; }
+.cover-photo svg { inline-size: 1.75rem; }
+.cover-photo:has(:focus-visible) { outline: max(2px, 0.08em) solid var(--accent); outline-offset: 0.25em; }
+.cover-photo.busy { opacity: 0.6; cursor: default; }
+.best-match {
+  display: grid;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  border-radius: var(--radius-m);
+  border: 1.5px solid var(--accent);
+  background: color-mix(in oklch, var(--accent) 10%, var(--bg));
+}
+.cover.big { inline-size: min(100%, 9rem); block-size: auto; aspect-ratio: 1; justify-self: center; }
+.best-match-text { display: grid; gap: var(--space-2xs, 0.25rem); min-inline-size: 0; }
+.best-match-text h2 { font-family: var(--display); font-size: var(--text-xl); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.best-match .row-meta { white-space: normal; }
+.best-match .warning { font-weight: 600; }
+.others { display: grid; gap: var(--space-xs); }

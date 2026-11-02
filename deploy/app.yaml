@@ -76,6 +76,13 @@ spec:
                   name: lp-collection-backup
                   key: BACKUP_TOKEN
                   optional: true
+            # Lets Lookup read the artist and title off a photo of a cover. Without the secret the button is hidden.
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lp-collection-anthropic
+                  key: ANTHROPIC_API_KEY
+                  optional: true
           envFrom:
             - secretRef:
                 name: lp-collection-discogs
