@@ -10,6 +10,7 @@ import { connectDatabase, migrate } from "./db.ts";
 import { createEcbRates, createFixedRates, type ExchangeRates } from "./exchange-rates.ts";
 import { createFakeDiscogs, sampleLowestListings, samplePrices, sampleReleases, type FakeDiscogs } from "./fake-discogs.ts";
 import { createRealDiscogs } from "./real-discogs.ts";
+import { createImporter } from "./discogs-import.ts";
 import { createMirror } from "./mirror.ts";
 import { createRefresh } from "./refresh.ts";
 import { createSecretBox } from "./secret-box.ts";
@@ -111,7 +112,7 @@ if (config.discogs.kind === "real") {
   exchangeRates = createEcbRates();
 } else {
   console.log(
-    "DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases and their prices. A username that starts with no-seller-settings has no seller settings until they are saved at /fake-discogs/settings/seller, and one that starts with no-collection-sync has a Discogs collection that refuses every change. Exchange rates are fixed.",
+    "DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases and their prices. A username that starts with no-seller-settings has no seller settings until they are saved at /fake-discogs/settings/seller, one that starts with no-collection-sync has a Discogs collection that refuses every change, and one that starts with with-discogs-collection has 120 records in Discogs to import at first login. Exchange rates are fixed.",
   );
   discogs = fake = createFakeDiscogs({
     releases: sampleReleases,
@@ -119,6 +120,9 @@ if (config.discogs.kind === "real") {
     lowestListings: sampleLowestListings,
     sellerSettingsMissingFor: (discogsUsername) => discogsUsername.startsWith("no-seller-settings"),
     collectionUnavailableFor: (discogsUsername) => discogsUsername.startsWith("no-collection-sync"),
+    collectionFor: (discogsUsername) =>
+      discogsUsername.startsWith("with-discogs-collection") ? Array.from({ length: 120 }, (_, index) => sampleReleases[index % sampleReleases.length]!.discogsReleaseId) : undefined,
+    collectionPageDelayMs: 1_500,
   });
   exchangeRates = createFixedRates();
 }
@@ -169,10 +173,18 @@ if (!(await storedTokensOpenWith(database, secretBox))) {
 await sealStoredDiscogsTokens(database, secretBox);
 
 const mirror = createMirror({ database, discogs, secretBox, now: () => new Date() });
-const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl, photosDir, mirror });
+// The fake Discogs has no rate limit to keep to.
+const pace = config.discogs.kind === "fake" ? async () => {} : (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const importer = createImporter({ database, discogs, secretBox, now: () => new Date(), wait: pace });
+const app = createApp({ database, discogs, exchangeRates, secretBox, now: () => new Date(), appOwnerDiscogsUsername: config.appOwnerDiscogsUsername, publicUrl: config.publicUrl, photosDir, mirror, importer });
 // Mirror changes Discogs refused or that waited for the rate limit are tried again every minute, and once at start.
-const mirrorRetries = setInterval(() => void mirror.runDue().catch((error: Error) => console.error(`The Discogs mirror stopped: ${error.message}`)), 60_000);
-void mirror.runDue().catch((error: Error) => console.error(`The Discogs mirror stopped: ${error.message}`));
+// Imports a restart interrupted, or that wait after a failure, carry on the same way.
+const background = () => {
+  void mirror.runDue().catch((error: Error) => console.error(`The Discogs mirror stopped: ${error.message}`));
+  importer.kick();
+};
+const mirrorRetries = setInterval(background, 60_000);
+background();
 if (fake) app.route("/", fake.pages);
 // The built phone UI; any path the API doesn't own falls back to the single page.
 app.use("*", serveStatic({ root: "dist/web" }));

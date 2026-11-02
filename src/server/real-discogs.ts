@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { conditions, isCurrency, lookupPageSize, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsGateway, type LookupQuery, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
+import { collectionPageSize, conditions, isCurrency, lookupPageSize, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsGateway, type LookupQuery, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
 
 export type RealDiscogsOptions = {
   consumerKey: string;
@@ -130,6 +130,12 @@ export function createRealDiscogs({
     `/users/${encodeURIComponent(discogsUsername)}/collection/folders/${folderId}/releases/${discogsReleaseId}/instances/${instanceId}`;
 
   return {
+    async collectionPage(discogsUsername, page, auth) {
+      const path = `/users/${encodeURIComponent(discogsUsername)}/collection/folders/0/releases?${new URLSearchParams({ page: String(page), per_page: String(collectionPageSize), sort: "added", sort_order: "asc" })}`;
+      const answer = ((await getAs(auth, path)) ?? {}) as { pagination?: { pages?: number; items?: number }; releases?: { id: number; instance_id: number; folder_id: number }[] };
+      const items = (answer.releases ?? []).map((release) => ({ discogsReleaseId: release.id, folderId: release.folder_id, instanceId: release.instance_id }));
+      return { items, pages: answer.pagination?.pages ?? 1, total: answer.pagination?.items ?? items.length };
+    },
     async addToCollection(discogsUsername, discogsReleaseId, auth) {
       const folderId = 1;
       const response = await changeAs(auth, "POST", `/users/${encodeURIComponent(discogsUsername)}/collection/folders/${folderId}/releases/${discogsReleaseId}`);

@@ -202,6 +202,31 @@ export const collectionValues = pgTable(
   (table) => [primaryKey({ columns: [table.refreshId, table.collectionId] }), index("collection_values_collection_idx").on(table.collectionId, table.recordedAt)],
 );
 
+export const importStatus = pgEnum("import_status", ["running", "done"]);
+
+/**
+ * The one import of a User's Discogs collection into their own Collection, made at their first login. It goes page by
+ * page and remembers the next one, so a server restart carries on where it stopped.
+ */
+export const discogsImports = pgTable("discogs_imports", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  collectionId: uuid("collection_id")
+    .notNull()
+    .references(() => collections.id),
+  status: importStatus("status").notNull().default("running"),
+  nextPage: integer("next_page").notNull().default(1),
+  imported: integer("imported").notNull().default(0),
+  total: integer("total"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: at("next_attempt_at").notNull(),
+  claimedUntil: at("claimed_until"),
+  lastError: text("last_error"),
+  startedAt: at("started_at").notNull(),
+  finishedAt: at("finished_at"),
+});
+
 export const mirrorJobKind = pgEnum("mirror_job_kind", ["add", "update", "remove"]);
 
 /**

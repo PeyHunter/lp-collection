@@ -7,6 +7,7 @@ import { createApp } from "../../src/server/app.ts";
 import { connectDatabase, migrate } from "../../src/server/db.ts";
 import { createFixedRates } from "../../src/server/exchange-rates.ts";
 import { createFakeDiscogs, type FakeDiscogsScript } from "../../src/server/fake-discogs.ts";
+import { createImporter, type Importer } from "../../src/server/discogs-import.ts";
 import { createMirror, type Mirror } from "../../src/server/mirror.ts";
 import { createSecretBox } from "../../src/server/secret-box.ts";
 
@@ -42,9 +43,11 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   let secretBox = createSecretBox(randomBytes(32));
   let owner = appOwnerDiscogsUsername;
   let mirror: Mirror;
+  let importer: Importer;
   const start = () => {
     mirror = createMirror({ database, discogs, secretBox, now: () => now });
-    return createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl), photosDir, mirror });
+    importer = createImporter({ database, discogs, secretBox, now: () => now, wait: async () => {} });
+    return createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl), photosDir, mirror, importer });
   };
   let app = start();
 
@@ -54,7 +57,7 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   /** Each answer waits for the Discogs mirror to finish what the request started, so a test sees where it ended. */
   const request = async (path: string, init?: RequestInit) => {
     const response = await app.request(path, init);
-    await mirror.idle();
+    await Promise.all([mirror.idle(), importer.idle()]);
     return response;
   };
 
@@ -83,6 +86,9 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
     appOwnerDiscogsUsername,
     get mirror() {
       return mirror;
+    },
+    get importer() {
+      return importer;
     },
     now: () => now,
     clock: {

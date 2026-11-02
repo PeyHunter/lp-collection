@@ -8,9 +8,18 @@ import { followLink, useRoute, type Route } from "./navigation.ts";
 import { ShelfScreen } from "./ShelfScreen.tsx";
 import { FillSectionScreen } from "./FillSectionScreen.tsx";
 import { ShelvesScreen } from "./ShelvesScreen.tsx";
+import type { ImportProgress } from "../server/discogs-import.ts";
 import type { Currency } from "../server/discogs.ts";
 
-export type Me = { discogsUsername: string; canCreateInvites: boolean; collection: { id: string }; currency: Currency; showValues: boolean; sellerSettingsUrl: string };
+export type Me = {
+  discogsUsername: string;
+  canCreateInvites: boolean;
+  collection: { id: string };
+  currency: Currency;
+  showValues: boolean;
+  sellerSettingsUrl: string;
+  discogsImport: ImportProgress | null;
+};
 
 const loginProblems = {
   "cookie-missing":

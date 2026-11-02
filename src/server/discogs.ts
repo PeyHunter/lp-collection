@@ -104,6 +104,11 @@ export type CollectionItem = { discogsReleaseId: number; folderId: number; insta
 /** What the app keeps in step on a Discogs collection item. A null note clears the Notes field. */
 export type CollectionFields = { mediaCondition: Condition; sleeveCondition: SleeveCondition; note: string | null };
 
+/** Discogs lists a collection at most this many items a page. */
+export const collectionPageSize = 100;
+
+export type CollectionPage = { items: CollectionItem[]; pages: number; total: number };
+
 /** The only way the app talks to Discogs. Tests use a scripted fake. */
 export type DiscogsGateway = {
   lookup(query: LookupQuery, auth: DiscogsAuth): Promise<LookupResult>;
@@ -112,6 +117,8 @@ export type DiscogsGateway = {
   /** The cheapest asking price right now in any condition, or null when nothing is for sale. */
   lowestListing(discogsReleaseId: number, currency: DiscogsCurrency, auth: DiscogsAuth): Promise<Money | null>;
   sellerSettingsUrl: string;
+  /** One page of everything in the user's Discogs collection, across all folders, oldest added first. Pages count from 1. */
+  collectionPage(discogsUsername: string, page: number, auth: DiscogsAuth): Promise<CollectionPage>;
   /** Adds the Release to the user's Discogs collection once more, as a new item. */
   addToCollection(discogsUsername: string, discogsReleaseId: number, auth: DiscogsAuth): Promise<CollectionItem>;
   setCollectionFields(discogsUsername: string, item: CollectionItem, fields: CollectionFields, auth: DiscogsAuth): Promise<void>;

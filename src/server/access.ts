@@ -9,7 +9,7 @@ import type { Database } from "./db.ts";
 import { sealedPrefix, type SecretBox } from "./secret-box.ts";
 import { currencies, isCurrency, type DiscogsIdentity, type LoginStart } from "./discogs.ts";
 import { createLoginBudget, type LoginSpender } from "./login-budget.ts";
-import { appOwner, collections, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
+import { appOwner, collections, discogsImports, invites, loginAttempts, memberships, sessions, users } from "./schema.ts";
 
 const minute = 60 * 1000;
 const day = 24 * 60 * minute;
@@ -55,7 +55,7 @@ function decideLogin(facts: {
   return { kind: "refused" };
 }
 
-export function createAccessRoutes({ database, discogs, secretBox, now, appOwnerDiscogsUsername, publicUrl }: AppDependencies) {
+export function createAccessRoutes({ database, discogs, secretBox, now, appOwnerDiscogsUsername, publicUrl, importer }: AppDependencies) {
   const { db } = database;
   const routes = new Hono();
   const secure = publicUrl.protocol === "https:";
@@ -101,6 +101,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
       }
       const [collection] = await tx.insert(collections).values({ ownerId: user.id, createdAt: at }).returning({ id: collections.id });
       await tx.insert(memberships).values({ collectionId: collection!.id, userId: user.id });
+      await tx.insert(discogsImports).values({ userId: user.id, collectionId: collection!.id, nextAttemptAt: at, startedAt: at });
       return { kind: "signed-up", userId: user.id } as const;
     });
   }
@@ -134,7 +135,10 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
           if (error instanceof TransactionRollbackError) return undefined;
           throw error;
         }
-        if (signUpResult.kind === "signed-up") return signUpResult.userId;
+        if (signUpResult.kind === "signed-up") {
+          importer.kick();
+          return signUpResult.userId;
+        }
         return logInReturningUser(identity, (await existingUserId(identity))!);
       }
       case "refused":
@@ -174,6 +178,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
       currency: user.currency,
       showValues: user.showValues,
       sellerSettingsUrl: discogs.sellerSettingsUrl,
+      discogsImport: (await importer.progress(user.id)) ?? null,
     });
   });
 
