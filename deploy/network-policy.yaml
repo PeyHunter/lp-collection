@@ -1,4 +1,4 @@
-# Only cloudflared reaches the app, and only the app and its monthly refresh reach PostgreSQL. Without
+# Only cloudflared (and the nightly backup) reach the app, and only the app, its monthly refresh and the backup reach PostgreSQL. Without
 # this, any pod in the cluster could call the app with a forged CF-Connecting-IP
 # or connect to the database. k3s enforces these with its built-in kube-router;
 # kubelet health checks from the node are always let through.
@@ -37,6 +37,10 @@ spec:
         - podSelector:
             matchLabels:
               app: cloudflared
+        # The nightly backup copies Photos from the app's backup route.
+        - podSelector:
+            matchLabels:
+              app: lp-collection-backup
       ports:
         - port: 3000
   egress:
@@ -79,6 +83,30 @@ spec:
       ports:
         - port: 443
 ---
+# The nightly backup reaches PostgreSQL and the app, and nothing else, and nothing reaches it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lp-collection-backup
+spec:
+  podSelector:
+    matchLabels:
+      app: lp-collection-backup
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lp-collection
+      ports:
+        - port: 3000
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -96,6 +124,9 @@ spec:
         - podSelector:
             matchLabels:
               app: lp-collection-refresh
+        - podSelector:
+            matchLabels:
+              app: lp-collection-backup
       ports:
         - port: 5432
 ---
