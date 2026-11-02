@@ -49,7 +49,8 @@ async function add(page: Page, barcode: string) {
   await page.getByRole("button", { name: "Look up" }).click();
   await page.getByRole("button", { name: "Add to Collection" }).click();
   await expect(page.getByRole("status")).toContainText("to your Collection.");
-  return ((await (await page.request.get(`/api/collections/${collectionId}/copies`)).json()) as { copies: { id: string }[] }).copies[0]!.id;
+  // Newest first: the default order is by Value, where the Copy just added need not come first.
+  return ((await (await page.request.get(`/api/collections/${collectionId}/copies?sort=added`)).json()) as { copies: { id: string }[] }).copies[0]!.id;
 }
 
 async function dragCorners(page: Page) {
