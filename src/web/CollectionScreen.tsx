@@ -126,6 +126,12 @@ export function CollectionScreen({
 
         {loaded && (loaded.total > 0 || filtered) && <ListControls key={controlsKey} query={query} facets={loaded.facets} showValues={me.showValues} onChange={changeQuery} />}
 
+        {loaded && loaded.total > 0 && (
+          <a className="btn secondary browse-link" href={`/browse${searchFromQuery(query) ? `?${searchFromQuery(query)}` : ""}`} onClick={followLink}>
+            Browse covers
+          </a>
+        )}
+
         <section className="section" aria-label="Copies" aria-busy={loading}>
           {loading && <p className="loading">Loading your Collection…</p>}
           {list.kind === "failed" && (

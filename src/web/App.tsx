@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { BrowseScreen } from "./BrowseScreen.tsx";
 import { CollectionScreen } from "./CollectionScreen.tsx";
 import { CopyScreen } from "./CopyScreen.tsx";
 import { Header } from "./Header.tsx";
@@ -92,6 +93,8 @@ function SessionGate({ route }: { route: Exclude<Route, { page: "invite" }> }) {
         <>
           {route.page === "lookup" ? (
             <LookupScreen collectionId={session.me.collection.id} />
+          ) : route.page === "browse" ? (
+            <BrowseScreen me={session.me} onShowValuesChanged={(showValues) => changeMe({ showValues })} />
           ) : route.page === "copy" ? (
             <CopyScreen me={session.me} copyId={route.copyId} onShowValuesChanged={(showValues) => changeMe({ showValues })} />
           ) : route.page === "shelves" ? (
@@ -132,7 +135,7 @@ function Dock({ current }: { current: Route["page"] }) {
           </svg>
           Scan
         </a>
-        <a className="tab end" href="/" onClick={followLink} aria-current={current === "collection" || current === "copy" ? "page" : undefined}>
+        <a className="tab end" href="/" onClick={followLink} aria-current={current === "collection" || current === "browse" || current === "copy" ? "page" : undefined}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
             <circle cx="12" cy="12" r="8.5" />
             <circle cx="12" cy="12" r="3" />
