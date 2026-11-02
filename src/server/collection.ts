@@ -17,6 +17,7 @@ const { searchText: _, artistSortKey: __, ...releaseColumns } = getTableColumns(
 
 const discogsUnreachable = "Discogs didn't answer. Try again in a moment.";
 const valueBatchSize = 5;
+const lowestListingRecheckMs = 60 * 60 * 1000;
 const failedValueRetryMs = 15 * 60_000;
 
 const maxTypedLength = 100;
@@ -129,7 +130,7 @@ function parseValuesRequest(body: unknown, now: Date): { retryEmptyBefore?: Date
 }
 
 function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, before: boolean) {
-  return outcome === "valued" ? false : outcome === "seller-settings-missing" ? true : before;
+  return outcome?.kind === "valued" ? outcome.sellerSettingsMissing : before;
 }
 
 export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number; held: { copyId: string; location: CopyLocation | null }[] };
@@ -451,31 +452,42 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
     return c.json({ copy: await oneCopy(member, copyId) });
   });
 
+  /**
+   * Copies with no Value, and Copies whose Value is the Lowest listing (taken while seller settings were missing) and
+   * older than an hour, so they get Discogs' suggestion once the seller settings exist. Those come last.
+   */
   async function copiesWithoutValue({ collectionId, currency }: Member, retryEmptyBefore: Date | undefined) {
-    const { rows } = await db.execute<{ id: string; discogs_release_id: number; media_condition: Condition }>(sql`
-      select c.id, c.discogs_release_id, c.media_condition
+    const lowestBefore = new Date(now().getTime() - lowestListingRecheckMs);
+    const { rows } = await db.execute<{ id: string; discogs_release_id: number; media_condition: Condition; lowest: boolean }>(sql`
+      select c.id, c.discogs_release_id, c.media_condition, coalesce(v.value = v.lowest_listing, false) as lowest
       from copies c
       left join lateral (${latestSnapshot(sql`c`, currency)}) v on true
       where c.collection_id = ${collectionId}
-        and (v.fetched_at is null or (v.value is null and v.fetched_at < ${retryEmptyBefore?.toISOString() ?? null}::timestamptz))
-      order by c.created_at desc, c.id desc`);
+        and (v.fetched_at is null
+          or (v.value is null and v.fetched_at < ${retryEmptyBefore?.toISOString() ?? null}::timestamptz)
+          or (v.value = v.lowest_listing and v.fetched_at < ${lowestBefore.toISOString()}::timestamptz))
+      order by coalesce(v.value = v.lowest_listing, false), c.created_at desc, c.id desc`);
     return rows
       .filter((row) => !waitsAfterFailure(row.id))
-      .map((row) => ({ id: row.id, discogsReleaseId: row.discogs_release_id, mediaCondition: row.media_condition }));
+      .map((row) => ({ id: row.id, discogsReleaseId: row.discogs_release_id, mediaCondition: row.media_condition, lowest: row.lowest }));
   }
 
   async function fetchMissingValues(member: Member, retryEmptyBefore: Date | undefined) {
     const due = await copiesWithoutValue(member, retryEmptyBefore);
     let sellerSettingsMissing = member.sellerSettingsMissing;
     const valued: string[] = [];
+    let done = 0;
     for (const copy of due.slice(0, valueBatchSize)) {
+      // While seller settings are missing, one Lowest listing Copy (they come last) asks Discogs whether they exist now.
+      if (copy.lowest && sellerSettingsMissing && due[done - 1]?.lowest) break;
       const outcome = await valuation.fetchValue(copy, member);
       sellerSettingsMissing = sellerSettingsMissingAfter(outcome, sellerSettingsMissing);
-      if (outcome === "seller-settings-missing") return { sellerSettingsMissing, valued, more: false };
-      if (outcome === "unavailable") failedAt.set(copy.id, now());
-      if (outcome === "valued") valued.push(copy.id);
+      if (outcome.kind === "unavailable") failedAt.set(copy.id, now());
+      else valued.push(copy.id);
+      done += 1;
     }
-    return { sellerSettingsMissing, valued, more: valued.length > 0 && due.length > valueBatchSize };
+    const more = due.slice(done).some((copy) => !copy.lowest || !sellerSettingsMissing);
+    return { sellerSettingsMissing, valued, more: valued.length > 0 && more };
   }
 
   async function fillInGenres({ collectionId, auth }: Member) {

@@ -26,9 +26,21 @@ export function hasValues(copy: CopyView): copy is CopyWithValues {
   return "value" in copy;
 }
 
-export function RowValue({ value, sellerSettingsMissing, fetching }: { value: CopyWithValues["value"]; sellerSettingsMissing: boolean; fetching: boolean }) {
+/** Without Discogs seller settings, the Value is the Lowest listing instead of the suggested price for the Media condition. */
+export function isLowestListing(value: CopyWithValues["value"]) {
+  return value?.value != null && value.value === value.lowestListing;
+}
+
+export function RowValue({ value, fetching }: { value: CopyWithValues["value"]; fetching: boolean }) {
+  if (value?.value != null && isLowestListing(value)) {
+    return (
+      <span className="row-end">
+        <Amount amount={value.value} currency={value.currency} className="row-value" />
+        <span className="waiting row-value-note">Lowest price</span>
+      </span>
+    );
+  }
   if (value?.value != null) return <Amount amount={value.value} currency={value.currency} className="row-end row-value" />;
-  if (sellerSettingsMissing) return <span className="row-end waiting">Waits for seller settings</span>;
   if (!value && fetching) return <span className="row-end waiting">Fetching Value…</span>;
   return <span className="row-end no-value">No Value yet</span>;
 }
@@ -50,7 +62,7 @@ export async function fetchValues(
     if (!response?.ok) return undefined;
     const answer = (await response.json()) as ValuesAnswer;
     onBatch?.(answer);
-    if (!answer.more || answer.sellerSettingsMissing) return answer;
+    if (!answer.more) return answer;
     body = answer.retryEmptyBefore ? { retryEmptyBefore: answer.retryEmptyBefore } : {};
   }
 }
@@ -93,49 +105,15 @@ export function ValuesSwitch({ showValues, onChanged }: { showValues: boolean; o
   );
 }
 
-type GuideState = { kind: "idle" } | { kind: "checking" } | { kind: "still-missing" } | { kind: "failed" };
-
-export function SellerSettingsGuide({ url, collectionId, onValued }: { url: string; collectionId: string; onValued: () => void }) {
-  const [state, setState] = useState<GuideState>({ kind: "idle" });
-
-  async function check() {
-    setState({ kind: "checking" });
-    const answer = await fetchValues(collectionId, { retryEmpty: true });
-    if (!answer) return setState({ kind: "failed" });
-    if (answer.sellerSettingsMissing) return setState({ kind: "still-missing" });
-    onValued();
-  }
-
+export function SellerSettingsHint({ url }: { url: string }) {
   return (
-    <section className="guide" aria-labelledby="seller-settings-heading">
-      <h2 id="seller-settings-heading">Fill in your Discogs seller settings to see Values</h2>
-      <p>
-        Discogs suggests prices only to accounts whose seller settings are filled in. You don't have to sell anything. Open the settings, fill in
-        your country and currency, and save.
-      </p>
-      <ol className="steps">
-        <li>
-          <a className="btn primary" href={url} target="_blank" rel="noreferrer">
-            Open seller settings on Discogs
-          </a>
-        </li>
-        <li>
-          <button className="btn secondary" type="button" onClick={check} disabled={state.kind === "checking"}>
-            {state.kind === "checking" ? "Fetching Values…" : "I've saved them, fetch Values"}
-          </button>
-        </li>
-      </ol>
-      {state.kind === "still-missing" && (
-        <p className="hint" role="alert">
-          Discogs still says your seller settings are missing. Save them on Discogs, then try again.
-        </p>
-      )}
-      {state.kind === "failed" && (
-        <p className="hint" role="alert">
-          Discogs didn't answer. Try again in a moment.
-        </p>
-      )}
-    </section>
+    <p className="hint seller-settings-hint">
+      For now, Values are the lowest price on Discogs. Fill in your{" "}
+      <a href={url} target="_blank" rel="noreferrer">
+        Discogs seller settings
+      </a>{" "}
+      (country and currency, about a minute) to get the realistic price for each condition.
+    </p>
   );
 }
 

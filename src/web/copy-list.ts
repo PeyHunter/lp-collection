@@ -156,7 +156,7 @@ export function useCopyList(collectionId: string, query: ListQuery, reloadKey: s
       signal: abort.signal,
       onBatch: ({ copies, sellerSettingsMissing, more }) =>
         setValues((before) => ({
-          fetching: more && !sellerSettingsMissing,
+          fetching: more,
           sellerSettingsMissing,
           valued: new Map([...before.valued, ...(copies ?? []).map((copy) => [copy.id, copy] as const)]),
         })),

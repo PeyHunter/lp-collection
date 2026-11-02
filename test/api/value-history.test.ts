@@ -122,13 +122,21 @@ test("each Owner's Copies are valued with that Owner's Discogs account, paced to
   expect(tokens.size).toBe(2);
 });
 
-test("a Collection whose Owner has no seller settings is skipped and the month stays open for it, while the others are refreshed", async () => {
-  const discogs = { ...script(), sellerSettingsMissingFor: (username: string) => username === "friend" };
-  const { app, owner } = await twoCollections(discogs);
+test("a Collection whose Owner has no seller settings is refreshed with Lowest listings as Values", async () => {
+  const discogs = { ...script(), lowestListings: { 5: { amount: 80, currency: "EUR" as const } }, sellerSettingsMissingFor: (username: string) => username === "friend" };
+  const { app, owner, friend } = await twoCollections(discogs);
 
-  expect(await refresh(app).run()).toMatchObject({ collections: 1, finished: false });
+  expect(await refresh(app).run()).toMatchObject({ collections: 2, finished: true });
 
-  expect((await collectionHistory(app)).map((row) => row.collection_id)).toEqual([owner.collectionId]);
+  expect((await collectionHistory(app)).map((row) => row.collection_id).sort()).toEqual([owner.collectionId, friend.collectionId].sort());
+  const snapshots = await app.query<{ value: string | null; lowest_listing: string | null }>(
+    "select s.value, s.lowest_listing from value_snapshots s join copies c on c.id = s.copy_id where c.collection_id = $1",
+    [friend.collectionId],
+  );
+  expect(snapshots.map((snapshot) => [Number(snapshot.value), Number(snapshot.lowest_listing)])).toEqual([
+    [596.8, 596.8],
+    [596.8, 596.8],
+  ]);
 });
 
 test("the Value history is left out while the User hides Values", async () => {

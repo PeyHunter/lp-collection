@@ -9,7 +9,7 @@ import { Header } from "./Header.tsx";
 import { navigate } from "./navigation.ts";
 import { ConfirmDelete, PhotosSection } from "./Photos.tsx";
 import { PlaceSection } from "./PlaceSection.tsx";
-import { Amount, formatAmount, hasValues, HistoryChart, historyMonth, SellerSettingsGuide, ValuesSwitch } from "./Value.tsx";
+import { Amount, formatAmount, hasValues, HistoryChart, historyMonth, isLowestListing, SellerSettingsHint, ValuesSwitch } from "./Value.tsx";
 
 /** `valueHistory` comes only with the first load; later answers about the Copy keep the one already shown. */
 type Loaded = { copy: CopyView; sellerSettingsMissing?: boolean; valueHistory?: ValueHistory; notSyncedYet?: boolean };
@@ -90,13 +90,12 @@ export function CopyScreen({ me, copyId, onShowValuesChanged }: { me: Me; copyId
             {state.notSyncedYet && (
               <p className="hint not-synced">Not synced to Discogs yet. The app keeps trying; the change is saved here either way.</p>
             )}
-            {me.showValues &&
-              hasValues(state.copy) &&
-              (state.sellerSettingsMissing ? (
-                <SellerSettingsGuide url={me.sellerSettingsUrl} collectionId={me.collection.id} onValued={() => setAttempt((count) => count + 1)} />
-              ) : (
+            {me.showValues && hasValues(state.copy) && (
+              <>
                 <ValueSection copy={state.copy} updating={saving.kind === "saving"} />
-              ))}
+                {state.sellerSettingsMissing && <SellerSettingsHint url={me.sellerSettingsUrl} />}
+              </>
+            )}
             {me.showValues && state.valueHistory?.length ? (
               <ValueHistorySection history={state.valueHistory} currency={me.currency} />
             ) : null}
@@ -176,13 +175,12 @@ function ValueHistorySection({ history, currency }: { history: ValueHistory; cur
 
 function ValueSection({ copy, updating }: { copy: CopyWithValues; updating: boolean }) {
   const { value } = copy;
+  const lowest = isLowestListing(value);
   return (
     <section className="section" aria-labelledby="value-heading" aria-busy={updating}>
       <div className="section-head">
         <h2 id="value-heading">Value</h2>
-        <span className="count">
-          for <Grade condition={copy.mediaCondition} />
-        </span>
+        <span className="count">{lowest ? "Lowest price on Discogs" : <>for <Grade condition={copy.mediaCondition} /></>}</span>
       </div>
       <div className="value-figure" aria-live="polite">
         {updating ? (
@@ -198,7 +196,7 @@ function ValueSection({ copy, updating }: { copy: CopyWithValues; updating: bool
           <p className="no-value">No Value yet</p>
         )}
       </div>
-      {!updating && value?.lowestListing != null && (
+      {!updating && !lowest && value?.lowestListing != null && (
         <p className="lowest">
           Lowest listing <b className="tnum">{formatAmount(value.lowestListing, value.currency)}</b>, any condition
         </p>

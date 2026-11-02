@@ -6,7 +6,7 @@ Once a month a refresh fetches a new Value for every Copy in every Collection, w
 
 - `refresh` is `node src/server/main.ts refresh`: one run for the current month (UTC), then it exits. A second run in a finished month does nothing. It paces itself to about 2.4 s per Copy (50 Discogs requests a minute per Owner) with the real Discogs, and not at all with the fake one.
 - `resume`: everything a refresh records names it, so a run that stops partway carries on with the Copies and Collections it hasn't done, valuing each Copy once a month.
-- `seller-settings` skips a Collection whose Owner has no Discogs seller settings and leaves the month open, so a later run that month tries it again.
+- `seller-settings` refreshes a Collection whose Owner has no Discogs seller settings with the Lowest listing as each Value.
 - `collection-value` records the Collection value after each Collection, counting Copies with no Value as zero. It isn't shown yet; the home screen (#17) draws it.
 - `copy-history` is the "Value history" section on a Copy (`/copies/<id>`), right under Value. It shows only once a refresh has run, only while Values show, and only refreshes in the viewer's currency.
 - `cronjob` is `deploy/refresh.yaml`, a Kubernetes CronJob at 03:00 on the 1st of each month using the app image.

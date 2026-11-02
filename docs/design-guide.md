@@ -178,7 +178,7 @@ The bottom bar is sticky at the bottom with a 2px `--ink` rule on top, `--sunk` 
 
 ### Values switch
 
-The "Values" switch sits at the end of the header on the Collection and on a Copy. It is an uppercase `--text-xs` label and a pill track, 44px tall in all. On, the track fills with `--accent-fill` and the knob is `--on-accent`. Off, the track is `--sunk` with a `--line` border and an `--ink-dim` knob. Off hides every Value, Gain, Purchase price, Value sort, Value group heading, seller settings guide and currency picker, and leaves no gap where they were.
+The "Values" switch sits at the end of the header on the Collection and on a Copy. It is an uppercase `--text-xs` label and a pill track, 44px tall in all. On, the track fills with `--accent-fill` and the knob is `--on-accent`. Off, the track is `--sunk` with a `--line` border and an `--ink-dim` knob. Off hides every Value, Gain, Purchase price, Value sort, Value group heading, seller settings hint and currency picker, and leaves no gap where they were.
 
 ### Buttons
 

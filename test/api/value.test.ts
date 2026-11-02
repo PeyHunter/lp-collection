@@ -165,7 +165,7 @@ test("a condition that isn't on the Discogs scale is refused and changes nothing
   expect(await listCopies(owner)).toEqual([copy]);
 });
 
-test("when Discogs refuses because the seller settings are missing, the User is told so instead of every Copy showing No Value yet, until they fill them in", async () => {
+test("a User without Discogs seller settings gets the Lowest listing as Value, and the suggested price once they fill them in", async () => {
   const app = await createTestApp({ discogs: priced });
   const owner = await logInWithCollection(app);
   const friend = await invitedFriend(app, owner.session, "no-seller-settings");
@@ -177,19 +177,38 @@ test("when Discogs refuses because the seller settings are missing, the User is 
   const me = await app.request("/api/me", { headers: { cookie: friend.session } });
 
   expect([first.sellerSettingsMissing, second.sellerSettingsMissing]).toEqual([true, true]);
-  expect([first.copy.value, second.copy.value]).toEqual([null, null]);
+  expect(first.copy.value).toMatchObject({ value: 231.26, lowestListing: 231.26, currency: "DKK" });
+  expect(second.copy.value).toMatchObject({ value: null, lowestListing: null });
   expect(await list.json()).toMatchObject({ sellerSettingsMissing: true });
   expect(await me.json()).toMatchObject({ sellerSettingsUrl: "/fake-discogs/settings/seller" });
-  expect(await app.query("SELECT * FROM value_snapshots")).toEqual([]);
+
+  const tooSoon = await friend.as("/values", { method: "POST" });
+  expect(await tooSoon.json()).toMatchObject({ copies: [], sellerSettingsMissing: true, more: false });
 
   app.discogs.fillInSellerSettings("no-seller-settings");
+  app.clock.advance(61 * 60_000);
   const retried = await friend.as("/values", { method: "POST" });
 
   expect(retried.status).toBe(200);
   const { copies, sellerSettingsMissing } = (await retried.json()) as { copies: CopyWithValues[]; sellerSettingsMissing: boolean };
   expect(sellerSettingsMissing).toBe(false);
-  expect(copies.map((copy) => copy.value?.value)).toEqual([null, 223.8]);
+  expect(copies.map((copy) => [copy.release.title, copy.value?.value, copy.value?.lowestListing])).toEqual([["Discovery", 223.8, 231.26]]);
   expect(await (await friend.as("/copies")).json()).toMatchObject({ sellerSettingsMissing: false });
+});
+
+test("while seller settings are still missing, an hour-old Lowest listing Value asks Discogs again for only one Copy", async () => {
+  const app = await createTestApp({ discogs: { ...priced, lowestListings: { [discovery]: { amount: 31, currency: "EUR" }, [gas5]: { amount: 10, currency: "EUR" } } } });
+  const owner = await logInWithCollection(app);
+  const friend = await invitedFriend(app, owner.session, "no-seller-settings");
+  await saved(friend, discovery);
+  await saved(friend, gas5);
+  app.clock.advance(61 * 60_000);
+  const before = priceRequests(app).length;
+
+  const answer = await friend.as("/values", { method: "POST" });
+
+  expect(await answer.json()).toMatchObject({ copies: [{}], sellerSettingsMissing: true, more: false });
+  expect(priceRequests(app).length - before).toBe(2);
 });
 
 test("the owner's prices don't depend on another User's missing seller settings", async () => {
@@ -314,7 +333,7 @@ test("Values are fetched once when the list asks for them twice at the same time
   expect(priceSuggestionsAsked(app)).toEqual(Array(2).fill(discovery));
 });
 
-test("the seller settings guide fetches again the Copies that Discogs gave no Value, each once", async () => {
+test("a retry fetches again the Copies that Discogs gave no Value, each once", async () => {
   const script: FakeDiscogsScript = { ...priced, prices: { ...priced.prices } };
   const app = await createTestApp({ discogs: script });
   const owner = await logInWithCollection(app);
@@ -382,7 +401,7 @@ test("a Copy whose Value keeps failing doesn't hold up the others, and isn't ask
   expect(second.more).toBe(false);
   expect(priceSuggestionsAsked(app)).toEqual([kindOfBlueEurope, discovery, discovery, discovery]);
 
-  app.clock.advance(60 * 60_000);
+  app.clock.advance(61 * 60_000);
   await fetchValues(owner);
 
   expect(priceSuggestionsAsked(app)).toEqual([kindOfBlueEurope, discovery, discovery, discovery, kindOfBlueEurope]);
