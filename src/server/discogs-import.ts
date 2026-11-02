@@ -36,8 +36,6 @@ export function createImporter({
   wait: (ms: number) => Promise<void>;
 }) {
   const { db } = database;
-  let running: Promise<void> | undefined;
-  let again = false;
 
   /** Waits its turn for each Discogs request the call makes, then makes it. */
   async function call<T>(request: () => Promise<T>, requests = 1) {
@@ -123,28 +121,40 @@ export function createImporter({
     }
   }
 
+  /** Imports run side by side, one per User: each User's Discogs account has its own rate limit. */
+  const runs = new Map<string, Promise<void>>();
+  const inFlight = new Set<Promise<void>>();
+
+  function track(promise: Promise<void>) {
+    inFlight.add(promise);
+    void promise.finally(() => inFlight.delete(promise)).catch(() => undefined);
+    return promise;
+  }
+
+  /** Starts every due import that isn't running yet, and settles when they are done. */
   function runDue(): Promise<void> {
-    if (running) {
-      again = true;
-      return running;
-    }
-    running = (async () => {
-      do {
-        again = false;
+    return track(
+      (async () => {
+        const started: Promise<void>[] = [];
         for (const job of await due()) {
+          if (runs.has(job.userId)) continue;
           const claimed = await claim(job);
-          if (claimed) await runImport(claimed);
+          if (!claimed) continue;
+          const run = runImport(claimed).finally(() => runs.delete(job.userId));
+          runs.set(job.userId, run);
+          started.push(track(run));
         }
-      } while (again);
-    })().finally(() => {
-      running = undefined;
-    });
-    return running;
+        await Promise.all(started);
+      })(),
+    );
   }
 
   return {
     runDue,
-    idle: () => running ?? Promise.resolve(),
+    /** Settles once no import is running or being started. */
+    async idle() {
+      while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
+    },
     kick() {
       runDue().catch((error: unknown) => console.error(`The Discogs import stopped: ${error instanceof Error ? error.message : String(error)}`));
     },

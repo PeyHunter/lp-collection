@@ -112,7 +112,7 @@ if (config.discogs.kind === "real") {
   exchangeRates = createEcbRates();
 } else {
   console.log(
-    "DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases and their prices. A username that starts with no-seller-settings has no seller settings until they are saved at /fake-discogs/settings/seller, one that starts with no-collection-sync has a Discogs collection that refuses every change, and one that starts with with-discogs-collection has 120 records in Discogs to import at first login. Exchange rates are fixed.",
+    "DISCOGS=fake: using the fake Discogs, whose login page asks only for a username and which knows a few sample Releases and their prices. A username that starts with no-seller-settings has no seller settings until they are saved at /fake-discogs/settings/seller, one that starts with no-collection-sync has a Discogs collection that refuses every change, and one that starts with with-discogs-collection has 250 records in Discogs to import at first login. Exchange rates are fixed.",
   );
   discogs = fake = createFakeDiscogs({
     releases: sampleReleases,
@@ -121,7 +121,7 @@ if (config.discogs.kind === "real") {
     sellerSettingsMissingFor: (discogsUsername) => discogsUsername.startsWith("no-seller-settings"),
     collectionUnavailableFor: (discogsUsername) => discogsUsername.startsWith("no-collection-sync"),
     collectionFor: (discogsUsername) =>
-      discogsUsername.startsWith("with-discogs-collection") ? Array.from({ length: 120 }, (_, index) => sampleReleases[index % sampleReleases.length]!.discogsReleaseId) : undefined,
+      discogsUsername.startsWith("with-discogs-collection") ? Array.from({ length: 250 }, (_, index) => sampleReleases[index % sampleReleases.length]!.discogsReleaseId) : undefined,
     collectionPageDelayMs: 1_500,
   });
   exchangeRates = createFixedRates();

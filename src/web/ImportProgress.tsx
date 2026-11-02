@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ImportProgress as Progress } from "../server/discogs-import.ts";
 
-const pollMs = 3_000;
+const pollMs = 1_000;
 
 /** While the first-login import runs, how far it has got. When it finishes, the Collection loads again with everything in it. */
 export function ImportProgress({ initial, onFinished }: { initial: Progress | null; onFinished: () => void }) {
@@ -20,15 +20,14 @@ export function ImportProgress({ initial, onFinished }: { initial: Progress | nu
     return () => clearInterval(timer);
   }, [running, onFinished]);
 
-  if (!running) return null;
+  // Nothing shows for an empty Discogs collection, or before the first page says how much there is.
+  if (!running || !progress.total) return null;
   return (
     <p className="notice import-progress" aria-live="polite">
       Importing your Discogs collection…{" "}
-      {progress.total === null ? "" : (
-        <b className="tnum">
-          {progress.imported} of {progress.total}
-        </b>
-      )}
+      <b className="tnum">
+        {progress.imported} of {progress.total}
+      </b>
     </p>
   );
 }
