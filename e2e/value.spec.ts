@@ -91,9 +91,12 @@ test("a User without Discogs seller settings is guided once to fill them in, the
   await settings.getByLabel("Discogs username").fill(username);
   await settings.getByRole("button", { name: "Save seller settings" }).click();
   await settings.close();
+  // Back to the app's tab, as the User would be. Chromium can leave a background tab's aria-labelledby names
+  // uncomputed, so the guide is found by its heading and button text from here on, never by the region's name (#55).
+  await page.bringToFront();
 
-  await guide.getByRole("button", { name: "I've saved them, fetch Values" }).click();
-  await expect(guide).toHaveCount(0);
+  await page.getByRole("button", { name: "I've saved them, fetch Values" }).click();
+  await expect(page.getByRole("heading", { name: "Fill in your Discogs seller settings to see Values" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Copies" }).getByRole("listitem").filter({ hasText: "Discovery" })).toContainText("252 kr");
 });
 
