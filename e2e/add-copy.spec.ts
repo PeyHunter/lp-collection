@@ -26,10 +26,10 @@ test("a User types a barcode, picks one of several pressings and finds the new C
   await page.getByRole("textbox", { name: "Barcode" }).fill("8 86979 89121 1");
   await page.getByRole("button", { name: "Look up" }).click();
 
-  await expect(page.getByRole("heading", { name: "3 Releases match" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Which one is yours?" })).toBeVisible();
   const pressings = page.getByRole("listitem").filter({ has: page.getByRole("button", { name: "Kind Of Blue" }) });
   await expect(pressings).toHaveCount(3);
-  const european2010 = pressings.filter({ hasText: "2010 · Europe · Columbia" });
+  const european2010 = pressings.filter({ hasText: "Europe" }).filter({ hasText: "Columbia" });
   await european2010.getByRole("button", { name: "Kind Of Blue" }).click();
   await expect(european2010).toContainText("Will be saved with Media condition and Sleeve condition Very Good Plus.");
   await european2010.getByRole("button", { name: "Add to Collection" }).click();
