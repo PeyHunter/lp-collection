@@ -274,7 +274,6 @@ function looseText(text: string) {
 
 function matchesQuery(release: FakeRelease, query: LookupQuery) {
   if ("barcode" in query) return release.barcodes.includes(query.barcode);
-  if ("catalogNumber" in query) return release.catalogNumber !== null && looseText(release.catalogNumber) === looseText(query.catalogNumber);
   return looseText(release.artist).includes(looseText(query.artist)) && looseText(release.title).includes(looseText(query.title));
 }
 

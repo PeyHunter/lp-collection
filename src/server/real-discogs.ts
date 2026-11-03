@@ -259,7 +259,6 @@ function moneyFrom(price: unknown): Money | null {
 /** A barcode is exact, so it searches every format. Typed text matches CDs and cassettes too, so it searches vinyl only. */
 function searchTerms(query: LookupQuery): Record<string, string> {
   if ("barcode" in query) return { barcode: query.barcode };
-  if ("catalogNumber" in query) return { catno: query.catalogNumber, format: "Vinyl" };
   return {
     ...(query.artist && { artist: query.artist }),
     ...(query.title && { release_title: query.title }),

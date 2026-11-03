@@ -92,8 +92,6 @@ async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
     }
     if (path === "/database/search?barcode=886979891211&type=release&per_page=25") {
       json(kindOfBlueSearch);
-    } else if (path === "/database/search?catno=CS+8163&format=Vinyl&type=release&per_page=25") {
-      json({ pagination: { page: 1, pages: 13, per_page: 25, items: 312 }, results: [kindOfBlueSearch.results[0]] });
     } else if (path === "/releases/2335811") {
       json(kindOfBlueRelease);
     } else if (path === "/masters/5460") {
@@ -265,15 +263,6 @@ test("a barcode Lookup searches the Discogs database as the User and reads each 
     },
   ]);
   expect(oauthParams(stub.received[0]!.headers)).toMatchObject({ oauth_token: "user-token", oauth_signature: "consumer-secret&user-secret" });
-});
-
-test("a Catalog number Lookup searches vinyl Releases by catno and reports how many matched in all", async () => {
-  const stub = await startDiscogsStub();
-
-  const { candidates, total } = await gateway(stub.url).lookup({ catalogNumber: "CS 8163" }, auth);
-
-  expect(total).toBe(312);
-  expect(candidates).toMatchObject([{ discogsReleaseId: 2335811, catalogNumber: "CS 8163" }]);
 });
 
 test("an artist and title Lookup searches vinyl Releases by artist and release title, leaving out a blank one", async () => {
