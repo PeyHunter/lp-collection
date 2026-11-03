@@ -18,6 +18,7 @@ const kindOfBlueSearch = {
       label: ["Columbia", "Legacy (2)"],
       catno: "CS 8163",
       format: ["Vinyl", "LP", "Album", "Reissue"],
+      formats: [{ name: "Vinyl", text: "180 Gram" }, { name: "Vinyl", text: "Reissue" }, { name: "Vinyl" }],
       barcode: ["8 86979 89121 1"],
       cover_image: "https://i.discogs.com/kind-of-blue.jpeg",
     },
@@ -248,7 +249,7 @@ test("a barcode Lookup searches the Discogs database as the User and reads each 
       catalogNumber: "CS 8163",
       country: "US",
       pressingYear: 2010,
-      format: "Vinyl, LP, Album, Reissue",
+      formats: ["Vinyl", "LP", "Album", "Reissue", "180 Gram"],
       coverImageUrl: "https://i.discogs.com/kind-of-blue.jpeg",
     },
     {
@@ -259,7 +260,7 @@ test("a barcode Lookup searches the Discogs database as the User and reads each 
       catalogNumber: null,
       country: null,
       pressingYear: null,
-      format: null,
+      formats: [],
       coverImageUrl: null,
     },
   ]);

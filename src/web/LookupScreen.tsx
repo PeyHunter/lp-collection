@@ -376,7 +376,7 @@ function CandidateList({
       {candidates.map((candidate) => {
         const isChosen = candidate.discogsReleaseId === chosen;
         const panelId = `save-${candidate.discogsReleaseId}`;
-        const facts = [candidate.pressingYear, candidate.country, candidate.label, candidate.catalogNumber, candidate.format].filter((fact) => fact !== null);
+        const facts = [candidate.pressingYear, candidate.country, candidate.label, candidate.catalogNumber, candidate.formats.join(", ") || null].filter((fact) => fact !== null);
         return (
           <li className="candidate" key={candidate.discogsReleaseId} aria-current={isChosen ? "true" : undefined}>
             <div className="row">

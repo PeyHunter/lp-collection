@@ -50,7 +50,7 @@ export type ReleaseCandidate = {
   catalogNumber: string | null;
   country: string | null;
   pressingYear: number | null;
-  format: string | null;
+  formats: string[];
   coverImageUrl: string | null;
 };
 
