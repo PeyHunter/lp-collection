@@ -55,7 +55,7 @@ function decideLogin(facts: {
   return { kind: "refused" };
 }
 
-export function createAccessRoutes({ database, discogs, secretBox, now, appOwnerDiscogsUsername, publicUrl, importer }: AppDependencies) {
+export function createAccessRoutes({ database, discogs, secretBox, now, appOwnerDiscogsUsername, publicUrl, importer, coverReader }: AppDependencies) {
   const { db } = database;
   const routes = new Hono();
   const secure = publicUrl.protocol === "https:";
@@ -188,6 +188,7 @@ export function createAccessRoutes({ database, discogs, secretBox, now, appOwner
       showValues: user.showValues,
       sellerSettingsUrl: discogs.sellerSettingsUrl,
       discogsImport: (await importer.progress(user.id)) ?? null,
+      coverReading: coverReader !== undefined,
     });
   });
 

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { createAccessRoutes } from "./access.ts";
 import { createBackupRoutes } from "./backup-routes.ts";
 import { createCollectionRoutes } from "./collection.ts";
+import { createCoverRoutes, type CoverReader } from "./cover-reader.ts";
 import type { Database } from "./db.ts";
 import type { DiscogsGateway } from "./discogs.ts";
 import type { ExchangeRates } from "./exchange-rates.ts";
@@ -25,6 +26,8 @@ export type AppDependencies = {
   importer: Importer;
   /** Lets the nightly backup fetch Photo files over the cluster network. Unset, the backup route doesn't exist. */
   backupToken?: string;
+  /** Reads the artist and title off a photo of a cover. Unset, the Cover reading route doesn't exist and the app hides its button. */
+  coverReader?: CoverReader;
 };
 
 export function createApp(dependencies: AppDependencies) {
@@ -42,6 +45,7 @@ export function createApp(dependencies: AppDependencies) {
   app.route("/", createCollectionRoutes(dependencies));
   app.route("/", createShelfRoutes(dependencies));
   app.route("/", createMemberRoutes(dependencies));
+  if (dependencies.coverReader) app.route("/", createCoverRoutes(dependencies.coverReader, dependencies));
 
   return app;
 }

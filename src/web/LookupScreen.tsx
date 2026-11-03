@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CopyView, LookupCandidate, LookupView } from "../server/collection.ts";
 import { Cover } from "./Cover.tsx";
+import { BestMatch, CoverPhotoButton, lookUpCover, unreadCover } from "./CoverPhoto.tsx";
 import { Header } from "./Header.tsx";
 import { navigate } from "./navigation.ts";
 import { Scanner } from "./Scanner.tsx";
@@ -37,9 +38,9 @@ const ways: Record<Way, { chip: string; next: Way | null; offer: string; noMatch
 
 type Save = { kind: "ready" } | { kind: "saving" } | { kind: "failed"; message: string };
 
-type Found = { kind: "found"; way: Way; searched: string; total: number; candidates: LookupCandidate[]; chosen: number | null; save: Save };
+type Found = { kind: "found"; way: Way; fromCover: boolean; searched: string; total: number; candidates: LookupCandidate[]; chosen: number | null; save: Save };
 
-type Lookup = { kind: "idle" } | { kind: "looking" } | { kind: "failed"; message: string } | Found;
+type Lookup = { kind: "idle" } | { kind: "reading-cover" } | { kind: "looking" } | { kind: "failed"; message: string } | Found;
 
 const unreachable = "LP-Collection can't reach its server right now. Try again in a moment.";
 
@@ -60,7 +61,7 @@ function searchedText(view: LookupView) {
   return [view.artist, view.title].filter(Boolean).join(" · ");
 }
 
-export function LookupScreen({ collectionId }: { collectionId: string }) {
+export function LookupScreen({ collectionId, coverReading }: { collectionId: string; coverReading: boolean }) {
   const [way, setWay] = useState<Way>("barcode");
   const [wayChosen, setWayChosen] = useState(false);
   const [typed, setTyped] = useState<Typed>({ barcode: "", catalogNumber: "", artist: "", title: "" });
@@ -81,9 +82,13 @@ export function LookupScreen({ collectionId }: { collectionId: string }) {
     const response = await fetch(`/api/collections/${collectionId}/lookup?${new URLSearchParams(query)}`).catch(() => undefined);
     if (!response) return setLookup({ kind: "failed", message: unreachable });
     if (!response.ok) return setLookup({ kind: "failed", message: await errorMessage(response) });
-    const view = (await response.json()) as LookupView;
-    const only = view.candidates.length === 1 ? view.candidates[0]!.discogsReleaseId : null;
-    setLookup({ kind: "found", way: lookupWay, searched: searchedText(view), total: view.total, candidates: view.candidates, chosen: only, save: { kind: "ready" } });
+    show(lookupWay, (await response.json()) as LookupView, false);
+  }
+
+  function show(lookupWay: Way, view: LookupView, fromCover: boolean) {
+    // A best match is added with its own button, so nothing in the list starts open.
+    const only = !fromCover && view.candidates.length === 1 ? view.candidates[0]!.discogsReleaseId : null;
+    setLookup({ kind: "found", way: lookupWay, fromCover, searched: searchedText(view), total: view.total, candidates: view.candidates, chosen: only, save: { kind: "ready" } });
   }
 
   async function save(found: Found, candidate: LookupCandidate) {
@@ -100,12 +105,51 @@ export function LookupScreen({ collectionId }: { collectionId: string }) {
     navigate("/", { kind: "saved", copyId: copy.id, title: copy.release.title });
   }
 
-  const looking = lookup.kind === "looking";
+  async function readCover(file: File) {
+    setLookup({ kind: "reading-cover" });
+    const found = await lookUpCover(collectionId, file);
+    if (found.kind === "failed") return setLookup({ kind: "failed", message: found.message });
+    // The reading is filled in as an artist and title search, so a wrong word is one edit away.
+    setWay("artistTitle");
+    setWayChosen(false);
+    setTyped((current) => ({ ...current, artist: found.reading.artist, title: found.reading.title }));
+    if (found.kind === "unread") return setLookup({ kind: "failed", message: unreadCover });
+    show("artistTitle", found.view, true);
+  }
+
+  const looking = lookup.kind === "looking" || lookup.kind === "reading-cover";
+
+  const matches = (
+    <section className="section" aria-label="Matches" aria-busy={looking}>
+      {lookup.kind === "reading-cover" && <p className="loading">Reading the cover…</p>}
+      {lookup.kind === "looking" && <p className="loading">Asking Discogs…</p>}
+      {lookup.kind === "failed" && (
+        <p className="notice error" role="alert">
+          {lookup.message}
+        </p>
+      )}
+      {lookup.kind === "found" && (
+        <Matches
+          found={lookup}
+          onChoose={(chosen) => setLookup({ ...lookup, chosen, save: { kind: "ready" } })}
+          onSave={(candidate) => save(lookup, candidate)}
+          onNextWay={switchTo}
+        />
+      )}
+    </section>
+  );
 
   return (
     <>
       <Header kicker="Lookup" title="Add a record" back="/" />
       <main className="content-grid">
+        {coverReading && (
+          <section className="section">
+            <CoverPhotoButton busy={looking} reading={lookup.kind === "reading-cover"} onFile={(file) => void readCover(file)} />
+            <p className="hint">Photograph the front of the sleeve. The best match comes up with one button to add it.</p>
+          </section>
+        )}
+        {coverReading && matches}
         <Scanner
           onRead={(barcode) => {
             setWay("barcode");
@@ -209,22 +253,7 @@ export function LookupScreen({ collectionId }: { collectionId: string }) {
           )}
         </form>
 
-        <section className="section" aria-label="Matches" aria-busy={looking}>
-          {looking && <p className="loading">Asking Discogs…</p>}
-          {lookup.kind === "failed" && (
-            <p className="notice error" role="alert">
-              {lookup.message}
-            </p>
-          )}
-          {lookup.kind === "found" && (
-            <Matches
-              found={lookup}
-              onChoose={(chosen) => setLookup({ ...lookup, chosen, save: { kind: "ready" } })}
-              onSave={(candidate) => save(lookup, candidate)}
-              onNextWay={switchTo}
-            />
-          )}
-        </section>
+        {!coverReading && matches}
       </main>
     </>
   );
@@ -258,7 +287,7 @@ function Matches({
   onSave: (candidate: LookupCandidate) => void;
   onNextWay: (way: Way) => void;
 }) {
-  const { way, searched, total, candidates, chosen, save } = found;
+  const { way, fromCover, searched, total, candidates, chosen, save } = found;
   const { next } = ways[way];
   const nextWay = next && (
     <button className="link" type="button" onClick={() => onNextWay(next)}>
@@ -278,6 +307,38 @@ function Matches({
       </div>
     );
   }
+  if (fromCover) {
+    const [best, ...others] = candidates;
+    return (
+      <>
+        <BestMatch candidate={best!}>
+          {best!.copiesInCollection > 0 && (
+            <p className="warning" role="alert">
+              You already have {copiesText(best!.copiesInCollection)} of this. {whereHeld(best!.held)}
+            </p>
+          )}
+          {save.kind === "failed" && chosen === null && (
+            <p className="notice error" role="alert">
+              {save.message}
+            </p>
+          )}
+          <button className="btn primary" type="button" onClick={() => onSave(best!)} disabled={save.kind === "saving"}>
+            {save.kind === "saving" && chosen === null ? "Adding…" : best!.copiesInCollection > 0 ? "Add another" : "Add to my collection"}
+          </button>
+        </BestMatch>
+        {others.length > 0 && (
+          <>
+            <div className="section-head">
+              <h2>Not this one?</h2>
+              <span className="count tnum searched">{searched}</span>
+            </div>
+            <CandidateList candidates={others} chosen={chosen} save={save} onChoose={onChoose} onSave={onSave} />
+          </>
+        )}
+        <p className="next-way">Not here at all? Change the artist or title above and look up again.</p>
+      </>
+    );
+  }
   return (
     <>
       <div className="section-head">
@@ -291,70 +352,88 @@ function Matches({
       ) : (
         candidates.length > 1 && <p className="lead">Tap the pressing you hold. Check the label and the year on the sleeve.</p>
       )}
-      <ol className="rows">
-        {candidates.map((candidate) => {
-          const isChosen = candidate.discogsReleaseId === chosen;
-          const panelId = `save-${candidate.discogsReleaseId}`;
-          const facts = [candidate.pressingYear, candidate.country, candidate.label, candidate.catalogNumber, candidate.format].filter((fact) => fact !== null);
-          return (
-            <li className="candidate" key={candidate.discogsReleaseId} aria-current={isChosen ? "true" : undefined}>
-              <div className="row">
-                <Cover url={candidate.coverImageUrl} />
-                <span className="row-text">
-                  <button className="row-link row-title" type="button" onClick={() => onChoose(candidate.discogsReleaseId)} aria-expanded={isChosen} aria-controls={panelId}>
-                    {candidate.title}
-                  </button>
-                  <span className="row-artist">{candidate.artist}</span>
-                  <span className="row-meta">{facts.join(" · ")}</span>
-                  {candidate.copiesInCollection > 0 && <span className="badge">In your Collection</span>}
-                </span>
-                <svg className="pick" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  {isChosen ? (
-                    <>
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="m8 12 3 3 5-6" />
-                    </>
-                  ) : (
-                    <path d="m9 6 6 6-6 6" />
-                  )}
-                </svg>
-              </div>
-              {isChosen && (
-                <div className={candidate.copiesInCollection > 0 ? "save-panel duplicate" : "save-panel"} id={panelId}>
-                  {candidate.copiesInCollection > 0 ? (
-                    <>
-                      <p className="warning" role="alert">You already have {copiesText(candidate.copiesInCollection)} of this. Add another?</p>
-                      <p className="where">{whereHeld(candidate.held)}</p>
-                    </>
-                  ) : (
-                    <p>Will be saved with Media condition and Sleeve condition Very Good Plus.</p>
-                  )}
-                  {save.kind === "failed" && (
-                    <p className="notice error" role="alert">
-                      {save.message}
-                    </p>
-                  )}
-                  {candidate.copiesInCollection > 0 ? (
-                    <div className="actions">
-                      <button className="btn primary" type="button" onClick={() => onSave(candidate)} disabled={save.kind === "saving"}>
-                        {save.kind === "saving" ? "Adding…" : "Add another"}
-                      </button>
-                      <button className="btn secondary" type="button" onClick={() => onChoose(null)} disabled={save.kind === "saving"}>
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button className="btn primary" type="button" onClick={() => onSave(candidate)} disabled={save.kind === "saving"}>
-                      {save.kind === "saving" ? "Adding…" : "Add to Collection"}
-                    </button>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ol>
+      <CandidateList candidates={candidates} chosen={chosen} save={save} onChoose={onChoose} onSave={onSave} />
       {nextWay && <p className="next-way">Not the one you hold? {nextWay}</p>}
     </>
+  );
+}
+
+function CandidateList({
+  candidates,
+  chosen,
+  save,
+  onChoose,
+  onSave,
+}: {
+  candidates: LookupCandidate[];
+  chosen: number | null;
+  save: Save;
+  onChoose: (discogsReleaseId: number | null) => void;
+  onSave: (candidate: LookupCandidate) => void;
+}) {
+  return (
+    <ol className="rows">
+      {candidates.map((candidate) => {
+        const isChosen = candidate.discogsReleaseId === chosen;
+        const panelId = `save-${candidate.discogsReleaseId}`;
+        const facts = [candidate.pressingYear, candidate.country, candidate.label, candidate.catalogNumber, candidate.format].filter((fact) => fact !== null);
+        return (
+          <li className="candidate" key={candidate.discogsReleaseId} aria-current={isChosen ? "true" : undefined}>
+            <div className="row">
+              <Cover url={candidate.coverImageUrl} />
+              <span className="row-text">
+                <button className="row-link row-title" type="button" onClick={() => onChoose(candidate.discogsReleaseId)} aria-expanded={isChosen} aria-controls={panelId}>
+                  {candidate.title}
+                </button>
+                <span className="row-artist">{candidate.artist}</span>
+                <span className="row-meta">{facts.join(" · ")}</span>
+                {candidate.copiesInCollection > 0 && <span className="badge">In your Collection</span>}
+              </span>
+              <svg className="pick" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {isChosen ? (
+                  <>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="m8 12 3 3 5-6" />
+                  </>
+                ) : (
+                  <path d="m9 6 6 6-6 6" />
+                )}
+              </svg>
+            </div>
+            {isChosen && (
+              <div className={candidate.copiesInCollection > 0 ? "save-panel duplicate" : "save-panel"} id={panelId}>
+                {candidate.copiesInCollection > 0 ? (
+                  <>
+                    <p className="warning" role="alert">You already have {copiesText(candidate.copiesInCollection)} of this. Add another?</p>
+                    <p className="where">{whereHeld(candidate.held)}</p>
+                  </>
+                ) : (
+                  <p>Will be saved with Media condition and Sleeve condition Very Good Plus.</p>
+                )}
+                {save.kind === "failed" && (
+                  <p className="notice error" role="alert">
+                    {save.message}
+                  </p>
+                )}
+                {candidate.copiesInCollection > 0 ? (
+                  <div className="actions">
+                    <button className="btn primary" type="button" onClick={() => onSave(candidate)} disabled={save.kind === "saving"}>
+                      {save.kind === "saving" ? "Adding…" : "Add another"}
+                    </button>
+                    <button className="btn secondary" type="button" onClick={() => onChoose(null)} disabled={save.kind === "saving"}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button className="btn primary" type="button" onClick={() => onSave(candidate)} disabled={save.kind === "saving"}>
+                    {save.kind === "saving" ? "Adding…" : "Add to Collection"}
+                  </button>
+                )}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ol>
   );
 }

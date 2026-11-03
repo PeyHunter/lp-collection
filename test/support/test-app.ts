@@ -10,6 +10,7 @@ import { createFakeDiscogs, type FakeDiscogsScript } from "../../src/server/fake
 import { createImporter, type Importer } from "../../src/server/discogs-import.ts";
 import { createMirror, type Mirror } from "../../src/server/mirror.ts";
 import { createSecretBox } from "../../src/server/secret-box.ts";
+import type { CoverReader } from "../../src/server/cover-reader.ts";
 
 export type TestAppOptions = {
   discogs?: FakeDiscogsScript;
@@ -17,6 +18,7 @@ export type TestAppOptions = {
   publicUrl?: string;
   backupToken?: string;
   tokenEncryptionKey?: Buffer;
+  coverReader?: CoverReader;
 };
 
 export type LoginResult = {
@@ -29,7 +31,7 @@ export type LoginResult = {
  * Starts the app against a brand-new PostgreSQL database and a scripted fake Discogs.
  * Tests talk to it only through `request`, the same HTTP API the phone UI uses.
  */
-export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsername = "app-owner", publicUrl = "http://localhost", backupToken, tokenEncryptionKey = randomBytes(32) }: TestAppOptions = {}) {
+export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsername = "app-owner", publicUrl = "http://localhost", backupToken, tokenEncryptionKey = randomBytes(32), coverReader }: TestAppOptions = {}) {
   const serverUrl = inject("postgresUrl");
   const name = `test_${randomUUID().replaceAll("-", "")}`;
   const admin = new pg.Client({ connectionString: `${serverUrl}/postgres` });
@@ -49,7 +51,7 @@ export async function createTestApp({ discogs: script = {}, appOwnerDiscogsUsern
   const start = () => {
     mirror = createMirror({ database, discogs, secretBox, now: () => now });
     importer = createImporter({ database, discogs, secretBox, now: () => now, wait: async () => {} });
-    return createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl), photosDir, mirror, importer, backupToken });
+    return createApp({ database, discogs, exchangeRates: createFixedRates(), secretBox, now: () => now, appOwnerDiscogsUsername: owner, publicUrl: new URL(publicUrl), photosDir, mirror, importer, backupToken, coverReader });
   };
   let app = start();
 

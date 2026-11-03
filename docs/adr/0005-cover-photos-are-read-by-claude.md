@@ -1,0 +1,5 @@
+# Cover photos are read by Claude, and only when a key is set
+
+A Cover reading sends the photo of a sleeve to Claude (`claude-haiku-5-5`, through `@anthropic-ai/sdk`), which answers with the artist and title it reads. Discogs has no image search, and reading stylised cover text, or recognising a cover with none, needs a vision model rather than OCR. The reading only fills in an artist and title Lookup, so a wrong reading costs the User one edit, never a wrong Copy.
+
+Claude is the app's second outside service after Discogs, so it is optional. Without `ANTHROPIC_API_KEY` (the `lp-collection-anthropic` secret, which `scripts/wizard/deploy.sh` offers to create) the route doesn't exist, `/api/me` says `coverReading: false`, and the button is hidden. Photos are not kept: they go to Anthropic and are forgotten by the app once read. Each User may read 30 covers per 15 minutes, which keeps a stuck phone or a stolen session from running up the bill. Tests and `DISCOGS=fake` use a fake reader that reads every photo as Sgt. Pepper, so no test needs the network.

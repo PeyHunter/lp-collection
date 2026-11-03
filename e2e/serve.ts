@@ -10,6 +10,8 @@ await postgres.createDatabase("lp_collection");
 
 process.env.APP_OWNER_DISCOGS_USERNAME ??= "owner";
 process.env.DISCOGS = "fake";
+// The fake cover reader reads every photo as Sgt. Pepper, so no spec reaches Claude.
+delete process.env.ANTHROPIC_API_KEY;
 process.env.PHOTOS_DIR = join(postgres.dir, "photos");
 process.env.DATABASE_URL = `${postgres.url}/lp_collection`;
 process.env.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("base64");
