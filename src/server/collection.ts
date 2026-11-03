@@ -32,19 +32,13 @@ function tidy(typed: string | undefined) {
 }
 
 function parseLookup(params: Record<string, string>): { query: LookupQuery } | { error: string } {
-  const { barcode, catalogNumber, artist, title } = params;
-  const ways = [barcode !== undefined, catalogNumber !== undefined, artist !== undefined || title !== undefined].filter(Boolean).length;
-  if (ways === 0) return { error: "Say what to look up: a barcode, a Catalog number, or an artist and title." };
-  if (ways > 1) return { error: "Look up one thing at a time: a barcode, a Catalog number, or an artist and title." };
+  const { barcode, artist, title } = params;
+  const ways = [barcode !== undefined, artist !== undefined || title !== undefined].filter(Boolean).length;
+  if (ways === 0) return { error: "Say what to look up: a barcode, or an artist and title." };
+  if (ways > 1) return { error: "Look up one thing at a time: a barcode, or an artist and title." };
   if (barcode !== undefined) {
     const digits = parseBarcode(barcode);
     return digits ? { query: { barcode: digits } } : { error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." };
-  }
-  if (catalogNumber !== undefined) {
-    const typed = tidy(catalogNumber);
-    if (!typed) return { error: "Type the Catalog number from the spine or the label." };
-    if (typed.length > maxTypedLength) return { error: `That's longer than any Catalog number. Type at most ${maxTypedLength} characters.` };
-    return { query: { catalogNumber: typed } };
   }
   const query = { artist: tidy(artist), title: tidy(title) };
   if (!query.artist && !query.title) return { error: "Type the artist, the title, or both." };

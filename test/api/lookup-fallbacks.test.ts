@@ -46,49 +46,33 @@ function searches(app: TestApp) {
   return app.discogs.requests.filter((request) => request.endpoint === "search").map(({ token: _, secret: __, ...request }) => request);
 }
 
-test("a barcode Discogs doesn't know finds nothing, and the Catalog number from the label finds the Release", async () => {
+test("a barcode Discogs doesn't know finds nothing, and the artist and title find every pressing", async () => {
   const app = await createTestApp({ discogs: { releases: sampleReleases } });
   const owner = await logInWithCollection(app);
 
   const byBarcode = await lookUp(owner, { barcode: noSuchBarcode });
-  const byCatalogNumber = await lookUp(owner, { catalogNumber: " pcs  7027 " });
+  const byArtistAndTitle = await lookUp(owner, { artist: " beatles ", title: "sgt.  pepper" });
 
   expect(byBarcode).toEqual({ barcode: noSuchBarcode, total: 0, candidates: [] });
-  expect(byCatalogNumber).toEqual({
-    catalogNumber: "pcs 7027",
-    total: 1,
-    candidates: [
-      {
-        discogsReleaseId: sgtPepperUk,
-        artist: "The Beatles",
-        title: "Sgt. Pepper's Lonely Hearts Club Band",
-        label: "Parlophone",
-        catalogNumber: "PCS 7027",
-        country: "UK",
-        pressingYear: 1967,
-        formats: ["Vinyl", "LP", "Album", "Stereo"],
-        coverImageUrl: `/fake-discogs/covers/${sgtPepperUk}.svg`,
-        copiesInCollection: 0,
-        held: [],
-      },
-    ],
+  expect(byArtistAndTitle).toMatchObject({ artist: "beatles", title: "sgt. pepper", total: 2 });
+  expect(byArtistAndTitle.candidates.map(({ discogsReleaseId }) => discogsReleaseId)).toEqual([sgtPepperUk, sgtPepperGermany]);
+  expect(byArtistAndTitle.candidates[0]).toEqual({
+    discogsReleaseId: sgtPepperUk,
+    artist: "The Beatles",
+    title: "Sgt. Pepper's Lonely Hearts Club Band",
+    label: "Parlophone",
+    catalogNumber: "PCS 7027",
+    country: "UK",
+    pressingYear: 1967,
+    formats: ["Vinyl", "LP", "Album", "Stereo"],
+    coverImageUrl: `/fake-discogs/covers/${sgtPepperUk}.svg`,
+    copiesInCollection: 0,
+    held: [],
   });
   expect(searches(app)).toEqual([
     { endpoint: "search", barcode: noSuchBarcode },
-    { endpoint: "search", catalogNumber: "pcs 7027" },
+    { endpoint: "search", artist: "beatles", title: "sgt. pepper" },
   ]);
-});
-
-test("a Catalog number Discogs doesn't know finds nothing, and the artist and title find every pressing", async () => {
-  const app = await createTestApp({ discogs: { releases: sampleReleases } });
-  const owner = await logInWithCollection(app);
-
-  const byCatalogNumber = await lookUp(owner, { catalogNumber: "PCS 9999" });
-  const byArtistAndTitle = await lookUp(owner, { artist: "beatles", title: "sgt. pepper" });
-
-  expect(byCatalogNumber).toEqual({ catalogNumber: "PCS 9999", total: 0, candidates: [] });
-  expect(byArtistAndTitle).toMatchObject({ artist: "beatles", title: "sgt. pepper", total: 2 });
-  expect(byArtistAndTitle.candidates.map(({ discogsReleaseId }) => discogsReleaseId)).toEqual([sgtPepperUk, sgtPepperGermany]);
 });
 
 test("the artist alone or the title alone is enough", async () => {
@@ -151,16 +135,16 @@ test("the Copy count also shows on a cached barcode Lookup, and counts only the 
   expect(searches(app)).toEqual([{ endpoint: "search", barcode: discovery }]);
 });
 
-test("only Members can look up into a Collection, by any of the three ways", async () => {
+test("only Members can look up into a Collection, by either way", async () => {
   const app = await createTestApp({ discogs: { releases: sampleReleases } });
   const owner = await logInWithCollection(app);
   const friend = await invitedFriend(app, owner.session, "friend");
   const intoOwners = (query: string) => app.request(`/api/collections/${owner.collectionId}/lookup?${query}`, { headers: { cookie: friend.session } });
 
   const responses = await Promise.all([
-    intoOwners("catalogNumber=PCS%207027"),
+    intoOwners("barcode=190295328709"),
     intoOwners("artist=The%20Beatles&title=Sgt"),
-    app.request(`/api/collections/${owner.collectionId}/lookup?catalogNumber=PCS%207027`),
+    app.request(`/api/collections/${owner.collectionId}/lookup?barcode=190295328709`),
   ]);
 
   expect(responses.map((response) => response.status)).toEqual([404, 404, 401]);
@@ -193,12 +177,12 @@ test("a broad search shows only the first page of Releases and says how many mat
   expect(body.candidates[0]).toMatchObject({ title: "Live 1" });
 });
 
-test("a Lookup needs exactly one way: a barcode, a Catalog number, or an artist and title", async () => {
+test("a Lookup needs exactly one way: a barcode, or an artist and title", async () => {
   const app = await createTestApp({ discogs: { releases: sampleReleases } });
   const owner = await logInWithCollection(app);
 
   const refusals = await Promise.all(
-    ["", "catalogNumber=%20%20", "artist=&title=%20", "barcode=190295328709&catalogNumber=PCS%207027", `catalogNumber=${"X".repeat(101)}`].map(
+    ["", "catalogNumber=PCS%207027", "artist=&title=%20", "barcode=190295328709&artist=Beatles", `artist=${"X".repeat(101)}`].map(
       async (query) => {
         const response = await owner.as(`/lookup?${query}`);
         return { status: response.status, ...((await response.json()) as { error: string }) };
@@ -207,20 +191,20 @@ test("a Lookup needs exactly one way: a barcode, a Catalog number, or an artist 
   );
 
   expect(refusals).toEqual([
-    { status: 400, error: "Say what to look up: a barcode, a Catalog number, or an artist and title." },
-    { status: 400, error: "Type the Catalog number from the spine or the label." },
+    { status: 400, error: "Say what to look up: a barcode, or an artist and title." },
+    { status: 400, error: "Say what to look up: a barcode, or an artist and title." },
     { status: 400, error: "Type the artist, the title, or both." },
-    { status: 400, error: "Look up one thing at a time: a barcode, a Catalog number, or an artist and title." },
-    { status: 400, error: "That's longer than any Catalog number. Type at most 100 characters." },
+    { status: 400, error: "Look up one thing at a time: a barcode, or an artist and title." },
+    { status: 400, error: "That's longer than any artist or title. Type at most 100 characters each." },
   ]);
   expect(searches(app)).toEqual([]);
 });
 
-test("when Discogs can't be reached a Catalog number or artist and title Lookup says so", async () => {
+test("when Discogs can't be reached a barcode or artist and title Lookup says so", async () => {
   const app = await createTestApp({ discogs: { releases: sampleReleases, unavailable: true } });
   const owner = await logInWithCollection(app);
 
-  const responses = await Promise.all([owner.as("/lookup?catalogNumber=PCS%207027"), owner.as("/lookup?artist=The%20Beatles")]);
+  const responses = await Promise.all([owner.as("/lookup?barcode=190295328709"), owner.as("/lookup?artist=The%20Beatles")]);
 
   expect(responses.map((response) => response.status)).toEqual([502, 502]);
   expect(await responses[0]!.json()).toEqual({ error: "Discogs didn't answer. Try again in a moment." });

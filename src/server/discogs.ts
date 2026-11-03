@@ -54,7 +54,7 @@ export type ReleaseCandidate = {
   coverImageUrl: string | null;
 };
 
-export type LookupQuery = { barcode: string } | { catalogNumber: string } | { artist: string; title: string };
+export type LookupQuery = { barcode: string } | { artist: string; title: string };
 
 export type LookupResult = { candidates: ReleaseCandidate[]; total: number };
 

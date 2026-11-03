@@ -8,25 +8,18 @@ import { Scanner } from "./Scanner.tsx";
 import { narrow, notListed, valuesOf, type Difference, type Picks, type Trait } from "./narrow.ts";
 import { locationLabel } from "./shelf-grid.ts";
 
-type Way = "barcode" | "catalogNumber" | "artistTitle";
+type Way = "barcode" | "artistTitle";
 
-type Typed = { barcode: string; catalogNumber: string; artist: string; title: string };
+type Typed = { barcode: string; artist: string; title: string };
 
 /** The ways to look a record up, in the order the Lookup falls back through them. */
 const ways: Record<Way, { chip: string; next: Way | null; offer: string; noMatch: (searched: string) => string; tip: string }> = {
   barcode: {
     chip: "Barcode",
-    next: "catalogNumber",
-    offer: "Search by Catalog number",
-    noMatch: (searched) => `No Release on Discogs has the barcode ${searched}.`,
-    tip: "Check the digits against the sleeve. Some older records have no barcode at all, but the Catalog number on the spine or the label finds them.",
-  },
-  catalogNumber: {
-    chip: "Catalog number",
     next: "artistTitle",
     offer: "Search by artist and title",
-    noMatch: (searched) => `No Release on Discogs has the Catalog number ${searched}.`,
-    tip: "Check it against the spine and the label. Some labels print it in more than one way.",
+    noMatch: (searched) => `No Release on Discogs has the barcode ${searched}.`,
+    tip: "Check the digits against the sleeve. Some older records have no barcode at all, but the artist and title find them.",
   },
   artistTitle: {
     chip: "Artist and title",
@@ -61,20 +54,18 @@ async function errorMessage(response: Response) {
 
 function queryFor(way: Way, typed: Typed): Record<string, string> {
   if (way === "barcode") return { barcode: typed.barcode };
-  if (way === "catalogNumber") return { catalogNumber: typed.catalogNumber };
   return { artist: typed.artist, title: typed.title };
 }
 
 function searchedText(view: LookupView) {
   if ("barcode" in view) return view.barcode;
-  if ("catalogNumber" in view) return view.catalogNumber;
   return [view.artist, view.title].filter(Boolean).join(" · ");
 }
 
 export function LookupScreen({ collectionId, coverReading }: { collectionId: string; coverReading: boolean }) {
   const [way, setWay] = useState<Way>("barcode");
   const [wayChosen, setWayChosen] = useState(false);
-  const [typed, setTyped] = useState<Typed>({ barcode: "", catalogNumber: "", artist: "", title: "" });
+  const [typed, setTyped] = useState<Typed>({ barcode: "", artist: "", title: "" });
   const [lookup, setLookup] = useState<Lookup>({ kind: "idle" });
   const matchesRef = useRef<HTMLElement>(null);
   const scrollToMatches = useRef(false);
@@ -224,28 +215,6 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
                 <LookUpButton looking={looking} />
               </div>
               <p className="hint">The 12 or 13 digits under the bars, usually on the back of the sleeve.</p>
-            </div>
-          )}
-          {way === "catalogNumber" && (
-            <div className="field">
-              <label htmlFor="catalog-number">Catalog number</label>
-              <div className="field-row">
-                <input
-                  className="input tnum"
-                  id="catalog-number"
-                  value={typed.catalogNumber}
-                  onChange={(event) => type("catalogNumber", event.target.value)}
-                  autoCapitalize="characters"
-                  autoComplete="off"
-                  spellCheck={false}
-                  enterKeyHint="search"
-                  maxLength={100}
-                  autoFocus={wayChosen}
-                  required
-                />
-                <LookUpButton looking={looking} />
-              </div>
-              <p className="hint">The label's code for the record, on the spine or the label, such as PCS 7027.</p>
             </div>
           )}
           {way === "artistTitle" && (
