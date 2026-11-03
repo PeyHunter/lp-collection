@@ -90,7 +90,15 @@ async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
       response.statusCode = 429;
       return json({ message: "You are making requests too quickly." });
     }
-    if (path === "/database/search?barcode=886979891211&type=release&per_page=25") {
+    if (path.startsWith("/database/search?q=")) {
+      const params = new URL(path, "http://stub").searchParams;
+      const q = params.get("q");
+      if (params.get("type") === "release" && q === "Miles Davis Kind of Blu") json(kindOfBlueSearch);
+      else if (params.get("type") === "artist" && q === "Fleetwod Mac") json({ results: [{ id: 1, type: "artist", title: "Fleetwod Mac Tribute Band Of Norway" }] });
+      else if (params.get("type") === "artist" && q === "Flee") {
+        json({ results: ["Fleet Foxes", "Fleetwood Mac", "Fleetwood Mac (2)", "Fleetwoods"].map((title, id) => ({ id, type: "artist", title })) });
+      } else json({ pagination: { items: 0 }, results: [] });
+    } else if (path === "/database/search?barcode=886979891211&type=release&per_page=25") {
       json(kindOfBlueSearch);
     } else if (path === "/releases/2335811") {
       json(kindOfBlueRelease);
@@ -277,6 +285,40 @@ test("an artist and title Lookup searches vinyl Releases by artist and release t
     "/database/search?artist=Miles+Davis&release_title=Kind+of+Blue&format=Vinyl&type=release&per_page=25",
     "/database/search?release_title=Kind+of+Blue&format=Vinyl&type=release&per_page=25",
   ]);
+});
+
+test("suggestions first search vinyl Releases by free text and offer each distinct artist and title", async () => {
+  const stub = await startDiscogsStub();
+
+  const suggestions = await gateway(stub.url).suggest({ artist: "Miles Davis", title: "Kind of Blu" }, auth);
+
+  expect(suggestions).toEqual([
+    { artist: "Miles Davis", title: "Kind Of Blue" },
+    { artist: "Nirvana", title: "Untitled - Live" },
+  ]);
+  expect(stub.received.map((request) => request.path)).toEqual(["/database/search?q=Miles+Davis+Kind+of+Blu&type=release&format=Vinyl&per_page=50"]);
+});
+
+test("when free text finds nothing, suggestions search artists by name and first letters, ranked by spelling, in at most 3 calls", async () => {
+  const stub = await startDiscogsStub();
+
+  const suggestions = await gateway(stub.url).suggest({ artist: "Fleetwod Mac", title: "Rumours" }, auth);
+
+  expect(suggestions).toEqual([{ artist: "Fleetwood Mac", title: "Rumours" }]);
+  expect(stub.received.map((request) => request.path)).toEqual([
+    "/database/search?q=Fleetwod+Mac+Rumours&type=release&format=Vinyl&per_page=50",
+    "/database/search?q=Fleetwod+Mac&type=artist&per_page=50",
+    "/database/search?q=Flee&type=artist&per_page=50",
+  ]);
+});
+
+test("with no artist typed, suggestions stop after the free text search", async () => {
+  const stub = await startDiscogsStub();
+
+  const suggestions = await gateway(stub.url).suggest({ artist: "", title: "Rumors" }, auth);
+
+  expect(suggestions).toEqual([]);
+  expect(stub.received).toHaveLength(1);
 });
 
 test("Release details take the Original year from the master release", async () => {

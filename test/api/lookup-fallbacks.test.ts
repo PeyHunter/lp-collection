@@ -43,7 +43,7 @@ async function saveCopy(user: Member, discogsReleaseId: number) {
 }
 
 function searches(app: TestApp) {
-  return app.discogs.requests.filter((request) => request.endpoint === "search").map(({ token: _, secret: __, ...request }) => request);
+  return app.discogs.requests.filter((request) => request.endpoint === "search" || request.endpoint === "suggest").map(({ token: _, secret: __, ...request }) => request);
 }
 
 test("a barcode Discogs doesn't know finds nothing, and the artist and title find every pressing", async () => {
@@ -54,7 +54,7 @@ test("a barcode Discogs doesn't know finds nothing, and the artist and title fin
   const byArtistAndTitle = await lookUp(owner, { artist: " beatles ", title: "sgt.  pepper" });
 
   expect(byBarcode).toEqual({ barcode: noSuchBarcode, total: 0, candidates: [] });
-  expect(byArtistAndTitle).toMatchObject({ artist: "beatles", title: "sgt. pepper", total: 2 });
+  expect(byArtistAndTitle).toMatchObject({ artist: "beatles", title: "sgt. pepper", total: 2, suggestions: [] });
   expect(byArtistAndTitle.candidates.map(({ discogsReleaseId }) => discogsReleaseId)).toEqual([sgtPepperUk, sgtPepperGermany]);
   expect(byArtistAndTitle.candidates[0]).toEqual({
     discogsReleaseId: sgtPepperUk,
@@ -92,7 +92,33 @@ test("an artist and title Discogs doesn't know find nothing", async () => {
 
   const body = await lookUp(owner, { artist: "Nobody Anyone Knows", title: "Unheard" });
 
-  expect(body).toEqual({ artist: "Nobody Anyone Knows", title: "Unheard", total: 0, candidates: [] });
+  expect(body).toEqual({ artist: "Nobody Anyone Knows", title: "Unheard", total: 0, candidates: [], suggestions: [] });
+});
+
+test("a misspelled artist that finds nothing suggests the close spellings Discogs knows, and only then", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases } });
+  const owner = await logInWithCollection(app);
+
+  const misspelled = await lookUp(owner, { artist: "Pink Floid", title: "" });
+  const halfTitle = await lookUp(owner, { artist: "beatels", title: "sgt pepper" });
+  const found = await lookUp(owner, { artist: "Pink Floyd", title: "" });
+
+  expect(misspelled).toMatchObject({ total: 0, candidates: [], suggestions: [{ artist: "Pink Floyd", title: "The Dark Side Of The Moon" }] });
+  expect(halfTitle).toMatchObject({ total: 0, suggestions: [{ artist: "The Beatles", title: "Sgt. Pepper's Lonely Hearts Club Band" }] });
+  expect(found).toMatchObject({ total: 3, suggestions: [] });
+  expect(searches(app).filter(({ endpoint }) => endpoint === "suggest")).toHaveLength(2);
+});
+
+test("when the suggestions fail, the Lookup still answers that nothing matched", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases } });
+  const owner = await logInWithCollection(app);
+  app.discogs.suggest = async () => {
+    throw new Error("Discogs is down");
+  };
+
+  const body = await lookUp(owner, { artist: "Pink Floid", title: "" });
+
+  expect(body).toEqual({ artist: "Pink Floid", title: "", total: 0, candidates: [], suggestions: [] });
 });
 
 test("each candidate says how many Copies of it the Collection already has: 1, then 2", async () => {
