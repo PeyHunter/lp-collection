@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { collectionPageSize, conditions, lookupPageSize, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type LookupQuery, type Money, type Release } from "./discogs.ts";
+import { collectionPageSize, conditions, lookupPageSize, maxSuggestions, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsCurrency, type DiscogsGateway, type DiscogsIdentity, type LookupQuery, type Money, type Release } from "./discogs.ts";
 import { converter, sampleRatesPerEuro } from "./exchange-rates.ts";
 import { priceSuggestionsFrom } from "./real-discogs.ts";
+import { closestNames } from "./spelling.ts";
 
 export type FakeRelease = Release & { barcodes: string[]; formats: string[] };
 
@@ -38,6 +39,7 @@ export type FakeCollectionItem = CollectionItem & Partial<CollectionFields>;
 
 export type FakeDiscogsRequest = (
   | ({ endpoint: "search" } & LookupQuery)
+  | { endpoint: "suggest"; artist: string; title: string }
   | { endpoint: "release"; discogsReleaseId: number }
   | { endpoint: "price-suggestions"; discogsReleaseId: number }
   | { endpoint: "stats"; discogsReleaseId: number; currency: DiscogsCurrency }
@@ -216,6 +218,15 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
         total: matches.length,
       };
     },
+    async suggest({ artist, title }, auth) {
+      answer({ endpoint: "suggest", artist, title, ...auth });
+      const close = closestNames(artist, releases.map((release) => release.artist), maxSuggestions);
+      const suggestions = close.flatMap((name) => {
+        const titles = releases.filter((release) => release.artist === name && looseText(release.title).includes(looseText(title))).map((release) => release.title);
+        return titles.length > 0 ? [...new Set(titles)].map((found) => ({ artist: name, title: found })) : [{ artist: name, title }];
+      });
+      return suggestions.slice(0, maxSuggestions);
+    },
     async release(discogsReleaseId, auth) {
       answer({ endpoint: "release", discogsReleaseId, ...auth });
       const found = releases.find((release) => release.discogsReleaseId === discogsReleaseId);
@@ -274,7 +285,6 @@ function looseText(text: string) {
 
 function matchesQuery(release: FakeRelease, query: LookupQuery) {
   if ("barcode" in query) return release.barcodes.includes(query.barcode);
-  if ("catalogNumber" in query) return release.catalogNumber !== null && looseText(release.catalogNumber) === looseText(query.catalogNumber);
   return looseText(release.artist).includes(looseText(query.artist)) && looseText(release.title).includes(looseText(query.title));
 }
 

@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AppDependencies } from "./app.ts";
 import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
-import type { Condition, Currency, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
+import type { Condition, Currency, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate, Suggestion } from "./discogs.ts";
 import { collectionValue, createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
 import { collectionCsv } from "./csv.ts";
 import { cacheRelease as cacheReleaseOnce } from "./releases.ts";
@@ -32,19 +32,13 @@ function tidy(typed: string | undefined) {
 }
 
 function parseLookup(params: Record<string, string>): { query: LookupQuery } | { error: string } {
-  const { barcode, catalogNumber, artist, title } = params;
-  const ways = [barcode !== undefined, catalogNumber !== undefined, artist !== undefined || title !== undefined].filter(Boolean).length;
-  if (ways === 0) return { error: "Say what to look up: a barcode, a Catalog number, or an artist and title." };
-  if (ways > 1) return { error: "Look up one thing at a time: a barcode, a Catalog number, or an artist and title." };
+  const { barcode, artist, title } = params;
+  const ways = [barcode !== undefined, artist !== undefined || title !== undefined].filter(Boolean).length;
+  if (ways === 0) return { error: "Say what to look up: a barcode, or an artist and title." };
+  if (ways > 1) return { error: "Look up one thing at a time: a barcode, or an artist and title." };
   if (barcode !== undefined) {
     const digits = parseBarcode(barcode);
     return digits ? { query: { barcode: digits } } : { error: "Type all the digits under the barcode: 8, 12, 13 or 14 of them." };
-  }
-  if (catalogNumber !== undefined) {
-    const typed = tidy(catalogNumber);
-    if (!typed) return { error: "Type the Catalog number from the spine or the label." };
-    if (typed.length > maxTypedLength) return { error: `That's longer than any Catalog number. Type at most ${maxTypedLength} characters.` };
-    return { query: { catalogNumber: typed } };
   }
   const query = { artist: tidy(artist), title: tidy(title) };
   if (!query.artist && !query.title) return { error: "Type the artist, the title, or both." };
@@ -135,7 +129,8 @@ function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, befor
 
 export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number; held: { copyId: string; location: CopyLocation | null }[] };
 
-export type LookupView = LookupQuery & { total: number; candidates: LookupCandidate[] };
+/** An artist and title Lookup that matched nothing carries close spellings Discogs knows. */
+export type LookupView = ({ barcode: string } | { artist: string; title: string; suggestions: Suggestion[] }) & { total: number; candidates: LookupCandidate[] };
 
 export function createCollectionRoutes({ database, discogs, exchangeRates, now, photosDir, mirror }: AppDependencies) {
   const { db } = database;
@@ -163,6 +158,15 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       await db.insert(barcodeLookupCache).values({ barcode, candidates: found.candidates, lookedUpAt: now() }).onConflictDoNothing();
     }
     return found;
+  }
+
+  async function suggestionsFor(query: { artist: string; title: string }, auth: DiscogsAuth) {
+    try {
+      return await discogs.suggest(query, auth);
+    } catch (error) {
+      console.error(`Discogs suggestions for ${JSON.stringify(query)} failed: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
   }
 
   /** The Copies the Collection already holds of each Release, with where each one lives. */
@@ -261,7 +265,8 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       const held = owned.get(candidate.discogsReleaseId) ?? [];
       return { ...candidate, copiesInCollection: held.length, held };
     });
-    return c.json<LookupView>({ ...query, total: found.total, candidates });
+    if ("barcode" in query) return c.json<LookupView>({ ...query, total: found.total, candidates });
+    return c.json<LookupView>({ ...query, suggestions: candidates.length === 0 ? await suggestionsFor(query, auth) : [], total: found.total, candidates });
   });
 
   routes.get("/api/collections/:collectionId/copies", async (c) => {

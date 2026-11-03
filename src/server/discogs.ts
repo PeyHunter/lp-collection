@@ -54,7 +54,12 @@ export type ReleaseCandidate = {
   coverImageUrl: string | null;
 };
 
-export type LookupQuery = { barcode: string } | { catalogNumber: string } | { artist: string; title: string };
+export type LookupQuery = { barcode: string } | { artist: string; title: string };
+
+/** An artist and title Discogs knows, offered when a typed one matched nothing. */
+export type Suggestion = { artist: string; title: string };
+
+export const maxSuggestions = 5;
 
 export type LookupResult = { candidates: ReleaseCandidate[]; total: number };
 
@@ -112,6 +117,8 @@ export type CollectionPage = { items: CollectionItem[]; pages: number; total: nu
 /** The only way the app talks to Discogs. Tests use a scripted fake. */
 export type DiscogsGateway = {
   lookup(query: LookupQuery, auth: DiscogsAuth): Promise<LookupResult>;
+  /** Close spellings of an artist and title that matched nothing, best first, at most `maxSuggestions`. */
+  suggest(query: { artist: string; title: string }, auth: DiscogsAuth): Promise<Suggestion[]>;
   release(discogsReleaseId: number, auth: DiscogsAuth): Promise<Release | undefined>;
   priceSuggestions(discogsReleaseId: number, auth: DiscogsAuth): Promise<PriceSuggestions>;
   /** The cheapest asking price right now in any condition, or null when nothing is for sale. */
