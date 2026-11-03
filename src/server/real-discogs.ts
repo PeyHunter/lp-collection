@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { collectionPageSize, conditions, isCurrency, lookupPageSize, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsGateway, type LookupQuery, type Money, type PriceSuggestions, type Release, type ReleaseCandidate } from "./discogs.ts";
+import { collectionPageSize, conditions, isCurrency, lookupPageSize, maxSuggestions, type CollectionFields, type CollectionItem, type Condition, type DiscogsAuth, type DiscogsGateway, type LookupQuery, type Money, type PriceSuggestions, type Release, type ReleaseCandidate, type Suggestion } from "./discogs.ts";
+import { closestNames } from "./spelling.ts";
 
 export type RealDiscogsOptions = {
   consumerKey: string;
@@ -14,6 +15,8 @@ export type RealDiscogsOptions = {
 };
 
 const requestTimeoutMs = 2_000;
+/** Discogs allows about 60 requests a minute, so a failed Lookup asks for suggestions at most this many times. */
+const maxSuggestCalls = 3;
 const userAgent = "LP-Collection/1.0 +https://github.com/PeyHunter/lp-collection";
 
 /**
@@ -170,6 +173,24 @@ export function createRealDiscogs({
       const candidates = (search?.results ?? []).map(candidateFrom);
       return { candidates, total: search?.pagination?.items ?? candidates.length };
     },
+    async suggest({ artist, title }, auth) {
+      const search = async (params: Record<string, string>) =>
+        (((await getAs(auth, `/database/search?${new URLSearchParams({ ...params, per_page: "50" })}`)) ?? {}) as { results?: SearchResult[] }).results ?? [];
+      // Free text forgives more than the artist and release_title fields.
+      const releases = await search({ q: [artist, title].filter(Boolean).join(" "), type: "release", format: "Vinyl" });
+      const pairs = new Map<string, Suggestion>();
+      for (const { artist, title } of releases.map(candidateFrom)) {
+        if (artist && title) pairs.set(`${artist}\n${title}`.toLowerCase(), { artist, title });
+      }
+      if (pairs.size > 0 || !artist) return [...pairs.values()].slice(0, maxSuggestions);
+      // Discogs has no fuzzy search, so a misspelled artist is found by its first letters and ranked by spelling.
+      const queries = [artist, ...artist.split(" ").filter((word) => word.length >= 4).map((word) => word.slice(0, 4))];
+      const names: string[] = [];
+      for (const q of [...new Set(queries)].slice(0, maxSuggestCalls - 1)) {
+        names.push(...(await search({ q, type: "artist" })).map((result) => result.title ?? ""));
+      }
+      return closestNames(artist, names, maxSuggestions).map((name) => ({ artist: name, title }));
+    },
     async release(discogsReleaseId, auth) {
       const release = (await getAs(auth, `/releases/${discogsReleaseId}`)) as DiscogsRelease | undefined;
       if (!release) return undefined;
@@ -213,6 +234,7 @@ type SearchResult = {
   label?: string[];
   catno?: string;
   format?: string[];
+  formats?: { text?: string }[];
   cover_image?: string;
 };
 
@@ -258,7 +280,6 @@ function moneyFrom(price: unknown): Money | null {
 /** A barcode is exact, so it searches every format. Typed text matches CDs and cassettes too, so it searches vinyl only. */
 function searchTerms(query: LookupQuery): Record<string, string> {
   if ("barcode" in query) return { barcode: query.barcode };
-  if ("catalogNumber" in query) return { catno: query.catalogNumber, format: "Vinyl" };
   return {
     ...(query.artist && { artist: query.artist }),
     ...(query.title && { release_title: query.title }),
@@ -276,9 +297,15 @@ function candidateFrom(result: SearchResult): ReleaseCandidate {
     catalogNumber: catalogNumber(result.catno),
     country: result.country || null,
     pressingYear: year(result.year),
-    format: result.format?.length ? result.format.join(", ") : null,
+    formats: formatsOf(result),
     coverImageUrl: result.cover_image && !result.cover_image.endsWith("/spacer.gif") ? result.cover_image : null,
   };
+}
+
+/** `format` holds the standard words; `formats[].text` holds free text such as "Red Marbled" or "180 Gram". */
+function formatsOf(result: SearchResult): string[] {
+  const words = [...(result.format ?? []), ...(result.formats ?? []).map((format) => format.text ?? "")];
+  return [...new Set(words.map((word) => word.trim()).filter((word) => word !== ""))];
 }
 
 function releaseFrom(release: DiscogsRelease, master: { year?: number } | undefined): Release {

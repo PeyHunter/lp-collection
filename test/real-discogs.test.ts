@@ -18,6 +18,7 @@ const kindOfBlueSearch = {
       label: ["Columbia", "Legacy (2)"],
       catno: "CS 8163",
       format: ["Vinyl", "LP", "Album", "Reissue"],
+      formats: [{ name: "Vinyl", text: "180 Gram" }, { name: "Vinyl", text: "Reissue" }, { name: "Vinyl" }],
       barcode: ["8 86979 89121 1"],
       cover_image: "https://i.discogs.com/kind-of-blue.jpeg",
     },
@@ -89,10 +90,16 @@ async function startDiscogsStub({ tooManyRequestsFirst = 0 } = {}) {
       response.statusCode = 429;
       return json({ message: "You are making requests too quickly." });
     }
-    if (path === "/database/search?barcode=886979891211&type=release&per_page=25") {
+    if (path.startsWith("/database/search?q=")) {
+      const params = new URL(path, "http://stub").searchParams;
+      const q = params.get("q");
+      if (params.get("type") === "release" && q === "Miles Davis Kind of Blu") json(kindOfBlueSearch);
+      else if (params.get("type") === "artist" && q === "Fleetwod Mac") json({ results: [{ id: 1, type: "artist", title: "Fleetwod Mac Tribute Band Of Norway" }] });
+      else if (params.get("type") === "artist" && q === "Flee") {
+        json({ results: ["Fleet Foxes", "Fleetwood Mac", "Fleetwood Mac (2)", "Fleetwoods"].map((title, id) => ({ id, type: "artist", title })) });
+      } else json({ pagination: { items: 0 }, results: [] });
+    } else if (path === "/database/search?barcode=886979891211&type=release&per_page=25") {
       json(kindOfBlueSearch);
-    } else if (path === "/database/search?catno=CS+8163&format=Vinyl&type=release&per_page=25") {
-      json({ pagination: { page: 1, pages: 13, per_page: 25, items: 312 }, results: [kindOfBlueSearch.results[0]] });
     } else if (path === "/releases/2335811") {
       json(kindOfBlueRelease);
     } else if (path === "/masters/5460") {
@@ -248,7 +255,7 @@ test("a barcode Lookup searches the Discogs database as the User and reads each 
       catalogNumber: "CS 8163",
       country: "US",
       pressingYear: 2010,
-      format: "Vinyl, LP, Album, Reissue",
+      formats: ["Vinyl", "LP", "Album", "Reissue", "180 Gram"],
       coverImageUrl: "https://i.discogs.com/kind-of-blue.jpeg",
     },
     {
@@ -259,20 +266,11 @@ test("a barcode Lookup searches the Discogs database as the User and reads each 
       catalogNumber: null,
       country: null,
       pressingYear: null,
-      format: null,
+      formats: [],
       coverImageUrl: null,
     },
   ]);
   expect(oauthParams(stub.received[0]!.headers)).toMatchObject({ oauth_token: "user-token", oauth_signature: "consumer-secret&user-secret" });
-});
-
-test("a Catalog number Lookup searches vinyl Releases by catno and reports how many matched in all", async () => {
-  const stub = await startDiscogsStub();
-
-  const { candidates, total } = await gateway(stub.url).lookup({ catalogNumber: "CS 8163" }, auth);
-
-  expect(total).toBe(312);
-  expect(candidates).toMatchObject([{ discogsReleaseId: 2335811, catalogNumber: "CS 8163" }]);
 });
 
 test("an artist and title Lookup searches vinyl Releases by artist and release title, leaving out a blank one", async () => {
@@ -287,6 +285,40 @@ test("an artist and title Lookup searches vinyl Releases by artist and release t
     "/database/search?artist=Miles+Davis&release_title=Kind+of+Blue&format=Vinyl&type=release&per_page=25",
     "/database/search?release_title=Kind+of+Blue&format=Vinyl&type=release&per_page=25",
   ]);
+});
+
+test("suggestions first search vinyl Releases by free text and offer each distinct artist and title", async () => {
+  const stub = await startDiscogsStub();
+
+  const suggestions = await gateway(stub.url).suggest({ artist: "Miles Davis", title: "Kind of Blu" }, auth);
+
+  expect(suggestions).toEqual([
+    { artist: "Miles Davis", title: "Kind Of Blue" },
+    { artist: "Nirvana", title: "Untitled - Live" },
+  ]);
+  expect(stub.received.map((request) => request.path)).toEqual(["/database/search?q=Miles+Davis+Kind+of+Blu&type=release&format=Vinyl&per_page=50"]);
+});
+
+test("when free text finds nothing, suggestions search artists by name and first letters, ranked by spelling, in at most 3 calls", async () => {
+  const stub = await startDiscogsStub();
+
+  const suggestions = await gateway(stub.url).suggest({ artist: "Fleetwod Mac", title: "Rumours" }, auth);
+
+  expect(suggestions).toEqual([{ artist: "Fleetwood Mac", title: "Rumours" }]);
+  expect(stub.received.map((request) => request.path)).toEqual([
+    "/database/search?q=Fleetwod+Mac+Rumours&type=release&format=Vinyl&per_page=50",
+    "/database/search?q=Fleetwod+Mac&type=artist&per_page=50",
+    "/database/search?q=Flee&type=artist&per_page=50",
+  ]);
+});
+
+test("with no artist typed, suggestions stop after the free text search", async () => {
+  const stub = await startDiscogsStub();
+
+  const suggestions = await gateway(stub.url).suggest({ artist: "", title: "Rumors" }, auth);
+
+  expect(suggestions).toEqual([]);
+  expect(stub.received).toHaveLength(1);
 });
 
 test("Release details take the Original year from the master release", async () => {

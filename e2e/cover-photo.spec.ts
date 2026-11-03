@@ -14,6 +14,12 @@ test("a record with no barcode is added in three taps from a photo of its cover"
   await logInAsNewUser(page, "collector");
   await page.getByRole("link", { name: "Scan" }).click();
 
+  const main = page.getByRole("main");
+  const firstSection = main.locator("section").first();
+  await expect(firstSection.getByLabel("Photo of the cover")).toBeAttached();
+  await expect(firstSection).toBeInViewport();
+  expect(await main.locator("section").evaluateAll((sections) => sections.findIndex((section) => section.querySelector("#scan-heading")))).toBeGreaterThan(0);
+
   await page.getByLabel("Photo of the cover").setInputFiles(await coverPhoto());
 
   const best = page.getByRole("group", { name: "Best match" });
