@@ -22,8 +22,9 @@ test("a record with no barcode is found by falling back to the Catalog number, t
   await page.getByRole("textbox", { name: "Title" }).fill("Sgt Pepper");
   await page.getByRole("button", { name: "Look up" }).click();
 
-  await expect(page.getByRole("heading", { name: "2 Releases match" })).toBeVisible();
-  const uk = page.getByRole("listitem").filter({ hasText: "1967 · UK · Parlophone · PCS 7027" });
+  await expect(page.getByRole("heading", { name: "Which one is yours?" })).toBeVisible();
+  await expect(page.getByText("2 Releases match.")).toBeVisible();
+  const uk = page.getByRole("listitem").filter({ hasText: "Parlophone" });
   await uk.getByRole("button", { name: "Sgt. Pepper's Lonely Hearts Club Band" }).click();
   await uk.getByRole("button", { name: "Add to Collection" }).click();
 
@@ -49,7 +50,7 @@ test("a long typed search wraps instead of pushing the page sideways", async ({ 
   await page.getByRole("textbox", { name: "Artist" }).fill("The Beatles");
   await page.getByRole("textbox", { name: "Title" }).fill("Sgt. Pepper's Lonely Hearts Club Band");
   await page.getByRole("button", { name: "Look up" }).click();
-  await expect(page.getByRole("heading", { name: "2 Releases match" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Which one is yours?" })).toBeVisible();
   expect(await sidewaysOverflow(page), "the searched artist and title above the matches fit the screen").toBe(0);
   await page.setViewportSize({ width: 320, height: 568 });
   expect(await sidewaysOverflow(page), "the searched artist and title fit the narrowest iPhone").toBe(0);

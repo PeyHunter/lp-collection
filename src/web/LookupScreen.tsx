@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CopyView, LookupCandidate, LookupView } from "../server/collection.ts";
 import { Cover } from "./Cover.tsx";
 import { BestMatch, CoverPhotoButton, lookUpCover, unreadCover } from "./CoverPhoto.tsx";
 import { Header } from "./Header.tsx";
 import { navigate } from "./navigation.ts";
 import { Scanner } from "./Scanner.tsx";
+import { narrow, notListed, valuesOf, type Difference, type Picks, type Trait } from "./narrow.ts";
 import { locationLabel } from "./shelf-grid.ts";
 
 type Way = "barcode" | "catalogNumber" | "artistTitle";
@@ -36,9 +37,18 @@ const ways: Record<Way, { chip: string; next: Way | null; offer: string; noMatch
   },
 };
 
+/** How each detail is named, and where on the record the Owner can find it. */
+const traitNames: Record<Trait, { label: string; where: string }> = {
+  country: { label: "Country", where: "Made in … on the back" },
+  pressingYear: { label: "Year", where: "On the label or back of the sleeve" },
+  label: { label: "Label", where: "On the label or back of the sleeve" },
+  catalogNumber: { label: "Catalog number", where: "On the spine" },
+  formats: { label: "Edition", where: "On a sticker, the sleeve or the vinyl itself" },
+};
+
 type Save = { kind: "ready" } | { kind: "saving" } | { kind: "failed"; message: string };
 
-type Found = { kind: "found"; way: Way; fromCover: boolean; searched: string; total: number; candidates: LookupCandidate[]; chosen: number | null; save: Save };
+type Found = { kind: "found"; way: Way; fromCover: boolean; searched: string; total: number; candidates: LookupCandidate[]; picks: Picks; chosen: number | null; save: Save };
 
 type Lookup = { kind: "idle" } | { kind: "reading-cover" } | { kind: "looking" } | { kind: "failed"; message: string } | Found;
 
@@ -66,6 +76,15 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
   const [wayChosen, setWayChosen] = useState(false);
   const [typed, setTyped] = useState<Typed>({ barcode: "", catalogNumber: "", artist: "", title: "" });
   const [lookup, setLookup] = useState<Lookup>({ kind: "idle" });
+  const matchesRef = useRef<HTMLElement>(null);
+  const scrollToMatches = useRef(false);
+
+  useEffect(() => {
+    if (!scrollToMatches.current || lookup.kind === "looking") return;
+    scrollToMatches.current = false;
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    matchesRef.current?.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
+  }, [lookup]);
 
   function type(field: keyof Typed, value: string) {
     setTyped((current) => ({ ...current, [field]: value }));
@@ -88,7 +107,7 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
   function show(lookupWay: Way, view: LookupView, fromCover: boolean) {
     // A best match is added with its own button, so nothing in the list starts open.
     const only = !fromCover && view.candidates.length === 1 ? view.candidates[0]!.discogsReleaseId : null;
-    setLookup({ kind: "found", way: lookupWay, fromCover, searched: searchedText(view), total: view.total, candidates: view.candidates, chosen: only, save: { kind: "ready" } });
+    setLookup({ kind: "found", way: lookupWay, fromCover, searched: searchedText(view), total: view.total, candidates: view.candidates, picks: {}, chosen: only, save: { kind: "ready" } });
   }
 
   async function save(found: Found, candidate: LookupCandidate) {
@@ -117,10 +136,17 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
     show("artistTitle", found.view, true);
   }
 
+  function pick(found: Found, picks: Picks) {
+    const { shown } = narrow(found.candidates, picks);
+    const stillShown = shown.some((candidate) => candidate.discogsReleaseId === found.chosen) ? found.chosen : null;
+    const chosen = shown.length === 1 ? shown[0]!.discogsReleaseId : stillShown;
+    setLookup({ ...found, picks, chosen, save: { kind: "ready" } });
+  }
+
   const looking = lookup.kind === "looking" || lookup.kind === "reading-cover";
 
   const matches = (
-    <section className="section" aria-label="Matches" aria-busy={looking}>
+    <section className="section matches" aria-label="Matches" aria-busy={looking} ref={matchesRef}>
       {lookup.kind === "reading-cover" && <p className="loading">Reading the cover…</p>}
       {lookup.kind === "looking" && <p className="loading">Asking Discogs…</p>}
       {lookup.kind === "failed" && (
@@ -132,6 +158,7 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
         <Matches
           found={lookup}
           onChoose={(chosen) => setLookup({ ...lookup, chosen, save: { kind: "ready" } })}
+          onPick={(picks) => pick(lookup, picks)}
           onSave={(candidate) => save(lookup, candidate)}
           onNextWay={switchTo}
         />
@@ -155,6 +182,7 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
             setWay("barcode");
             setWayChosen(false);
             type("barcode", barcode);
+            scrollToMatches.current = true;
             void lookUp("barcode", { barcode });
           }}
         />
@@ -280,14 +308,16 @@ function Matches({
   found,
   onChoose,
   onSave,
+  onPick,
   onNextWay,
 }: {
   found: Found;
   onChoose: (discogsReleaseId: number | null) => void;
+  onPick: (picks: Picks) => void;
   onSave: (candidate: LookupCandidate) => void;
   onNextWay: (way: Way) => void;
 }) {
-  const { way, fromCover, searched, total, candidates, chosen, save } = found;
+  const { way, fromCover, searched, total, candidates, picks, chosen, save } = found;
   const { next } = ways[way];
   const nextWay = next && (
     <button className="link" type="button" onClick={() => onNextWay(next)}>
@@ -332,40 +362,106 @@ function Matches({
               <h2>Not this one?</h2>
               <span className="count tnum searched">{searched}</span>
             </div>
-            <CandidateList candidates={others} chosen={chosen} save={save} onChoose={onChoose} onSave={onSave} />
+            <CandidateList candidates={others} differences={narrow(others, {}).differences} picks={{}} chosen={chosen} save={save} onChoose={onChoose} onSave={onSave} />
           </>
         )}
         <p className="next-way">Not here at all? Change the artist or title above and look up again.</p>
       </>
     );
   }
+  if (candidates.length === 1) {
+    return (
+      <>
+        <div className="section-head">
+          <h2>1 Release matches</h2>
+          <span className="count tnum searched">{searched}</span>
+        </div>
+        <CandidateList candidates={candidates} differences={[]} picks={{}} chosen={chosen} save={save} onChoose={onChoose} onSave={onSave} />
+        {nextWay && <p className="next-way">Not the one you hold? {nextWay}</p>}
+      </>
+    );
+  }
+  const { shown, differences, shared } = narrow(candidates, picks);
+  const picked = Object.keys(picks).length > 0;
   return (
     <>
       <div className="section-head">
-        <h2>{total === 1 ? "1 Release matches" : `${total.toLocaleString("da-DK")} Releases match`}</h2>
+        <h2>Which one is yours?</h2>
         <span className="count tnum searched">{searched}</span>
       </div>
-      {total > candidates.length ? (
-        <p className="lead">
-          Showing the first {candidates.length}. Type more of the artist or the title to find yours faster.
-        </p>
-      ) : (
-        candidates.length > 1 && <p className="lead">Tap the pressing you hold. Check the label and the year on the sleeve.</p>
+      <p className="lead">
+        {total > candidates.length
+          ? `${total.toLocaleString("da-DK")} Releases match. Showing the first ${candidates.length}. Type more of the artist or the title to find yours faster.`
+          : `${candidates.length} Releases match.`}
+      </p>
+      {differences.length > 0 && (
+        <div className="narrow" role="group" aria-labelledby="narrow-heading">
+          <div className="narrow-head">
+            <h3 id="narrow-heading">Narrow it down</h3>
+            {picked && (
+              <button className="link" type="button" onClick={() => onPick({})}>
+                Show all {candidates.length}
+              </button>
+            )}
+          </div>
+          {differences.map((difference) => (
+            <NarrowRow key={difference.trait} difference={difference} picked={picks[difference.trait]} onPick={(value) => onPick(withPick(picks, difference.trait, value))} />
+          ))}
+        </div>
       )}
-      <CandidateList candidates={candidates} chosen={chosen} save={save} onChoose={onChoose} onSave={onSave} />
+      {shown.length > 1 && shared.length > 0 && (
+        <p className="shared">
+          All {shown.length} share: {shared.map(({ value }) => value).join(" · ")}
+        </p>
+      )}
+      {/* The last one left shows every detail, so it can be checked against the sleeve. */}
+      <CandidateList candidates={shown} differences={shown.length > 1 ? differences : []} picks={picks} chosen={chosen} save={save} onChoose={onChoose} onSave={onSave} />
       {nextWay && <p className="next-way">Not the one you hold? {nextWay}</p>}
     </>
   );
 }
 
+function withPick(picks: Picks, trait: Trait, value: string | undefined): Picks {
+  const { [trait]: _, ...others } = picks;
+  return value === undefined ? others : { ...others, [trait]: value };
+}
+
+function NarrowRow({ difference, picked, onPick }: { difference: Difference; picked: string | undefined; onPick: (value: string | undefined) => void }) {
+  const { label, where } = traitNames[difference.trait];
+  const labelId = `narrow-${difference.trait}`;
+  return (
+    <div className="narrow-row" role="group" aria-labelledby={labelId}>
+      <p className="narrow-label">
+        <span id={labelId}>{label}</span> <span className="hint">{where}</span>
+      </p>
+      <div className="chips">
+        {difference.options.map(({ value, count }) => (
+          <button className="chip" type="button" key={value} aria-pressed={value === picked} onClick={() => onPick(value === picked ? undefined : value)}>
+            {value} <span className="chip-count tnum">{count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function factText(trait: Trait, value: string) {
+  return value === notListed ? `${traitNames[trait].label} not listed` : value;
+}
+
 function CandidateList({
   candidates,
+  differences,
+  picks,
   chosen,
   save,
   onChoose,
   onSave,
 }: {
   candidates: LookupCandidate[];
+  /** The details that tell these candidates apart; a row shows only those. */
+  differences: Difference[];
+  picks: Picks;
   chosen: number | null;
   save: Save;
   onChoose: (discogsReleaseId: number | null) => void;
@@ -377,6 +473,9 @@ function CandidateList({
         const isChosen = candidate.discogsReleaseId === chosen;
         const panelId = `save-${candidate.discogsReleaseId}`;
         const facts = [candidate.pressingYear, candidate.country, candidate.label, candidate.catalogNumber, candidate.formats.join(", ") || null].filter((fact) => fact !== null);
+        const pills = differences.flatMap(({ trait, options }) =>
+          options.filter(({ value }) => valuesOf(candidate, trait).includes(value)).map(({ value }) => ({ trait, value })),
+        );
         return (
           <li className="candidate" key={candidate.discogsReleaseId} aria-current={isChosen ? "true" : undefined}>
             <div className="row">
@@ -386,7 +485,17 @@ function CandidateList({
                   {candidate.title}
                 </button>
                 <span className="row-artist">{candidate.artist}</span>
-                <span className="row-meta">{facts.join(" · ")}</span>
+                {differences.length === 0 ? (
+                  <span className="row-meta">{facts.join(" · ")}</span>
+                ) : (
+                  <span className="facts">
+                    {pills.map(({ trait, value }) => (
+                      <span className="fact" key={`${trait}:${value}`} data-picked={picks[trait] === value || undefined}>
+                        {factText(trait, value)}{" "}
+                      </span>
+                    ))}
+                  </span>
+                )}
                 {candidate.copiesInCollection > 0 && <span className="badge">In your Collection</span>}
               </span>
               <svg className="pick" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
