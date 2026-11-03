@@ -22,7 +22,7 @@ const releases: FakeRelease[] = Array.from({ length: 13 }, (_, index) => ({
   pressingYear: null,
   originalYear: null,
   coverImageUrl: null,
-  format: null,
+  formats: [],
   genres: [],
   styles: [],
   barcodes: [],

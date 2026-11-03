@@ -7,7 +7,7 @@ import { invitedFriend, logInWithCollection, saveCopy, type Member, type TestApp
 import { createTestApp, days } from "../support/test-app.ts";
 
 function release(discogsReleaseId: number, title: string): FakeRelease {
-  return { discogsReleaseId, artist: "Gasolin'", title, label: null, catalogNumber: null, country: null, pressingYear: null, originalYear: 1975, coverImageUrl: null, format: null, genres: [], styles: [], barcodes: [] };
+  return { discogsReleaseId, artist: "Gasolin'", title, label: null, catalogNumber: null, country: null, pressingYear: null, originalYear: 1975, coverImageUrl: null, formats: [], genres: [], styles: [], barcodes: [] };
 }
 
 type History = { recordedAt: string; mediaCondition: string; value: number | null }[];

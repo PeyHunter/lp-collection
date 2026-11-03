@@ -4,7 +4,7 @@ import { collectionPageSize, conditions, lookupPageSize, type CollectionFields, 
 import { converter, sampleRatesPerEuro } from "./exchange-rates.ts";
 import { priceSuggestionsFrom } from "./real-discogs.ts";
 
-export type FakeRelease = Release & { barcodes: string[]; format: string | null };
+export type FakeRelease = Release & { barcodes: string[]; formats: string[] };
 
 export type FakePrices = Partial<Record<Condition, Money>>;
 
@@ -220,7 +220,7 @@ export function createFakeDiscogs(script: FakeDiscogsScript = {}): FakeDiscogs {
       answer({ endpoint: "release", discogsReleaseId, ...auth });
       const found = releases.find((release) => release.discogsReleaseId === discogsReleaseId);
       if (!found) return undefined;
-      const { barcodes: _, format: __, ...release } = found;
+      const { barcodes: _, formats: __, ...release } = found;
       return release;
     },
     async startLogin(callbackUrl) {
@@ -297,7 +297,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "US",
     pressingYear: 2010,
     originalYear: 1959,
-    format: "Vinyl, LP, Album, Reissue, Stereo, 180g",
+    formats: ["Vinyl", "LP", "Album", "Reissue", "Stereo", "180 Gram"],
     coverImageUrl: fakeCoverUrl(2335811),
     genres: ["Jazz"],
     styles: ["Modal", "Hard Bop"],
@@ -312,7 +312,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "Europe",
     pressingYear: 2010,
     originalYear: 1959,
-    format: "Vinyl, LP, Album, Reissue, Stereo",
+    formats: ["Vinyl", "LP", "Album", "Reissue", "Stereo"],
     coverImageUrl: fakeCoverUrl(2474032),
     genres: ["Jazz"],
     styles: ["Modal", "Hard Bop"],
@@ -327,7 +327,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "Europe",
     pressingYear: 2015,
     originalYear: 1959,
-    format: "Vinyl, LP, Album, Reissue, Remastered",
+    formats: ["Vinyl", "LP", "Album", "Reissue", "Remastered"],
     coverImageUrl: null,
     genres: ["Jazz"],
     styles: ["Modal"],
@@ -342,7 +342,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "Europe",
     pressingYear: 2021,
     originalYear: 2001,
-    format: "Vinyl, 2×LP, Album, Reissue",
+    formats: ["Vinyl", "2×LP", "Album", "Reissue"],
     coverImageUrl: fakeCoverUrl(16893476),
     genres: ["Electronic"],
     styles: ["House", "Disco"],
@@ -357,7 +357,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "Denmark",
     pressingYear: 1975,
     originalYear: 1975,
-    format: "Vinyl, LP, Album",
+    formats: ["Vinyl", "LP", "Album"],
     coverImageUrl: fakeCoverUrl(1503928),
     genres: ["Rock"],
     styles: ["Pop Rock"],
@@ -372,7 +372,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "UK",
     pressingYear: 1967,
     originalYear: 1967,
-    format: "Vinyl, LP, Album, Stereo",
+    formats: ["Vinyl", "LP", "Album", "Stereo"],
     coverImageUrl: fakeCoverUrl(1095979),
     genres: ["Rock"],
     styles: ["Psychedelic Rock", "Pop Rock"],
@@ -387,7 +387,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "Germany",
     pressingYear: 1967,
     originalYear: 1967,
-    format: "Vinyl, LP, Album, Stereo",
+    formats: ["Vinyl", "LP", "Album", "Stereo"],
     coverImageUrl: null,
     genres: ["Rock"],
     styles: ["Psychedelic Rock", "Pop Rock"],
@@ -402,7 +402,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "UK",
     pressingYear: 2019,
     originalYear: 1969,
-    format: "Vinyl, LP, Album, Reissue, Remastered",
+    formats: ["Vinyl", "LP", "Album", "Reissue", "Remastered"],
     coverImageUrl: fakeCoverUrl(13716287),
     genres: ["Rock"],
     styles: ["Pop Rock"],
@@ -417,7 +417,7 @@ export const sampleReleases: FakeRelease[] = [
     country: "UK",
     pressingYear: 1985,
     originalYear: 1985,
-    format: "Vinyl, LP, Album",
+    formats: ["Vinyl", "LP", "Album"],
     coverImageUrl: fakeCoverUrl(3133906),
     genres: ["Electronic", "Rock", "Pop"],
     styles: ["Art Rock", "Synth-pop"],
@@ -432,11 +432,56 @@ export const sampleReleases: FakeRelease[] = [
     country: "Germany",
     pressingYear: 1977,
     originalYear: 1977,
-    format: "Vinyl, LP, Album",
+    formats: ["Vinyl", "LP", "Album"],
     coverImageUrl: fakeCoverUrl(1046716),
     genres: ["Electronic"],
     styles: ["Synth-pop", "Electro"],
     barcodes: ["5099906406616"],
+  },
+  {
+    discogsReleaseId: 1873013,
+    artist: "Pink Floyd",
+    title: "The Dark Side Of The Moon",
+    label: "EMI",
+    catalogNumber: "SHVL 804",
+    country: "UK",
+    pressingYear: 2003,
+    originalYear: 1973,
+    formats: ["Vinyl", "LP", "Album", "Reissue", "Remastered", "180 Gram"],
+    coverImageUrl: fakeCoverUrl(1873013),
+    genres: ["Rock"],
+    styles: ["Prog Rock", "Psychedelic Rock"],
+    barcodes: ["5099902894119"],
+  },
+  {
+    discogsReleaseId: 8718632,
+    artist: "Pink Floyd",
+    title: "The Dark Side Of The Moon",
+    label: "Pink Floyd Records",
+    catalogNumber: "PFRLP8",
+    country: "Europe",
+    pressingYear: 2016,
+    originalYear: 1973,
+    formats: ["Vinyl", "LP", "Album", "Reissue", "Remastered", "180 Gram"],
+    coverImageUrl: fakeCoverUrl(8718632),
+    genres: ["Rock"],
+    styles: ["Prog Rock", "Psychedelic Rock"],
+    barcodes: ["5099902894119"],
+  },
+  {
+    discogsReleaseId: 2843913,
+    artist: "Pink Floyd",
+    title: "The Dark Side Of The Moon",
+    label: "EMI",
+    catalogNumber: "SHVL 804",
+    country: "Europe",
+    pressingYear: 2011,
+    originalYear: 1973,
+    formats: ["Vinyl", "LP", "Album", "Reissue", "Remastered", "Gatefold"],
+    coverImageUrl: fakeCoverUrl(2843913),
+    genres: ["Rock"],
+    styles: ["Prog Rock", "Psychedelic Rock"],
+    barcodes: ["5099902894119"],
   },
 ];
 
@@ -453,6 +498,7 @@ export const samplePrices: Record<number, FakePrices> = {
   13716287: priceLadder(38),
   3133906: priceLadder(60),
   1046716: priceLadder(110),
+  8718632: priceLadder(30),
 };
 
 export const sampleLowestListings: Record<number, Money> = {
