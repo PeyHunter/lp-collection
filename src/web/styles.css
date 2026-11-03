@@ -442,6 +442,8 @@ main.content-grid { row-gap: var(--space-xl); align-content: start; padding-bloc
 .notice.error { border: 1.5px solid color-mix(in oklch, var(--loss) 45%, transparent); }
 .notice.done { border: 1.5px solid color-mix(in oklch, var(--gain) 45%, transparent); }
 .empty { display: grid; gap: var(--space-m); justify-items: start; padding-block: var(--space-l); color: var(--ink-dim); overflow-wrap: anywhere; }
+.suggestions { display: grid; gap: var(--space-s); inline-size: 100%; margin: 0; padding: 0; list-style: none; }
+.suggestion { inline-size: 100%; justify-content: start; padding-block: var(--space-s); text-align: start; color: var(--ink); }
 .loading { color: var(--ink-dim); }
 @media (prefers-reduced-motion: no-preference) {
   .loading { animation: pulse 1.2s var(--ease-out) infinite alternate; }

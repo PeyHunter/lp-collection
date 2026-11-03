@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CopyView, LookupCandidate, LookupView } from "../server/collection.ts";
+import type { Suggestion } from "../server/discogs.ts";
 import { Cover } from "./Cover.tsx";
 import { BestMatch, CoverPhotoButton, lookUpCover, unreadCover } from "./CoverPhoto.tsx";
 import { Header } from "./Header.tsx";
@@ -41,7 +42,18 @@ const traitNames: Record<Trait, { label: string; where: string }> = {
 
 type Save = { kind: "ready" } | { kind: "saving" } | { kind: "failed"; message: string };
 
-type Found = { kind: "found"; way: Way; fromCover: boolean; searched: string; total: number; candidates: LookupCandidate[]; picks: Picks; chosen: number | null; save: Save };
+type Found = {
+  kind: "found";
+  way: Way;
+  fromCover: boolean;
+  searched: string;
+  total: number;
+  candidates: LookupCandidate[];
+  suggestions: Suggestion[];
+  picks: Picks;
+  chosen: number | null;
+  save: Save;
+};
 
 type Lookup = { kind: "idle" } | { kind: "reading-cover" } | { kind: "looking" } | { kind: "failed"; message: string } | Found;
 
@@ -98,7 +110,8 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
   function show(lookupWay: Way, view: LookupView, fromCover: boolean) {
     // A best match is added with its own button, so nothing in the list starts open.
     const only = !fromCover && view.candidates.length === 1 ? view.candidates[0]!.discogsReleaseId : null;
-    setLookup({ kind: "found", way: lookupWay, fromCover, searched: searchedText(view), total: view.total, candidates: view.candidates, picks: {}, chosen: only, save: { kind: "ready" } });
+    const suggestions = "suggestions" in view ? view.suggestions : [];
+    setLookup({ kind: "found", way: lookupWay, fromCover, searched: searchedText(view), total: view.total, candidates: view.candidates, suggestions, picks: {}, chosen: only, save: { kind: "ready" } });
   }
 
   async function save(found: Found, candidate: LookupCandidate) {
@@ -127,6 +140,13 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
     show("artistTitle", found.view, true);
   }
 
+  function lookUpSuggestion({ artist, title }: Suggestion) {
+    setWay("artistTitle");
+    setWayChosen(false);
+    setTyped((current) => ({ ...current, artist, title }));
+    void lookUp("artistTitle", { artist, title });
+  }
+
   function pick(found: Found, picks: Picks) {
     const { shown } = narrow(found.candidates, picks);
     const stillShown = shown.some((candidate) => candidate.discogsReleaseId === found.chosen) ? found.chosen : null;
@@ -152,6 +172,7 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
           onPick={(picks) => pick(lookup, picks)}
           onSave={(candidate) => save(lookup, candidate)}
           onNextWay={switchTo}
+          onSuggestion={lookUpSuggestion}
         />
       )}
     </section>
@@ -279,20 +300,38 @@ function Matches({
   onSave,
   onPick,
   onNextWay,
+  onSuggestion,
 }: {
   found: Found;
   onChoose: (discogsReleaseId: number | null) => void;
   onPick: (picks: Picks) => void;
   onSave: (candidate: LookupCandidate) => void;
   onNextWay: (way: Way) => void;
+  onSuggestion: (suggestion: Suggestion) => void;
 }) {
-  const { way, fromCover, searched, total, candidates, picks, chosen, save } = found;
+  const { way, fromCover, searched, total, candidates, suggestions, picks, chosen, save } = found;
   const { next } = ways[way];
   const nextWay = next && (
     <button className="link" type="button" onClick={() => onNextWay(next)}>
       {ways[way].offer}
     </button>
   );
+  if (candidates.length === 0 && suggestions.length > 0) {
+    return (
+      <div className="empty" role="status">
+        <p>{ways[way].noMatch(searched)} Did you mean:</p>
+        <ul className="suggestions">
+          {suggestions.map((suggestion) => (
+            <li key={`${suggestion.artist}\n${suggestion.title}`}>
+              <button className="btn secondary suggestion" type="button" onClick={() => onSuggestion(suggestion)}>
+                {[suggestion.artist, suggestion.title].filter(Boolean).join(" · ")}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   if (candidates.length === 0) {
     return (
       <div className="empty" role="status">

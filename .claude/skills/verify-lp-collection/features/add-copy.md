@@ -9,7 +9,7 @@ When the barcode finds nothing, the screen offers "Search by artist and title". 
 - `lookup-single` shows "1 Release matches" with the save panel already open.
 - `lookup-several` shows the heading "Which one is yours?", "N Releases match.", the "Narrow it down" chips, and each row's differing details as pills; it opens the save panel under the tapped pressing.
 - `lookup-none` says no Release on Discogs has that barcode and offers "Search by artist and title". A barcode list also offers it under "Not the one you hold?".
-- `lookup-artist-title` looks up by artist, title, or both, ignoring case and extra spaces. No match says "Nothing on Discogs matches …" with no further way.
+- `lookup-artist-title` looks up by artist, title, or both, ignoring case and extra spaces. No match says "Nothing on Discogs matches … Did you mean:" with up to 5 buttons of close spellings Discogs knows (artist `Pink Floid` offers "Pink Floyd · The Dark Side Of The Moon"); tapping one fills in the artist and title and looks up again. With nothing close it shows the spelling tip instead.
 - `lookup-first-page` shows at most 25 candidates. When more matched, the heading gives the total and the lead says "Showing the first 25." Covered by `test/api/lookup-fallbacks.test.ts`; the fake knows too few Releases to show it.
 - `duplicate-warning` marks candidates the Collection has with "In your Collection". Picking one shows "You already have 1 Copy of this. Add another?" (or "2 Copies"). "Cancel" closes the panel and saves nothing; "Add another" saves one more Copy.
 - `lookup-invalid` refuses anything but 8, 12, 13 or 14 digits with "Type all the digits under the barcode: 8, 12, 13 or 14 of them." Spaces and dashes are fine.

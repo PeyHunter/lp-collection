@@ -25,6 +25,34 @@ test("a record with no barcode is found by falling back to the artist and title"
   await expect(page.getByRole("status")).toHaveText("Added Sgt. Pepper's Lonely Hearts Club Band to your Collection.");
 });
 
+test("a misspelled artist finds nothing, and tapping the suggested spelling finds the Release", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "collector");
+  await page.getByRole("link", { name: "Scan" }).click();
+
+  await page.getByRole("radio", { name: "Artist and title" }).check();
+  await page.getByRole("textbox", { name: "Artist" }).fill("Pink Floid");
+  await page.getByRole("button", { name: "Look up" }).click();
+  await expect(page.getByText("Nothing on Discogs matches Pink Floid. Did you mean:")).toBeVisible();
+  expect(await sidewaysOverflow(page), "the suggestions fit the screen").toBe(0);
+
+  await page.getByRole("button", { name: "Pink Floyd · The Dark Side Of The Moon" }).click();
+  await expect(page.getByRole("textbox", { name: "Artist" })).toHaveValue("Pink Floyd");
+  await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("The Dark Side Of The Moon");
+  await expect(page.getByRole("heading", { name: "Which one is yours?" })).toBeVisible();
+  await expect(page.getByText("3 Releases match.")).toBeVisible();
+});
+
+test("a misspelling with nothing close keeps the spelling tip", async ({ page, logInAsNewUser }) => {
+  await logInAsNewUser(page, "collector");
+  await page.getByRole("link", { name: "Scan" }).click();
+
+  await page.getByRole("radio", { name: "Artist and title" }).check();
+  await page.getByRole("textbox", { name: "Artist" }).fill("Nobody Anyone Knows");
+  await page.getByRole("button", { name: "Look up" }).click();
+  await expect(page.getByText("Nothing on Discogs matches Nobody Anyone Knows.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Check the spelling, or type less: only the artist, or a few words of the title.")).toBeVisible();
+});
+
 async function sidewaysOverflow(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
