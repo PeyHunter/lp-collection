@@ -14,7 +14,7 @@ const gas5: FakeRelease = {
   pressingYear: 1975,
   originalYear: 1975,
   coverImageUrl: null,
-  format: null,
+  formats: [],
   genres: ["Rock"],
   styles: [],
   barcodes: [],

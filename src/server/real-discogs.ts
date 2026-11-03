@@ -213,6 +213,7 @@ type SearchResult = {
   label?: string[];
   catno?: string;
   format?: string[];
+  formats?: { text?: string }[];
   cover_image?: string;
 };
 
@@ -276,9 +277,15 @@ function candidateFrom(result: SearchResult): ReleaseCandidate {
     catalogNumber: catalogNumber(result.catno),
     country: result.country || null,
     pressingYear: year(result.year),
-    format: result.format?.length ? result.format.join(", ") : null,
+    formats: formatsOf(result),
     coverImageUrl: result.cover_image && !result.cover_image.endsWith("/spacer.gif") ? result.cover_image : null,
   };
+}
+
+/** `format` holds the standard words; `formats[].text` holds free text such as "Red Marbled" or "180 Gram". */
+function formatsOf(result: SearchResult): string[] {
+  const words = [...(result.format ?? []), ...(result.formats ?? []).map((format) => format.text ?? "")];
+  return [...new Set(words.map((word) => word.trim()).filter((word) => word !== ""))];
 }
 
 function releaseFrom(release: DiscogsRelease, master: { year?: number } | undefined): Release {

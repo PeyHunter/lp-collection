@@ -24,7 +24,7 @@ function release(discogsReleaseId: number, artist: string, title: string, facts:
     pressingYear: null,
     originalYear: null,
     coverImageUrl: null,
-    format: null,
+    formats: [],
     genres: [],
     styles: [],
     barcodes: [],
