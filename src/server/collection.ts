@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AppDependencies } from "./app.ts";
 import { gainOf, parseCopyChanges, purchaseOf } from "./copy-details.ts";
-import type { Condition, Currency, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate } from "./discogs.ts";
+import type { Condition, Currency, DiscogsAuth, Money, LookupQuery, LookupResult, ReleaseCandidate, Suggestion } from "./discogs.ts";
 import { collectionValue, createListing, decodeCursor, defaultDirection, latestSnapshot, sortNames, type CachedRelease, type ListedCopy, type ListQuery, type SortName } from "./listing.ts";
 import { collectionCsv } from "./csv.ts";
 import { cacheRelease as cacheReleaseOnce } from "./releases.ts";
@@ -129,7 +129,8 @@ function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, befor
 
 export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number; held: { copyId: string; location: CopyLocation | null }[] };
 
-export type LookupView = LookupQuery & { total: number; candidates: LookupCandidate[] };
+/** An artist and title Lookup that matched nothing carries close spellings Discogs knows. */
+export type LookupView = ({ barcode: string } | { artist: string; title: string; suggestions: Suggestion[] }) & { total: number; candidates: LookupCandidate[] };
 
 export function createCollectionRoutes({ database, discogs, exchangeRates, now, photosDir, mirror }: AppDependencies) {
   const { db } = database;
@@ -157,6 +158,15 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       await db.insert(barcodeLookupCache).values({ barcode, candidates: found.candidates, lookedUpAt: now() }).onConflictDoNothing();
     }
     return found;
+  }
+
+  async function suggestionsFor(query: { artist: string; title: string }, auth: DiscogsAuth) {
+    try {
+      return await discogs.suggest(query, auth);
+    } catch (error) {
+      console.error(`Discogs suggestions for ${JSON.stringify(query)} failed: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
   }
 
   /** The Copies the Collection already holds of each Release, with where each one lives. */
@@ -255,7 +265,8 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       const held = owned.get(candidate.discogsReleaseId) ?? [];
       return { ...candidate, copiesInCollection: held.length, held };
     });
-    return c.json<LookupView>({ ...query, total: found.total, candidates });
+    if ("barcode" in query) return c.json<LookupView>({ ...query, total: found.total, candidates });
+    return c.json<LookupView>({ ...query, suggestions: candidates.length === 0 ? await suggestionsFor(query, auth) : [], total: found.total, candidates });
   });
 
   routes.get("/api/collections/:collectionId/copies", async (c) => {
