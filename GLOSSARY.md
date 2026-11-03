@@ -117,6 +117,10 @@ The Value of each Copy and the Collection value, recorded at each monthly refres
 Turning something the user has (a barcode, or an artist and title) into candidate Releases. The user picks one when several match.
 _Avoid_: scan (scanning is only the barcode path)
 
+**Suggestion**:
+A close spelling of an artist and title that Discogs knows, offered when a typed artist and title Lookup matches nothing. Tapping one looks it up.
+_Avoid_: autocorrect, did-you-mean
+
 **Cover reading**:
 Reading the artist and title off a photo of the front of a sleeve, for a record with no barcode. The reading only fills in the artist and title of a Lookup; the user checks it and still picks the Release.
 _Avoid_: cover scan, image search
