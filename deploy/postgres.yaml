@@ -70,11 +70,17 @@ spec:
             exec:
               command: [pg_isready, -U, lp_collection, -d, lp_collection]
             periodSeconds: 10
+          startupProbe:
+            exec:
+              command: [pg_isready, -U, lp_collection, -d, lp_collection]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             exec:
               command: [pg_isready, -U, lp_collection, -d, lp_collection]
-            initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 5
           resources:
             requests:
               cpu: 50m
