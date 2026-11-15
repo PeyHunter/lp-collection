@@ -20,11 +20,11 @@ export async function invitedFriend(app: TestApp, ownerSession: string, discogsU
   return logInWithCollection(app, discogsUsername, url.split("/invite/")[1]);
 }
 
-export function saveCopy(user: Member, discogsReleaseId: number) {
+export function saveCopy(user: Member, discogsReleaseId: number, { addAnother = false } = {}) {
   return user.as("/copies", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ discogsReleaseId }),
+    body: JSON.stringify(addAnother ? { discogsReleaseId, addAnother } : { discogsReleaseId }),
   });
 }
 

@@ -30,7 +30,7 @@ async function owned(script: FakeDiscogsScript = {}) {
 }
 
 async function save(owner: Member) {
-  const response = await saveCopy(owner, 5);
+  const response = await saveCopy(owner, 5, { addAnother: true });
   expect(response.status).toBe(201);
   return (await response.json()) as CopyAnswer;
 }

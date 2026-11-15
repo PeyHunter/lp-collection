@@ -40,7 +40,8 @@ const traitNames: Record<Trait, { label: string; where: string }> = {
   formats: { label: "Edition", where: "On a sticker, the sleeve or the vinyl itself" },
 };
 
-type Save = { kind: "ready" } | { kind: "saving" } | { kind: "failed"; message: string };
+/** "already" is the server asking first, because the Collection holds another pressing of the album. */
+type Save = { kind: "ready" } | { kind: "saving" } | { kind: "failed"; message: string } | { kind: "already"; message: string };
 
 type Found = {
   kind: "found";
@@ -114,13 +115,14 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
     setLookup({ kind: "found", way: lookupWay, fromCover, searched: searchedText(view), total: view.total, candidates: view.candidates, suggestions, picks: {}, chosen: only, save: { kind: "ready" } });
   }
 
-  async function save(found: Found, candidate: LookupCandidate) {
+  async function save(found: Found, candidate: LookupCandidate, addAnother: boolean) {
     setLookup({ ...found, save: { kind: "saving" } });
     const response = await fetch(`/api/collections/${collectionId}/copies`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ discogsReleaseId: candidate.discogsReleaseId }),
+      body: JSON.stringify(addAnother ? { discogsReleaseId: candidate.discogsReleaseId, addAnother } : { discogsReleaseId: candidate.discogsReleaseId }),
     }).catch(() => undefined);
+    if (response?.status === 409) return setLookup({ ...found, save: { kind: "already", message: await errorMessage(response) } });
     if (!response?.ok) {
       return setLookup({ ...found, save: { kind: "failed", message: response ? await errorMessage(response) : unreachable } });
     }
@@ -170,7 +172,7 @@ export function LookupScreen({ collectionId, coverReading }: { collectionId: str
           found={lookup}
           onChoose={(chosen) => setLookup({ ...lookup, chosen, save: { kind: "ready" } })}
           onPick={(picks) => pick(lookup, picks)}
-          onSave={(candidate) => save(lookup, candidate)}
+          onSave={(candidate, addAnother) => save(lookup, candidate, addAnother)}
           onNextWay={switchTo}
           onSuggestion={lookUpSuggestion}
         />
@@ -305,7 +307,7 @@ function Matches({
   found: Found;
   onChoose: (discogsReleaseId: number | null) => void;
   onPick: (picks: Picks) => void;
-  onSave: (candidate: LookupCandidate) => void;
+  onSave: (candidate: LookupCandidate, addAnother: boolean) => void;
   onNextWay: (way: Way) => void;
   onSuggestion: (suggestion: Suggestion) => void;
 }) {
@@ -360,8 +362,18 @@ function Matches({
               {save.message}
             </p>
           )}
-          <button className="btn primary" type="button" onClick={() => onSave(best!)} disabled={save.kind === "saving"}>
-            {save.kind === "saving" && chosen === null ? "Adding…" : best!.copiesInCollection > 0 ? "Add another" : "Add to my collection"}
+          {save.kind === "already" && chosen === null && (
+            <p className="warning" role="alert">
+              {save.message}
+            </p>
+          )}
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => onSave(best!, best!.copiesInCollection > 0 || (save.kind === "already" && chosen === null))}
+            disabled={save.kind === "saving"}
+          >
+            {save.kind === "saving" && chosen === null ? "Adding…" : best!.copiesInCollection > 0 || (save.kind === "already" && chosen === null) ? "Add another" : "Add to my collection"}
           </button>
         </BestMatch>
         {others.length > 0 && (
@@ -473,7 +485,7 @@ function CandidateList({
   chosen: number | null;
   save: Save;
   onChoose: (discogsReleaseId: number | null) => void;
-  onSave: (candidate: LookupCandidate) => void;
+  onSave: (candidate: LookupCandidate, addAnother: boolean) => void;
 }) {
   return (
     <ol className="rows">
@@ -518,8 +530,8 @@ function CandidateList({
               </svg>
             </div>
             {isChosen && (
-              <div className={candidate.copiesInCollection > 0 ? "save-panel duplicate" : "save-panel"} id={panelId}>
-                {candidate.copiesInCollection > 0 ? (
+              <div className={candidate.copiesInCollection > 0 || save.kind === "already" ? "save-panel duplicate" : "save-panel"} id={panelId}>
+                {save.kind === "already" ? null : candidate.copiesInCollection > 0 ? (
                   <>
                     <p className="warning" role="alert">You already have {copiesText(candidate.copiesInCollection)} of this. Add another?</p>
                     <p className="where">{whereHeld(candidate.held)}</p>
@@ -532,9 +544,14 @@ function CandidateList({
                     {save.message}
                   </p>
                 )}
-                {candidate.copiesInCollection > 0 ? (
+                {save.kind === "already" && (
+                  <p className="warning" role="alert">
+                    {save.message}
+                  </p>
+                )}
+                {candidate.copiesInCollection > 0 || save.kind === "already" ? (
                   <div className="actions">
-                    <button className="btn primary" type="button" onClick={() => onSave(candidate)} disabled={save.kind === "saving"}>
+                    <button className="btn primary" type="button" onClick={() => onSave(candidate, true)} disabled={save.kind === "saving"}>
                       {save.kind === "saving" ? "Adding…" : "Add another"}
                     </button>
                     <button className="btn secondary" type="button" onClick={() => onChoose(null)} disabled={save.kind === "saving"}>
@@ -542,7 +559,7 @@ function CandidateList({
                     </button>
                   </div>
                 ) : (
-                  <button className="btn primary" type="button" onClick={() => onSave(candidate)} disabled={save.kind === "saving"}>
+                  <button className="btn primary" type="button" onClick={() => onSave(candidate, false)} disabled={save.kind === "saving"}>
                     {save.kind === "saving" ? "Adding…" : "Add to Collection"}
                   </button>
                 )}

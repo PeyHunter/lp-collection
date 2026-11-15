@@ -9,7 +9,7 @@ const discovery = 16893476;
 const gas5 = 1503928;
 
 async function savedCopy(user: Member, discogsReleaseId = discovery) {
-  const response = await saveCopy(user, discogsReleaseId);
+  const response = await saveCopy(user, discogsReleaseId, { addAnother: true });
   expect(response.status).toBe(201);
   return ((await response.json()) as { copy: CopyView }).copy;
 }

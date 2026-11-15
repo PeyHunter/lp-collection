@@ -15,7 +15,7 @@ const priced: FakeDiscogsScript = {
 type CopyAnswer = { copy: CopyWithValues; sellerSettingsMissing: boolean };
 
 async function saved(user: Member, discogsReleaseId = discovery) {
-  const response = await saveCopy(user, discogsReleaseId);
+  const response = await saveCopy(user, discogsReleaseId, { addAnother: true });
   expect(response.status).toBe(201);
   return ((await response.json()) as CopyAnswer).copy;
 }

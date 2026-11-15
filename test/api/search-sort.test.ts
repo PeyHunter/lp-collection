@@ -259,7 +259,7 @@ test("a Copy saved while the User scrolls doesn't repeat or push out the Copies 
 test("a page asks for at most 100 Copies and defaults to 50", async () => {
   const app = await createTestApp({ discogs: { releases: [kindOfBlue] } });
   const owner = await logInWithCollection(app);
-  for (let saves = 0; saves < 51; saves++) await saveCopy(owner, kindOfBlue.discogsReleaseId);
+  for (let saves = 0; saves < 51; saves++) await saveCopy(owner, kindOfBlue.discogsReleaseId, { addAnother: true });
 
   const page = await list(owner);
 

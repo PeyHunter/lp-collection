@@ -133,11 +133,57 @@ test("two Copies of the same Release are two Copies, newest first", async () => 
 
   const first = await saveCopy(owner, 16893476);
   app.clock.advance(60_000);
-  const second = await saveCopy(owner, 16893476);
+  const second = await saveCopy(owner, 16893476, { addAnother: true });
 
   const ids = [((await second.json()) as { copy: { id: string } }).copy.id, ((await first.json()) as { copy: { id: string } }).copy.id];
   expect(ids[0]).not.toBe(ids[1]);
   expect((await listCopies(owner)).map((copy) => (copy as { id: string }).id)).toEqual(ids);
+});
+
+test("adding a Release the Collection already holds is refused until the Member says it is another Copy", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases } });
+  const owner = await logInWithCollection(app);
+  const first = (await (await saveCopy(owner, 16893476)).json()) as { copy: { id: string } };
+
+  const again = await saveCopy(owner, 16893476);
+
+  expect(again.status).toBe(409);
+  expect(await again.json()).toEqual({
+    error: "You already have Discovery. Add it again only if this is another Copy.",
+    alreadyHeld: [{ copyId: first.copy.id, location: null }],
+  });
+  expect(await listCopies(owner)).toHaveLength(1);
+});
+
+test("another pressing of an album the Collection already holds also asks first", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases } });
+  const owner = await logInWithCollection(app);
+  const us = (await (await saveCopy(owner, 2335811)).json()) as { copy: { id: string } };
+
+  const europe = await saveCopy(owner, 7371225);
+
+  expect(europe.status).toBe(409);
+  expect(await europe.json()).toMatchObject({ alreadyHeld: [{ copyId: us.copy.id }] });
+  expect((await saveCopy(owner, 7371225, { addAnother: true })).status).toBe(201);
+  expect(await listCopies(owner)).toHaveLength(2);
+});
+
+test("a different album is added without asking", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases } });
+  const owner = await logInWithCollection(app);
+  await saveCopy(owner, 2335811);
+
+  expect((await saveCopy(owner, 16893476)).status).toBe(201);
+});
+
+test("two adds of the same album at once save only one Copy", async () => {
+  const app = await createTestApp({ discogs: { releases: sampleReleases } });
+  const owner = await logInWithCollection(app);
+
+  const statuses = (await Promise.all([saveCopy(owner, 16893476), saveCopy(owner, 16893476)])).map((response) => response.status);
+
+  expect(statuses.sort()).toEqual([201, 409]);
+  expect(await listCopies(owner)).toHaveLength(1);
 });
 
 test("the Original year comes from the master release, so a reissue keeps the year the music came out", async () => {

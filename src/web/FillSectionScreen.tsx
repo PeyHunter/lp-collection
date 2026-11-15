@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { CopyView, LookupCandidate, LookupView } from "../server/collection.ts";
+import type { AlreadyHeld, CopyView, LookupCandidate, LookupView } from "../server/collection.ts";
 import type { ShelfView } from "../server/shelves.ts";
 import type { Me } from "./App.tsx";
 import { Cover } from "./Cover.tsx";
@@ -19,6 +19,7 @@ type Step =
   | { kind: "best"; candidates: LookupCandidate[] }
   | { kind: "placed"; title: string }
   | { kind: "which"; title: string; held: Held[] }
+  | { kind: "another"; candidate: LookupCandidate; message: string; held: Held[] }
   | { kind: "unknown"; candidates: LookupCandidate[] }
   | { kind: "not-found"; barcode: string }
   | { kind: "failed"; message: string };
@@ -71,13 +72,17 @@ export function FillSectionScreen({ me, shelfId, sectionId }: { me: Me; shelfId:
     setStep({ kind: "placed", title });
   }
 
-  async function addAndPlace(candidate: LookupCandidate) {
+  async function addAndPlace(candidate: LookupCandidate, addAnother = false) {
     setStep({ kind: "busy" });
     const response = await fetch(`${api}/copies`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ discogsReleaseId: candidate.discogsReleaseId, sectionId }),
+      body: JSON.stringify(addAnother ? { discogsReleaseId: candidate.discogsReleaseId, sectionId, addAnother } : { discogsReleaseId: candidate.discogsReleaseId, sectionId }),
     }).catch(() => undefined);
+    if (response?.status === 409) {
+      const { error, alreadyHeld } = (await response.json()) as AlreadyHeld;
+      return setStep({ kind: "another", candidate, message: error, held: alreadyHeld });
+    }
     if (!response?.ok) return setStep({ kind: "failed", message: `${candidate.title} wasn't added. ${connectionLost}` });
     setPlaced((count) => count + 1);
     setStep({ kind: "placed", title: candidate.title });
@@ -201,7 +206,7 @@ function StepNotice({
   step: Step;
   here: string;
   onPlace: (copyId: string, title: string) => void;
-  onAdd: (candidate: LookupCandidate) => void;
+  onAdd: (candidate: LookupCandidate, addAnother?: boolean) => void;
   onTake: (candidate: LookupCandidate) => void;
 }) {
   switch (step.kind) {
@@ -261,6 +266,22 @@ function StepNotice({
                 Copy {index + 1}: {copy.location ? locationLabel(copy.location) : "Not on a shelf"}
               </button>
             ))}
+          </div>
+        </div>
+      );
+    case "another":
+      return (
+        <div className="notice warning" role="alert">
+          <p>{step.message}</p>
+          <div className="actions">
+            {step.held.map((copy, index) => (
+              <button className="btn secondary" type="button" key={copy.copyId} onClick={() => onPlace(copy.copyId, step.candidate.title)}>
+                Put {step.held.length > 1 ? `Copy ${index + 1}` : "the one I have"} here ({copy.location ? locationLabel(copy.location) : "Not on a shelf"})
+              </button>
+            ))}
+            <button className="btn primary" type="button" onClick={() => onAdd(step.candidate, true)}>
+              Add another Copy
+            </button>
           </div>
         </div>
       );

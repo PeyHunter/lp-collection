@@ -40,7 +40,7 @@ async function swipe(page: Page, direction: "left" | "right") {
 async function saveCopies(page: Page, discogsReleaseIds: number[]) {
   const { collection } = (await (await page.request.get("/api/me")).json()) as { collection: { id: string } };
   for (const discogsReleaseId of discogsReleaseIds) {
-    expect((await page.request.post(`/api/collections/${collection.id}/copies`, { data: { discogsReleaseId } })).status()).toBe(201);
+    expect((await page.request.post(`/api/collections/${collection.id}/copies`, { data: { discogsReleaseId, addAnother: true } })).status()).toBe(201);
   }
 }
 

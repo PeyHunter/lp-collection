@@ -37,7 +37,7 @@ async function saveCopy(user: Member, discogsReleaseId: number) {
   const response = await user.as("/copies", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ discogsReleaseId }),
+    body: JSON.stringify({ discogsReleaseId, addAnother: true }),
   });
   expect(response.status).toBe(201);
 }
