@@ -51,7 +51,7 @@ async function shelfList(user: Member) {
 }
 
 async function savedCopy(user: Member) {
-  const response = await saveCopy(user, discovery);
+  const response = await saveCopy(user, discovery, { addAnother: true });
   expect(response.status).toBe(201);
   return ((await response.json()) as { copy: CopyView }).copy;
 }

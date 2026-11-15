@@ -14,7 +14,7 @@ async function scan(user: Member, barcode: string) {
 }
 
 async function savedCopy(user: Member, discogsReleaseId: number) {
-  return ((await (await saveCopy(user, discogsReleaseId)).json()) as { copy: CopyView }).copy;
+  return ((await (await saveCopy(user, discogsReleaseId, { addAnother: true })).json()) as { copy: CopyView }).copy;
 }
 
 const addInto = (user: Member, discogsReleaseId: number, sectionId: unknown) =>

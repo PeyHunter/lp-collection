@@ -59,7 +59,7 @@ test("a backup restored into an empty database gives back every User, Copy, Phot
   expect((await empty.request(`/api/collections/${friend.collectionId}/copies`, { headers: { cookie: friend.session } })).status).toBe(200);
   expect((await empty.request(`/api/collections/${owner.collectionId}/copies/${copyId}`, { headers: { cookie: owner.session } })).status).toBe(200);
 
-  const saved = await saveCopy(asOwnerThere, 2474032);
+  const saved = await saveCopy(asOwnerThere, 2474032, { addAnother: true });
   expect(saved.status).toBe(201);
 });
 

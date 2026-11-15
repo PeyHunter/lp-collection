@@ -9,7 +9,7 @@ const photo = await readFile(new URL("../fixtures/photo.jpg", import.meta.url));
 const discovery = 16893476;
 
 async function savedCopy(user: Member) {
-  const response = await saveCopy(user, discovery);
+  const response = await saveCopy(user, discovery, { addAnother: true });
   expect(response.status).toBe(201);
   return ((await response.json()) as { copy: CopyWithValues }).copy;
 }

@@ -127,7 +127,10 @@ function sellerSettingsMissingAfter(outcome: ValuationOutcome | undefined, befor
   return outcome?.kind === "valued" ? outcome.sellerSettingsMissing : before;
 }
 
-export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number; held: { copyId: string; location: CopyLocation | null }[] };
+export type HeldCopy = { copyId: string; location: CopyLocation | null };
+export type LookupCandidate = ReleaseCandidate & { copiesInCollection: number; held: HeldCopy[] };
+/** The answer to adding a Copy of an album the Collection already holds, without saying it is another Copy. */
+export type AlreadyHeld = { error: string; alreadyHeld: HeldCopy[] };
 
 /** An artist and title Lookup that matched nothing carries close spellings Discogs knows. */
 export type LookupView = ({ barcode: string } | { artist: string; title: string; suggestions: Suggestion[] }) & { total: number; candidates: LookupCandidate[] };
@@ -187,6 +190,25 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       held.set(row.discogsReleaseId, list);
     }
     return held;
+  }
+
+  /**
+   * The Copies the Collection holds of the same album as the Release: that Release, or any other pressing
+   * with the same artist and title. Discogs tells same-named artists apart with a suffix like "(2)", so it is dropped.
+   */
+  async function sameAlbumCopies(tx: Pick<typeof db, "execute">, collectionId: string, discogsReleaseId: number) {
+    const artistKey = (alias: string) => sql.raw(`regexp_replace(${alias}.artist_sort_key, '\\s*\\(\\d+\\)$', '')`);
+    const titleKey = (alias: string) => sql.raw(`lower(btrim(${alias}.title))`);
+    const { rows } = await tx.execute<{ copy_id: string; section_id: string | null }>(sql`
+      select c.id as copy_id, c.section_id
+      from copies c
+      join releases r on r.discogs_release_id = c.discogs_release_id
+      join releases target on target.discogs_release_id = ${discogsReleaseId}
+      where c.collection_id = ${collectionId}
+        and (c.discogs_release_id = target.discogs_release_id
+          or (${artistKey("r")} = ${artistKey("target")} and ${titleKey("r")} = ${titleKey("target")}))
+      order by c.created_at, c.id`);
+    return rows;
   }
 
   const cacheRelease = (discogsReleaseId: number, auth: DiscogsAuth) => cacheReleaseOnce(database, discogs, now, discogsReleaseId, auth);
@@ -333,11 +355,12 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
   });
 
   routes.post("/api/collections/:collectionId/copies", async (c) => {
-    const body = (await c.req.json().catch(() => undefined)) as { discogsReleaseId?: unknown; sectionId?: unknown } | undefined;
+    const body = (await c.req.json().catch(() => undefined)) as { discogsReleaseId?: unknown; sectionId?: unknown; addAnother?: unknown } | undefined;
     const discogsReleaseId = body?.discogsReleaseId;
     if (typeof discogsReleaseId !== "number" || !Number.isSafeInteger(discogsReleaseId) || discogsReleaseId <= 0) {
       return c.json({ error: "Say which Release to save with its Discogs release id." }, 400);
     }
+    const addAnother = body?.addAnother === true;
     const sectionId = body?.sectionId ?? null;
     if (sectionId !== null && (typeof sectionId !== "string" || !uuidPattern.test(sectionId))) return c.json({ error: "Say which Section, or leave it out." }, 400);
     const member = c.var.member;
@@ -350,7 +373,27 @@ export function createCollectionRoutes({ database, discogs, exchangeRates, now, 
       console.error(`Discogs Release ${discogsReleaseId} failed: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: discogsUnreachable }, 502);
     }
-    const [copy] = await db.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, sectionId, createdAt: now() }).returning();
+    type Added = { held: Awaited<ReturnType<typeof sameAlbumCopies>> } | { copy: typeof copies.$inferSelect };
+    const added = await db.transaction(async (tx): Promise<Added> => {
+      // One add at a time per Collection, so a double tap can't slip a second Copy past the check.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${member.collectionId}))`);
+      const held = addAnother ? [] : await sameAlbumCopies(tx, member.collectionId, discogsReleaseId);
+      if (held.length > 0) return { held };
+      const [copy] = await tx.insert(copies).values({ collectionId: member.collectionId, discogsReleaseId, sectionId, createdAt: now() }).returning();
+      return { copy: copy! };
+    });
+    if ("held" in added) {
+      const locations = await locationsOf(database, added.held.map((row) => row.section_id));
+      const [release] = await db.select({ title: releases.title }).from(releases).where(eq(releases.discogsReleaseId, discogsReleaseId));
+      return c.json<AlreadyHeld>(
+        {
+          error: `You already have ${release!.title}. Add it again only if this is another Copy.`,
+          alreadyHeld: added.held.map((row) => ({ copyId: row.copy_id, location: (row.section_id && locations.get(row.section_id)) || null })),
+        },
+        409,
+      );
+    }
+    const { copy } = added;
     await mirror.copyAdded(copy!);
     const outcome = member.showValues ? await valuation.fetchValue(copy!, member) : undefined;
     return c.json(
