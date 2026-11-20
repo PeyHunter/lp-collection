@@ -1,4 +1,4 @@
-# Nightly backups on k3s-1, the other node from the app and PostgreSQL (k3s-2), keeping 30 days.
+# Nightly backups on k3s-1, keeping 30 days. The app and PostgreSQL run wherever their volumes live (normally k3s-2).
 # The job runs the app image: `node src/server/backup-cli.ts backup` dumps the database over the network and copies
 # each new Photo from the app (a token-guarded route), into the lp-collection-backups volume on k3s-1.
 # Restoring is by hand: docs/backup-restore.md.
