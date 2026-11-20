@@ -26,10 +26,7 @@ spec:
       labels:
         app: postgres
     spec:
-      # local-path keeps the data on one node's disk. k3s-2 is the home node with
-      # memory to spare; k3s-1 is the small VPS and the target for nightly backups.
-      nodeSelector:
-        kubernetes.io/hostname: k3s-2
+      # No nodeSelector: the local-path volume pins this pod to the node that holds its data, so it can move with the data.
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

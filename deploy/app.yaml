@@ -42,10 +42,7 @@ spec:
       labels:
         app: lp-collection
     spec:
-      # On k3s-2 with PostgreSQL, which the app can't work without anyway. The photos volume is created on the node
-      # of the first pod that mounts it, so a pod that could land on k3s-1 would strand the photos there.
-      nodeSelector:
-        kubernetes.io/hostname: k3s-2
+      # No nodeSelector: the local-path volume pins this pod to the node that holds its data, so it can move with the data.
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
