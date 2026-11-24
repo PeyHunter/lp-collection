@@ -23,9 +23,6 @@ spec:
             app: lp-collection-refresh
         spec:
           restartPolicy: OnFailure
-          # On k3s-2 with PostgreSQL, like the app.
-          nodeSelector:
-            kubernetes.io/hostname: k3s-2
           automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
